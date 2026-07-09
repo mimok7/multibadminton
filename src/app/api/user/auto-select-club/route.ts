@@ -41,11 +41,13 @@ export async function POST(request: Request) {
     if (userClubs && userClubs.length > 0) {
       // 첫 번째 활성 클럽을 쿠키에 설정
       const clubId = userClubs[0].club_id;
-      cookieStore.set(CLUB_COOKIE_NAME, clubId, {
-        path: '/',
-        maxAge: 2592000, // 30일
-        sameSite: 'lax',
-      });
+      if (clubId) {
+        cookieStore.set(CLUB_COOKIE_NAME, clubId, {
+          path: '/',
+          maxAge: 2592000, // 30일
+          sameSite: 'lax',
+        });
+      }
       return NextResponse.json({ success: true, clubId });
     }
 

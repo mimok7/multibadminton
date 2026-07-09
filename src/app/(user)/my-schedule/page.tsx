@@ -1624,7 +1624,7 @@ export default function MySchedulePage() {
             .from('notifications')
             .select('id')
             .eq('user_id', participant.user_id)
-            .eq('club_id', activeClubId)
+            .eq('club_id', activeClubId || '')
             .eq('type', 'match_preparation')
             .eq('related_match_id', match.id)
             .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // 30분 내
@@ -1654,7 +1654,7 @@ export default function MySchedulePage() {
               message: `경기 #${match.match_number} ${notificationMessage}`,
               type: 'match_preparation',
               related_match_id: match.id,
-              club_id: activeClubId,
+              club_id: activeClubId || '',
               is_read: false
             });
             totalNotifications++;

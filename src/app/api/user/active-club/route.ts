@@ -53,7 +53,7 @@ export async function GET() {
 
       if (userClubs && userClubs.length > 0) {
         const firstClub = userClubs[0];
-        clubId = firstClub.club_id;
+        clubId = firstClub.club_id || null;
         clubData = Array.isArray(firstClub.clubs) ? firstClub.clubs[0] : firstClub.clubs;
         memberData = {
           role: firstClub.role,
@@ -66,11 +66,13 @@ export async function GET() {
         const { cookies } = await import('next/headers');
         const cookieStore = await cookies();
         const { CLUB_COOKIE_NAME } = await import('@/lib/club');
-        cookieStore.set(CLUB_COOKIE_NAME, clubId, {
-          path: '/',
-          maxAge: 2592000,
-          sameSite: 'lax',
-        });
+        if (clubId) {
+          cookieStore.set(CLUB_COOKIE_NAME, clubId, {
+            path: '/',
+            maxAge: 2592000,
+            sameSite: 'lax',
+          });
+        }
       } else {
         // No active clubs found for this user at all
         return NextResponse.json({ club: null, clubRole: null, member: null });
