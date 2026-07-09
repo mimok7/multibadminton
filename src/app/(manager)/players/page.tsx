@@ -285,6 +285,10 @@ function PlayersPage() {
       const n = (count ?? 0) + 1;
       const sessionName = `${selectedGenDate}_${mode}_${n}`;
       
+      const activeClubId = typeof document !== 'undefined'
+        ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
+        : '';
+
       // 경기 세션 생성
       const { data: sessionData, error: sessionError } = await supabase
         .from('match_sessions')
@@ -292,7 +296,8 @@ function PlayersPage() {
           session_name: sessionName,
           total_matches: matches.length,
           assigned_matches: assignType === 'today' ? matches.length : 0,
-          session_date: selectedGenDate
+          session_date: selectedGenDate,
+          club_id: activeClubId
         })
         .select()
         .single();
@@ -308,7 +313,8 @@ function PlayersPage() {
         team2_player1_id: match.team2.player1.id,
         team2_player2_id: match.team2.player2.id,
         status: 'scheduled', // 초기 상태는 예정
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        club_id: activeClubId
       }));
 
       const { error: matchError } = await supabase
