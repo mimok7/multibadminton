@@ -228,13 +228,18 @@ export default function MatchAssignmentManager({
           
           // 알림 히스토리 기록
           try {
+            const activeClubId = typeof document !== 'undefined'
+              ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
+              : '';
+
             await supabase.from('notifications').insert({
               user_id: participant.user_id,
               title: '경기 준비 알림',
               message: `경기 #${match.match_number} 준비 알림입니다.\n\n빈 코트로 이동하여 경기를 시작해 주세요.\n진행중 선택 시 다음 참가자에게 준비 알림이 발송됩니다.\n\n부상 없이 즐거운 운동 하세요!`,
               type: 'match_preparation',
               related_match_id: match.id,
-              is_read: false
+              is_read: false,
+              club_id: activeClubId
             });
             totalNotifications++;
           } catch (notificationError) {
