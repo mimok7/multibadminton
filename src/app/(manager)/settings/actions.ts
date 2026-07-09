@@ -6,7 +6,7 @@ import { getClubRole } from '@/lib/club-auth';
 import { isUserAdmin } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
-const supabaseAdmin = await getFilteredAdminClient();
+
 
 async function getManagerContext() {
     const supabase = await getSupabaseServerClient();
@@ -35,6 +35,7 @@ async function getManagerContext() {
 }
 
 export async function updateLevelAliases(clubId: string, aliases: Record<string, string>) {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx || ctx.clubId !== clubId) {
         return { error: '수정 권한이 없습니다.' };

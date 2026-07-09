@@ -6,7 +6,7 @@ import { getClubRole } from '@/lib/club-auth';
 import { isUserAdmin } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
-const supabaseAdmin = await getFilteredAdminClient();
+
 
 async function getManagerContext() {
     const supabase = await getSupabaseServerClient();
@@ -43,6 +43,7 @@ export type UpdateUserPayload = {
 }
 
 export async function deleteUser(userId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     // In a multi-club system, a manager deleting a user should probably only remove them from the club,
     // NOT delete the global user (unless they are the owner and the user belongs to no other clubs).
     // For now, we will delete from club_members.
@@ -68,6 +69,7 @@ export async function deleteUser(userId: string) {
 }
 
 export async function updateUser(userId: string, updates: UpdateUserPayload) {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '수정 권한이 없습니다.' };
 
@@ -138,6 +140,7 @@ export type CreateMemberPayload = {
 };
 
 export async function createMember(payload: CreateMemberPayload) {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '추가 권한이 없습니다.' };
 
@@ -220,6 +223,7 @@ export async function createMembersBulk(payload: { full_names: string; skill_lev
 }
 
 export async function resetUserPassword(userId: string, newPassword: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '비밀번호 초기화 권한이 없습니다.' };
 
@@ -248,6 +252,7 @@ export async function resetUserPassword(userId: string, newPassword: string) {
 }
 
 export async function resetMemberData(userId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '초기화 권한이 없습니다.' };
 
@@ -270,6 +275,7 @@ export async function resetMemberData(userId: string) {
 }
 
 export async function updateRatingSettings(startDate: string | null, endDate: string | null) {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '설정 권한이 없습니다.' };
 
@@ -289,6 +295,7 @@ export async function updateRatingSettings(startDate: string | null, endDate: st
 }
 
 export async function resetAttendanceAll() {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '권한이 없습니다.' };
 
@@ -304,6 +311,7 @@ export async function resetAttendanceAll() {
 }
 
 export async function resetWinRateAll() {
+    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '권한이 없습니다.' };
 

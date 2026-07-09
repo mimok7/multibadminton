@@ -3,9 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { getFilteredAdminClient } from '@/lib/supabase-server';
 
-const supabaseAdmin = await getFilteredAdminClient();
+
 
 export async function getClubsWithMemberCount() {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         let { data: clubs, error: clubsError } = await (supabaseAdmin as any)
             .from('clubs')
@@ -63,6 +64,7 @@ export async function getClubsWithMemberCount() {
 }
 
 export async function createClub(payload: { name: string; code: string; description?: string; phone?: string; address?: string; manager_name?: string }) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const name = payload.name.trim();
         const code = payload.code.trim().toUpperCase();
@@ -113,6 +115,7 @@ export async function createClub(payload: { name: string; code: string; descript
 }
 
 export async function deleteClub(clubId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const { error } = await (supabaseAdmin as any)
             .from('clubs')
@@ -128,6 +131,7 @@ export async function deleteClub(clubId: string) {
 }
 
 export async function getClubLevelAliases(clubId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const { data, error } = await (supabaseAdmin as any)
             .from('club_level_aliases')
@@ -142,6 +146,7 @@ export async function getClubLevelAliases(clubId: string) {
 }
 
 export async function updateClubLevelAliases(clubId: string, aliases: Record<string, string>) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const rows = Object.entries(aliases).map(([code, alias]) => ({
             club_id: clubId,
@@ -161,6 +166,7 @@ export async function updateClubLevelAliases(clubId: string, aliases: Record<str
 }
 
 export async function getClubManagers(clubId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const { data, error } = await (supabaseAdmin as any)
             .from('club_members')
@@ -194,6 +200,7 @@ export async function getClubManagers(clubId: string) {
 }
 
 export async function searchUsers(query: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const trimmed = query.trim();
         if (!trimmed) return { users: [] };
@@ -212,6 +219,7 @@ export async function searchUsers(query: string) {
 }
 
 export async function addClubManager(clubId: string, userId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const { error } = await (supabaseAdmin as any)
             .from('club_members')
@@ -231,6 +239,7 @@ export async function addClubManager(clubId: string, userId: string) {
 }
 
 export async function removeClubManager(clubId: string, userId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         const { error } = await (supabaseAdmin as any)
             .from('club_members')

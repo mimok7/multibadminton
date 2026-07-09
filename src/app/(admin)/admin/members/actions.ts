@@ -8,7 +8,7 @@ import { DEFAULT_COIN_SETTINGS } from '@/lib/coins';
 
 // 사용자를 삭제하려면 서비스 키를 사용하는 별도의 관리자 클라이언트가 필요합니다.
 // 이 키는 절대로 노출되어서는 안 됩니다.
-const supabaseAdmin = await getFilteredAdminClient();
+
 
 async function isAdmin() {
     const supabase = await getSupabaseServerClient();
@@ -21,6 +21,7 @@ async function isAdmin() {
 }
 
 export async function deleteUser(userId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         if (!(await isAdmin())) {
             return { error: '삭제 권한이 없습니다.' };
@@ -94,6 +95,7 @@ export type UpdateUserPayload = {
 }
 
 export async function updateUser(userId: string, updates: UpdateUserPayload) {
+    const supabaseAdmin = await getFilteredAdminClient();
     if (!(await isAdmin())) {
         return { error: '수정 권한이 없습니다.' };
     }
@@ -141,6 +143,7 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
 export async function updateUsersBulk(
     items: Array<{ userId: string; updates: UpdateUserPayload }>
 ) {
+    const supabaseAdmin = await getFilteredAdminClient();
     if (!(await isAdmin())) {
         return { error: '수정 권한이 없습니다.' };
     }
@@ -196,6 +199,7 @@ export async function updateUsersBulk(
 }
 
 export async function resetAttendanceAll() {
+    const supabaseAdmin = await getFilteredAdminClient();
     if (!(await isAdmin())) {
         return { error: '권한이 없습니다.' };
     }
@@ -214,6 +218,7 @@ export async function resetAttendanceAll() {
 }
 
 export async function resetWinRateAll() {
+    const supabaseAdmin = await getFilteredAdminClient();
     if (!(await isAdmin())) {
         return { error: '권한이 없습니다.' };
     }
@@ -316,6 +321,7 @@ export type CreateMemberPayload = {
 };
 
 export async function createMember(payload: CreateMemberPayload) {
+    const supabaseAdmin = await getFilteredAdminClient();
     if (!(await isAdmin())) {
         return { error: '추가 권한이 없습니다.' };
     }
@@ -373,6 +379,7 @@ export async function createMember(payload: CreateMemberPayload) {
 }
 
 export async function updateRatingSettings(startDate: string | null, endDate: string | null) {
+    const supabaseAdmin = await getFilteredAdminClient();
     if (!(await isAdmin())) {
         return { error: '설정 권한이 없습니다.' };
     }
@@ -396,6 +403,7 @@ export async function updateRatingSettings(startDate: string | null, endDate: st
 }
 
 export async function resetUserPassword(userId: string, newPassword: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         if (!(await isAdmin())) {
             return { error: '비밀번호 초기화 권한이 없습니다.' };
@@ -438,6 +446,7 @@ export async function resetUserPassword(userId: string, newPassword: string) {
 }
 
 export async function resetMemberData(userId: string) {
+    const supabaseAdmin = await getFilteredAdminClient();
     try {
         if (!(await isAdmin())) {
             return { error: '초기화 권한이 없습니다.' };
