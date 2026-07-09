@@ -12,33 +12,73 @@ export async function GET() {
       return NextResponse.json({ club: null });
     }
 
-    const clubId = await getActiveClubId();
-    if (!clubId) {
-      return NextResponse.json({ club: null });
-    }
-
     const adminSupabase = getSupabaseAdminClient();
+    let clubId = await getActiveClubId();
+    let isClubValid = false;
+    let memberData = null;
+    let clubData = null;
 
-    const { data, error } = await adminSupabase
-      .from('clubs')
-      .select('id, name, code')
-      .eq('id', clubId)
-      .single();
+    if (clubId) {
+      // 1. Check if the club exists
+      const { data: club } = await adminSupabase
+        .from('clubs')
+        .select('id, name, code')
+        .eq('id', clubId)
+        .single();
+      
+      if (club) {
+        clubData = club;
+        // 2. Check if the user is a member of this club
+        const { data: member } = await adminSupabase
+          .from('club_members')
+          .select('role, coin_balance, coin_wins, coin_losses, status')
+          .eq('club_id', clubId)
+          .eq('user_id', user.id)
+          .single();
 
-    if (error || !data) {
-      return NextResponse.json({ club: null, clubRole: null });
+        if (member && member.status === 'active') {
+          isClubValid = true;
+          memberData = member;
+        }
+      }
     }
 
-    // 클럽 내 사용자의 역할 및 스탯을 가져옴
-    const { data: memberData } = await adminSupabase
-      .from('club_members')
-      .select('role, coin_balance, coin_wins, coin_losses')
-      .eq('club_id', clubId)
-      .eq('user_id', user.id)
-      .single();
+    // Auto-heal: If no valid club cookie is found, auto-select the user's first active club
+    if (!isClubValid) {
+      const { data: userClubs } = await adminSupabase
+        .from('club_members')
+        .select('club_id, role, coin_balance, coin_wins, coin_losses, clubs!inner(id, name, code)')
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      if (userClubs && userClubs.length > 0) {
+        const firstClub = userClubs[0];
+        clubId = firstClub.club_id;
+        clubData = Array.isArray(firstClub.clubs) ? firstClub.clubs[0] : firstClub.clubs;
+        memberData = {
+          role: firstClub.role,
+          coin_balance: firstClub.coin_balance,
+          coin_wins: firstClub.coin_wins,
+          coin_losses: firstClub.coin_losses,
+        };
+
+        // Set the new correct cookie
+        const { cookies } = await import('next/headers');
+        const cookieStore = await cookies();
+        const { CLUB_COOKIE_NAME } = await import('@/lib/club');
+        cookieStore.set(CLUB_COOKIE_NAME, clubId, {
+          path: '/',
+          maxAge: 2592000,
+          sameSite: 'lax',
+        });
+      } else {
+        // No active clubs found for this user at all
+        return NextResponse.json({ club: null, clubRole: null, member: null });
+      }
+    }
 
     return NextResponse.json({ 
-      club: data, 
+      club: clubData, 
       clubRole: (memberData as any)?.role || null,
       member: memberData || null
     });

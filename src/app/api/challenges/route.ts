@@ -42,12 +42,13 @@ function getProfileName(profile?: ProfileLite | null) {
   return profile?.full_name || profile?.username || '선수';
 }
 
-async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabaseAdminClient>, today: string) {
+async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabaseAdminClient>, today: string, clubId: string) {
   const { data: attendanceRows, error: attendanceError } = await adminSupabase
     .from('attendances')
     .select('user_id')
     .eq('attended_at', today)
-    .eq('status', 'present');
+    .eq('status', 'present')
+    .eq('club_id', clubId);
 
   if (attendanceError) {
     throw new Error(attendanceError.message);
@@ -68,6 +69,7 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
     .from('match_schedules')
     .select('id, generated_match_id, status')
     .eq('match_date', today)
+    .eq('club_id', clubId)
     .in('status', ['scheduled', 'in_progress']);
 
   if (assignedSchedulesError) {
@@ -160,6 +162,7 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
     .from('challenge_requests')
     .select('challenger_id, partner_id, opponent1_id, opponent2_id, status')
     .eq('challenge_date', today)
+    .eq('club_id', clubId)
     .in('status', ['pending', 'accepted']);
 
   if (challengeRowsError) {
@@ -308,6 +311,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return NextResponse.json({
+      currentProfile: { id: '', name: '', coin_balance: 0, eligible: false, ineligible_reason: null, isAdmin: false },
+      eligiblePlayers: [],
+      incomingChallenges: [],
+      outgoingChallenges: [],
+    });
+  }
+
   const currentProfile = await getProfileByUserId(serverSupabase, user.id);
 
   if (!currentProfile) {
@@ -324,7 +337,7 @@ export async function GET() {
       profilesById,
       blockedByMatchUserIds = new Set<string>(),
       blockedByChallengeUserIds = new Set<string>(),
-    } = await getTodayChallengePool(adminSupabase, today);
+    } = await getTodayChallengePool(adminSupabase, today, clubId);
 
     const eligiblePlayers = Array.from(eligibilityMap.values())
       .filter((player) => player.id !== currentProfile.id)
@@ -334,6 +347,7 @@ export async function GET() {
       .from('challenge_requests')
       .select('*')
       .eq('challenge_date', today)
+      .eq('club_id', clubId)
       .or(
         [
           `challenger_id.eq.${currentProfile.id}`,
@@ -423,7 +437,7 @@ export async function POST(request: Request) {
 
   try {
     const today = getKoreaDate();
-    const { eligibilityMap, profilesById } = await getTodayChallengePool(adminSupabase, today);
+    const { eligibilityMap, profilesById } = await getTodayChallengePool(adminSupabase, today, clubId);
 
     if (!eligibilityMap.has(currentProfile.id)) {
       return NextResponse.json(

@@ -11,12 +11,12 @@ export async function GET() {
     } = await serverSupabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+      return NextResponse.json({ notifications: [] });
     }
 
     const clubId = await getActiveClubId();
     if (!clubId) {
-      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+      return NextResponse.json({ notifications: [] });
     }
 
     const adminSupabase = getSupabaseAdminClient() as any;
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
 
     const clubId = await getActiveClubId();
     if (!clubId) {
-      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+      return NextResponse.json({ success: true });
     }
 
     const body = await request.json();

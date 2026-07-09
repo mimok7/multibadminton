@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 
 export async function POST(request: Request) {
   try {
+    const serverSupabase = await getSupabaseServerClient();
+    const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ matches: [] });
+    }
+
     const adminSupabase = getSupabaseAdminClient();
     const { participantIds, status } = await request.json();
 
@@ -48,6 +60,7 @@ export async function POST(request: Request) {
         )
       `)
       .or(participantMatchFilter)
+      .eq('club_id', clubId)
       .order('match_number', { ascending: false });
 
     if (status) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole, getProfileByUserId } from '@/lib/auth';
+import { getActiveClubId } from '@/lib/club';
 import { syncSessionMatchFlow } from '@/lib/match-session-flow';
 import { notifyWaitingMatchesForSession } from '@/lib/match-preparation-notifications';
 
@@ -14,13 +15,19 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
+    }
+
     const adminSupabase = getSupabaseAdminClient();
 
-    // 1. Fetch match_schedules
+    // 1. Fetch match_schedules (club_id filtered)
     const { data: scheduleMatch, error } = await adminSupabase
       .from('match_schedules')
       .select('*')
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .single();
 
     if (error || !scheduleMatch) {
@@ -142,11 +149,17 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
+    }
+
     const adminSupabase = getSupabaseAdminClient();
     const { data: scheduleMatch, error: matchError } = await adminSupabase
       .from('match_schedules')
       .select('*')
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .single();
 
     if (matchError || !scheduleMatch) {
@@ -182,7 +195,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       const { error: updateError } = await adminSupabase
         .from('match_schedules')
         .update(updateData)
-        .eq('id', matchId);
+        .eq('id', matchId)
+        .eq('club_id', clubId);
 
       if (updateError) {
         throw updateError;

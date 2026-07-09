@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DEFAULT_USER_REDIRECT, isSafeRedirectPath } from '@/lib/route-access';
 import { clearActiveClubAction } from '@/app/actions/club';
+import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ type ProfileMatch = {
 };
 
 export default function LoginPage() {
+  const router = useRouter();
   useEffect(() => {
     // 로그인 화면에 진입하면 이전의 활성화 클럽 쿠키를 확실하게 삭제
     clearActiveClubAction().catch((err) => console.error('Failed to clear active club:', err));
@@ -193,6 +195,21 @@ export default function LoginPage() {
       const isAdmin = role === 'admin' || role === 'administrator' || role === '관리자';
       const isManager = role === 'manager' || role === '매니저' || role === '운영자';
       
+      // 사용자 클럽 목록 조회 및 active_club_id 쿠키 자동 갱신 (서버사이드 처리)
+      if (signInData.user) {
+        try {
+          await fetch('/api/user/auto-select-club', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${signInData.session?.access_token}`,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to auto-select club:', e);
+        }
+      }
+
       let defaultPath = DEFAULT_USER_REDIRECT;
       if (isAdmin) defaultPath = '/admin';
       else if (isManager) defaultPath = '/manager';
@@ -204,7 +221,12 @@ export default function LoginPage() {
         nextPath = redirectTo;
       }
 
-      window.location.replace(nextPath);
+      // Next.js App Router 환경에서 쿠키 동기화 시간을 위해 살짝 대기 후 라우팅
+      setTimeout(() => {
+        router.refresh();
+        router.push(nextPath);
+      }, 300);
+
     } catch (error) {
       setError('로그인 중 오류가 발생했습니다.');
     } finally {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
@@ -676,6 +677,7 @@ function AssignedMatchCard({
 
 export default function MySchedulePage() {
   const { user, profile, loading: userLoading, isAdmin } = useUser();
+  const { clubId } = useClub();
   const router = useRouter();
   const supabase = getSupabaseClient();
   const levelInfoMap = useLevelInfoMap();
@@ -1603,6 +1605,8 @@ export default function MySchedulePage() {
       const notifiedPlayers: string[] = [];
 
       // 각 다음 경기의 참가자들에게 알림 발송
+      const activeClubId = clubId;
+
       for (const match of (sessionMatches as any[])) {
         const participants = [
           match.team1_player1,
@@ -1620,6 +1624,7 @@ export default function MySchedulePage() {
             .from('notifications')
             .select('id')
             .eq('user_id', participant.user_id)
+            .eq('club_id', activeClubId)
             .eq('type', 'match_preparation')
             .eq('related_match_id', match.id)
             .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // 30분 내
@@ -1642,12 +1647,14 @@ export default function MySchedulePage() {
           
           // 알림 히스토리 기록
           try {
+
             await supabase.from('notifications').insert({
               user_id: participant.user_id,
               title: '경기 준비 알림',
               message: `경기 #${match.match_number} ${notificationMessage}`,
               type: 'match_preparation',
               related_match_id: match.id,
+              club_id: activeClubId,
               is_read: false
             });
             totalNotifications++;

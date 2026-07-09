@@ -241,6 +241,19 @@ export async function middleware(req: NextRequest) {
 
       return res;
     }
+
+    // ──────────────────────────────────────────────
+    // 3. 일반 사용자 홈 라우트 (/dashboard, /profile, /match-registration 등)
+    // ──────────────────────────────────────────────
+    if (isProtectedPath && !isAdminRoute && !isManagerRoute && pathname !== '/select-club' && pathname !== '/change-password') {
+      const hasClubCookie = req.cookies.has('active_club_id');
+      if (!hasClubCookie) {
+        const url = req.nextUrl.clone();
+        url.pathname = '/select-club';
+        url.searchParams.set('redirectTo', pathname);
+        return NextResponse.redirect(url);
+      }
+    }
   } catch (error) {
     console.error('Middleware error:', error);
   }

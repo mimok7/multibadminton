@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
+import { getActiveClubId } from '@/lib/club';
 
 async function resolveProfileId() {
   const [serverSupabase, adminSupabase] = await Promise.all([
@@ -42,13 +43,19 @@ export async function GET() {
     const resolved = await resolveProfileId();
     if ('error' in resolved) return resolved.error;
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ isRegistered: false, partner: null, availablePartners: [] });
+    }
+
     const today = getKoreaDate();
 
     // 1. 오늘 출석부 조회 (status가 present, lesson인 사용자 수집)
     const { data: attendancesData } = await resolved.adminSupabase
       .from('attendances')
       .select('user_id, status, partner_user_id')
-      .eq('attended_at', today);
+      .eq('attended_at', today)
+      .eq('club_id', clubId);
 
     const activeUserIds = new Set<string>();
     let myAttendance = null;
@@ -70,7 +77,8 @@ export async function GET() {
     const { data: schedules } = await resolved.adminSupabase
       .from('match_schedules')
       .select('id')
-      .eq('match_date', today);
+      .eq('match_date', today)
+      .eq('club_id', clubId);
 
     let matchParticipant = null;
     if (schedules && schedules.length > 0) {
@@ -169,8 +177,10 @@ export async function POST(request: Request) {
     const resolved = await resolveProfileId();
     if ('error' in resolved) return resolved.error;
 
-    const cookieStore = await cookies();
-    const activeClubId = cookieStore.get('active_club_id')?.value || '';
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const partnerId = typeof body.partnerId === 'string' && body.partnerId.trim() !== '' ? body.partnerId : null;
@@ -199,7 +209,7 @@ export async function POST(request: Request) {
           attended_at: today,
           status: newStatus,
           partner_user_id: partnerId,
-          club_id: activeClubId,
+          club_id: clubId,
         },
         { onConflict: 'user_id,attended_at' }
       );
@@ -213,7 +223,8 @@ export async function POST(request: Request) {
     const { data: schedules } = await resolved.adminSupabase
       .from('match_schedules')
       .select('id, club_id')
-      .eq('match_date', today);
+      .eq('match_date', today)
+      .eq('club_id', clubId);
 
     if (schedules && schedules.length > 0) {
       for (const sched of schedules) {

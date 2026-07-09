@@ -6,6 +6,7 @@ interface ClubContextData {
   clubId: string | null;
   clubName: string | null;
   clubRole: string | null;
+  clubMember: any | null;
   loading: boolean;
   error: Error | null;
 }
@@ -15,6 +16,7 @@ export function useClub(): ClubContextData {
     clubId: null,
     clubName: null,
     clubRole: null,
+    clubMember: null,
     loading: true,
     error: null,
   });
@@ -24,30 +26,28 @@ export function useClub(): ClubContextData {
 
     async function fetchClubInfo() {
       try {
-        // 클라이언트에서 active_club_id 쿠키 확인
-        const match = document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/);
-        const activeClubId = match ? decodeURIComponent(match[1]) : null;
-
-        if (!activeClubId) {
-          if (isMounted) {
-            setData(prev => ({ ...prev, clubId: null, clubName: null, clubRole: null, loading: false }));
-          }
-          return;
-        }
-
-        // API를 통해 클럽 이름 및 권한 조회
+        // API를 통해 클럽 정보 및 권한 조회 (서버가 HttpOnly 쿠키를 처리함)
         const res = await fetch('/api/user/active-club');
         if (!res.ok) {
           throw new Error('Failed to fetch active club');
         }
 
         const json = await res.json();
-        
+        const activeClubId = json.club?.id || null;
+
+        if (!activeClubId) {
+          if (isMounted) {
+            setData(prev => ({ ...prev, clubId: null, clubName: null, clubRole: null, clubMember: null, loading: false }));
+          }
+          return;
+        }
+
         if (isMounted) {
           setData({
             clubId: activeClubId,
             clubName: json.club?.name || null,
             clubRole: json.clubRole || null,
+            clubMember: json.member || null,
             loading: false,
             error: null,
           });

@@ -234,12 +234,6 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         setMyAttendanceStatus(null);
       }
 
-      const activeClubId = document.cookie
-        .split('; ')
-        .find(row => row.trim().startsWith('active_club_id='))
-        ?.split('=')[1];
-      const decodedClubId = activeClubId ? decodeURIComponent(activeClubId) : null;
-
       // 2. Fetch today's match schedules
       let schedulesQuery = supabase
         .from('match_schedules')
@@ -248,8 +242,8 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         .eq('status', 'scheduled')
         .is('generated_match_id', null);
         
-      if (decodedClubId) {
-        schedulesQuery = schedulesQuery.eq('club_id', decodedClubId);
+      if (activeClub?.id) {
+        schedulesQuery = schedulesQuery.eq('club_id', activeClub.id);
       }
       
       const { data: schedulesData } = await schedulesQuery;
@@ -291,7 +285,7 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
       void fetchAttendanceAndRegistration();
       void fetchCoinStatus();
     }
-  }, [userId, profile]);
+  }, [userId, profile, activeClub]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -324,11 +318,15 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         if (error) throw error;
 
         // Also clear attendance if any
-        const { error: deleteError } = await supabase
+        let deleteQuery = supabase
           .from('attendances')
           .delete()
           .eq('user_id', userProfileId)
           .eq('attended_at', today);
+        if (activeClub?.id) {
+          deleteQuery = deleteQuery.eq('club_id', activeClub.id);
+        }
+        const { error: deleteError } = await deleteQuery;
 
         if (deleteError) {
           console.error('출석 초기화 실패:', deleteError);
@@ -378,11 +376,15 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         }
 
         // Also delete attendance to revert to '참가' state
-        const { error: deleteError } = await supabase
+        let deleteQuery = supabase
           .from('attendances')
           .delete()
           .eq('user_id', userProfileId)
           .eq('attended_at', today);
+        if (activeClub?.id) {
+          deleteQuery = deleteQuery.eq('club_id', activeClub.id);
+        }
+        const { error: deleteError } = await deleteQuery;
 
         if (deleteError) {
           console.error('출석 초기화 실패:', deleteError);
@@ -413,11 +415,15 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
 
       if (isAlreadyActive) {
         // Toggle off: delete attendance record
-        const { error } = await supabase
+        let deleteQuery = supabase
           .from('attendances')
           .delete()
           .eq('user_id', userProfileId)
           .eq('attended_at', today);
+        if (activeClub?.id) {
+          deleteQuery = deleteQuery.eq('club_id', activeClub.id);
+        }
+        const { error } = await deleteQuery;
 
         if (error) throw error;
         setMyAttendanceStatus(null);
@@ -486,8 +492,8 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
           <div className="flex items-start justify-between gap-3 px-2">
             <div>
               {activeClub && (
-                <div className="text-[11px] text-emerald-400 font-bold mb-1.5 flex items-center gap-1">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-bold text-emerald-400 border border-emerald-400/20 shadow-sm">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                   {activeClub.name}
                 </div>
               )}

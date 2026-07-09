@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
+import { useClub } from '@/hooks/useClub';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -170,6 +171,7 @@ const ADMIN_MENU_CARDS: AdminMenuCard[] = [
 export default function AdminDashboard({ userId, email }: { userId: string; email: string }) {
   const router = useRouter();
   const supabase = getSupabaseClient();
+  const { clubId } = useClub();
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     todayAttendance: 0,
@@ -251,12 +253,7 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        // 쿠키에서 active_club_id 추출
-        const activeClubId = document.cookie
-          .split('; ')
-          .find(row => row.trim().startsWith('active_club_id='))
-          ?.split('=')[1];
-        const decodedClubId = activeClubId ? decodeURIComponent(activeClubId) : null;
+        const decodedClubId = clubId || null;
 
         let membersQuery = supabase.from('club_members').select('*', { count: 'exact', head: true });
         let att1Query = supabase.from('attendances').select('*', { count: 'exact', head: true }).eq('attended_at', today);
@@ -334,7 +331,7 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
     };
 
     fetchAdminData();
-  }, [userId, email, supabase]);
+  }, [userId, email, supabase, clubId]);
 
   const updateMyAttendanceStatus = async (status: 'present' | 'lesson' | 'absent') => {
     if (isUpdatingStatus) return;
@@ -355,18 +352,16 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
       
       let error;
       
+        const activeClubId = clubId || '';
+
       if (existingAttendance) {
         const result = await supabase
           .from('attendances')
           .update({ status })
-          .match({ user_id: userId, attended_at: today });
+          .match({ user_id: userId, attended_at: today, club_id: activeClubId });
         
         error = result.error;
       } else {
-        const activeClubId = typeof document !== 'undefined'
-          ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[2] || document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
-          : '';
-
         const result = await supabase
           .from('attendances')
           .insert({

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { readCoinSettings } from '@/lib/coin-settings';
+import { getActiveClubId } from '@/lib/club';
 
 type AttendanceStatus = 'present' | 'lesson' | 'absent';
 
@@ -54,17 +55,26 @@ async function resolveProfileId() {
 export async function GET(request: Request) {
   try {
     const resolved = await resolveProfileId();
-    if ('error' in resolved) return resolved.error;
+    if ('error' in resolved) {
+      // 401 에러를 콘솔에 뿜지 않도록 GET 요청에서는 조용히 null 리턴
+      return NextResponse.json({ status: null, attendedAt: getTodayLocal() });
+    }
 
     const { searchParams } = new URL(request.url);
     const attendedAt = searchParams.get('date') || getTodayLocal();
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ status: null, attendedAt });
+    }
 
-    const { data, error } = await resolved.adminSupabase
+    const query = resolved.adminSupabase
       .from('attendances')
       .select('status')
       .eq('user_id', resolved.profileId)
       .eq('attended_at', attendedAt)
-      .maybeSingle();
+      .eq('club_id', clubId);
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: 'Failed to fetch attendance status' }, { status: 500 });
@@ -85,18 +95,24 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     const status = body?.status;
     const attendedAt = typeof body?.attendedAt === 'string' && body.attendedAt ? body.attendedAt : getTodayLocal();
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: 'Club not selected' }, { status: 400 });
+    }
 
     if (!isAttendanceStatus(status)) {
       return NextResponse.json({ error: 'Invalid attendance status' }, { status: 400 });
     }
 
     // 1. 기존 출석 상태 조회
-    const { data: prevAttendance, error: lookupError } = await resolved.adminSupabase
+    const lookupQuery = resolved.adminSupabase
       .from('attendances')
       .select('status')
       .eq('user_id', resolved.profileId)
       .eq('attended_at', attendedAt)
-      .maybeSingle();
+      .eq('club_id', clubId);
+
+    const { data: prevAttendance, error: lookupError } = await lookupQuery.maybeSingle();
 
     if (lookupError) {
       return NextResponse.json({ error: 'Failed to lookup previous attendance status' }, { status: 500 });
@@ -112,8 +128,9 @@ export async function POST(request: Request) {
           user_id: resolved.profileId,
           attended_at: attendedAt,
           status,
+          club_id: clubId,
         },
-        { onConflict: 'user_id,attended_at' }
+        { onConflict: 'club_id,user_id,attended_at' }
       );
 
     if (error) {
@@ -129,15 +146,23 @@ export async function POST(request: Request) {
       const reward = coinSettings.attendanceReward ?? 10;
 
       if (coinSettings.isCoinEnabled && reward > 0) {
-        // 프로필 잔액 조회 및 증감
+        // profiles 에서 guest 여부 파악
         const { data: profile } = await resolved.adminSupabase
           .from('profiles')
-          .select('coin_balance, is_guest')
+          .select('is_guest')
           .eq('id', resolved.profileId)
           .single();
 
-        if (profile) {
-          const currentBalance = profile.coin_balance ?? 0;
+        if (profile && clubId) {
+          // club_members 에서 해당 클럽 코인 잔액 조회
+          const { data: memberInfo } = await resolved.adminSupabase
+            .from('club_members')
+            .select('coin_balance')
+            .eq('club_id', clubId)
+            .eq('user_id', resolved.authUserId)
+            .single();
+
+          const currentBalance = memberInfo?.coin_balance ?? 0;
           let nextBalance = currentBalance;
           const profileReward = profile.is_guest 
             ? (coinSettings.guestAttendanceReward ?? 5) 
@@ -149,13 +174,14 @@ export async function POST(request: Request) {
             nextBalance = Math.max(0, nextBalance - profileReward);
           }
 
+          // club_members 테이블의 코인 잔액 업데이트
           await resolved.adminSupabase
-            .from('profiles')
+            .from('club_members')
             .update({
               coin_balance: nextBalance,
-              coin_updated_at: new Date().toISOString(),
             })
-            .eq('id', resolved.profileId);
+            .eq('club_id', clubId)
+            .eq('user_id', resolved.authUserId);
         }
       }
     }

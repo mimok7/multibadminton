@@ -80,14 +80,11 @@ export async function GET(request: Request) {
 
     // 쿠키에서 active_club_id 추출
     const cookieHeader = request.headers.get('cookie') || '';
-    const activeClubId = cookieHeader
-      .split('; ')
-      .find(row => row.trim().startsWith('active_club_id='))
-      ?.split('=')[1];
+    const activeClubIdMatch = cookieHeader.match(/(?:^|;\s*)active_club_id=([^;]*)/);
+    const decodedClubId = activeClubIdMatch ? decodeURIComponent(activeClubIdMatch[1]).replace(/"/g, '') : null;
 
-    const decodedClubId = activeClubId ? decodeURIComponent(activeClubId) : null;
     if (!decodedClubId) {
-      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+      return NextResponse.json({ matches: [] });
     }
 
     const { data: schedules, error: schedulesError } = await adminSupabase

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole, getProfileByUserId } from '@/lib/auth';
+import { getActiveClubId } from '@/lib/club';
 
 type RouteContext = { params: Promise<{ matchId: string }> };
 
@@ -108,12 +109,18 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
+    }
+
     const adminSupabase = getSupabaseAdminClient();
 
     const { data: rawMatch, error } = await adminSupabase
       .from('tournament_matches')
       .select('*')
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .single();
     const match = rawMatch as MatchRow | null;
 
@@ -193,13 +200,19 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
+    }
+
     const adminSupabase = getSupabaseAdminClient();
 
-    // 현재 매치 확인
+    // 현재 매치 확인 (club_id filtered)
     const { data: rawMatch, error: matchError } = await adminSupabase
       .from('tournament_matches')
       .select('*')
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .single();
     const match = rawMatch as MatchRow | null;
 
@@ -259,6 +272,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       .from('tournament_matches')
       .update(updateData)
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .select('*')
       .single();
 
@@ -287,13 +301,19 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
+    }
+
     const adminSupabase = getSupabaseAdminClient();
 
-    // 현재 매치 확인
+    // 현재 매치 확인 (club_id filtered)
     const { data: rawMatch, error: matchError } = await adminSupabase
       .from('tournament_matches')
       .select('*')
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .single();
     const match = rawMatch as MatchRow | null;
 
@@ -350,6 +370,7 @@ export async function POST(request: Request, context: RouteContext) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', matchId)
+      .eq('club_id', clubId)
       .select('*')
       .single();
 

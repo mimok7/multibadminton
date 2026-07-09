@@ -43,11 +43,14 @@ const formSchema = z.object({
 
 export default function ProfilePage() {
   const { user, profile, loading: userLoading } = useUser();
-  const { clubId, loading: clubLoading } = useClub();
+  const { clubId, loading: clubLoading, clubMember: clubMemberInfo } = useClub();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const [members, setMembers] = useState<any[]>([]);
   const [myVotes, setMyVotes] = useState<Record<string, string>>({});
+  const [myLatestProfile, setMyLatestProfile] = useState<any>(null);
+
+
   
   // 비밀번호 변경 관련 상태
   const [newPassword, setNewPassword] = useState('');
@@ -136,17 +139,20 @@ export default function ProfilePage() {
     }
   };
   const levelInfoMap = useLevelInfoMap();
-  const displayName = profile?.full_name || profile?.username || '회원';
-  const levelLabel = profile?.skill_level_name || getLevelNameFromCode(levelInfoMap, profile?.skill_level, profile?.skill_level || '미지정');
+  const targetProfile = myLatestProfile || profile;
+  const displayName = targetProfile?.full_name || targetProfile?.username || '회원';
+  const levelLabel = targetProfile?.skill_level_name || getLevelNameFromCode(levelInfoMap, targetProfile?.skill_level, targetProfile?.skill_level || '미지정');
   const levelOptions = SKILL_LEVEL_GROUP_CODES.map((code) => ({
     code,
     name: getLevelNameFromCode(levelInfoMap, code, code) || code,
   }));
-  const roleLabel = profile?.role === 'admin' ? '관리자' : '일반 회원';
+  const roleLabel = clubMemberInfo?.role === 'owner' ? '소유자' :
+                    clubMemberInfo?.role === 'admin' ? '관리자' :
+                    clubMemberInfo?.role === 'manager' ? '매니저' : '일반 회원';
   const genderLabel =
-    profile?.gender === 'male' || profile?.gender === 'M'
+    targetProfile?.gender === 'male' || targetProfile?.gender === 'M'
       ? '남성'
-      : profile?.gender === 'female' || profile?.gender === 'F'
+      : targetProfile?.gender === 'female' || targetProfile?.gender === 'F'
         ? '여성'
         : '미설정';
 
@@ -175,40 +181,33 @@ export default function ProfilePage() {
   const loadRatingData = async (currentUserId: string, targetClubId: string | null) => {
     setLoadingData(true);
     let resolvedMembers: any[] = [];
+    
+    try {
+      const { data: myProf } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUserId)
+        .single();
+      if (myProf) {
+        setMyLatestProfile(myProf);
+      }
+    } catch (err) {
+      console.error('Error loading latest profile:', err);
+    }
+
     try {
       let profilesData: any[] = [];
       if (targetClubId) {
-        const { data: memberRows, error: memberError } = await supabase
-          .from('club_members')
-          .select(`
-            profiles (
-              id,
-              full_name,
-              username,
-              email,
-              skill_level,
-              gender,
-              avatar_url
-            )
-          `)
-          .eq('club_id', targetClubId);
-
-        if (memberError) {
-          console.error('Error fetching club members:', memberError);
-        }
-        
-        if (memberRows) {
-          profilesData = memberRows
-            .map((row: any) => row.profiles)
-            .filter(Boolean);
+        const res = await fetch('/api/user/club-members');
+        if (res.ok) {
+          const json = await res.json();
+          profilesData = json.members || [];
+        } else {
+          console.error('Error fetching club members API:', await res.text());
         }
       } else {
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, email, skill_level, gender, avatar_url');
-        profilesData = data || [];
+        profilesData = [];
       }
-      
       const collator = new Intl.Collator('ko');
       resolvedMembers = (profilesData || []).slice().sort((a: any, b: any) => {
         const aName = a.full_name || a.username || a.email || '';
@@ -666,7 +665,7 @@ export default function ProfilePage() {
                   <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-100">레벨 {levelLabel}</span>
                   <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-100">{roleLabel}</span>
                   {isCoinEnabled && (
-                    <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-amber-100">코인 {profile?.coin_balance ?? 0}</span>
+                    <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-amber-100">코인 {clubMemberInfo?.coin_balance ?? 0}</span>
                   )}
                 </div>
               </div>

@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Bell } from 'lucide-react';
 
 export default function Header() {
   const { user } = useUser();
+  const { clubId } = useClub();
   const supabase = getSupabaseClient();
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeClub, setActiveClub] = useState<{name: string} | null>(null);
@@ -54,7 +56,9 @@ export default function Header() {
         schema: 'public',
         table: 'notifications',
         filter: `user_id=eq.${user.id}`
-      }, () => {
+      }, (payload: any) => {
+        // Only refresh if the notification belongs to the active club
+        if (payload.new?.club_id && payload.new.club_id !== clubId) return;
         fetchUnread();
       })
       .subscribe();
@@ -62,7 +66,7 @@ export default function Header() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, supabase]);
+  }, [user, clubId, supabase]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75">

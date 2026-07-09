@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { getProfileByUserId } from '@/lib/auth';
 
 interface MatchAssignmentNotification {
@@ -15,12 +16,13 @@ interface MatchAssignmentNotification {
 
 export default function MatchNotifications() {
   const { user, profile } = useUser();
+  const { clubId } = useClub();
   const [notifications, setNotifications] = useState<MatchAssignmentNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const supabase = getSupabaseClient();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !clubId) return;
 
     const checkForNewMatches = async () => {
       try {
@@ -37,6 +39,7 @@ export default function MatchNotifications() {
         const { data: recentSchedules, error: schedulesError } = await supabase
           .from('match_schedules')
           .select('id, created_at, status, generated_match_id')
+          .eq('club_id', clubId)
           .eq('match_date', today)
           .eq('status', 'scheduled')
           .gte('created_at', recentThreshold)
@@ -118,7 +121,7 @@ export default function MatchNotifications() {
     const interval = setInterval(checkForNewMatches, 30000);
 
     return () => clearInterval(interval);
-  }, [user, profile, supabase]);
+  }, [user, profile, clubId, supabase]);
 
   const markAsRead = (notificationId: string) => {
     setNotifications(prev =>

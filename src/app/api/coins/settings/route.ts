@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
   try {
@@ -11,7 +12,12 @@ export async function GET() {
     } = await serverSupabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ isCoinEnabled: false });
+    }
+
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ isCoinEnabled: false });
     }
 
     const coinSettings = await readCoinSettings();

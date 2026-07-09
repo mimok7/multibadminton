@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getProfileByUserId } from '@/lib/auth';
 import { formatNameWithCoins } from '@/lib/player-display';
+import { useClub } from '@/hooks/useClub';
 import type { Database } from '@/types/supabase';
 
 interface MatchSchedule {
@@ -45,6 +46,7 @@ export default function MatchRegistration({
   onRegistrationChange 
 }: MatchRegistrationProps) {
   const supabase = getSupabaseClient();
+  const { clubId } = useClub();
   const [resolvedParticipantId, setResolvedParticipantId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(false);
@@ -203,9 +205,7 @@ export default function MatchRegistration({
       }
 
       // 3. 등록 진행
-      const activeClubId = typeof document !== 'undefined'
-        ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
-        : '';
+      const activeClubId = clubId || '';
 
       const { error } = await supabase
         .from('match_participants')

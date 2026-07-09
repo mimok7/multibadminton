@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@/hooks/useUser";
+import { useClub } from "@/hooks/useClub";
 import { getSupabaseClient } from "@/lib/supabase";
 import {
   Bell,
@@ -118,6 +119,7 @@ function formatMessageWithBreaks(message: string): React.ReactNode {
 
 export default function NotificationsPage() {
   const { user, loading } = useUser();
+  const { clubId } = useClub();
   const supabase = getSupabaseClient();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [fetching, setFetching] = useState(false);
@@ -231,7 +233,7 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !clubId) return;
     fetchNotifications();
 
     const channel = supabase
@@ -244,7 +246,9 @@ export default function NotificationsPage() {
           table: "notifications",
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
+        (payload: any) => {
+          // Only refresh if the notification belongs to the active club
+          if (payload.new?.club_id && payload.new.club_id !== clubId) return;
           fetchNotifications();
         }
       )
@@ -253,7 +257,7 @@ export default function NotificationsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, clubId]);
 
   if (loading) {
     return (

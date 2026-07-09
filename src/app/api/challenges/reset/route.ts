@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole } from '@/lib/auth';
 import { getKoreaDate } from '@/lib/date';
+import { getActiveClubId } from '@/lib/club';
 
 export async function POST() {
   const serverSupabase = await getSupabaseServerClient();
@@ -21,6 +22,11 @@ export async function POST() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+  }
+
   try {
     const today = getKoreaDate();
 
@@ -35,6 +41,7 @@ export async function POST() {
         updated_at: new Date().toISOString()
       })
       .eq('challenge_date', today)
+      .eq('club_id', clubId)
       .in('status', ['pending', 'accepted']);
 
     if (updateError) {

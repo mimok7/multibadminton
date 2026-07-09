@@ -8,6 +8,7 @@ import { RequireAuth } from '@/components/AuthGuard';
 import { Button } from '@/components/ui/button';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { getKoreaDate } from '@/lib/date';
 import { getLevelNameFromCode } from '@/lib/level-info';
 import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
@@ -60,6 +61,7 @@ function formatMatchDate(value: string | null, options: Intl.DateTimeFormatOptio
 
 export default function MatchRegistrationPage() {
   const { user, profile } = useUser();
+  const { clubId } = useClub();
   const supabase = getSupabaseClient();
   const participantProfileId = profile?.id ?? null;
   const levelInfoMap = useLevelInfoMap();
@@ -78,13 +80,10 @@ export default function MatchRegistrationPage() {
     try {
       setLoading(true);
       
-      const activeClubId = document.cookie
-        .split('; ')
-        .find(row => row.trim().startsWith('active_club_id='))
-        ?.split('=')[1];
+      const activeClubId = clubId;
 
       if (!activeClubId) {
-        console.error('active_club_id cookie not found');
+        console.warn('active_club_id cookie not found');
         setSchedules([]);
         setUserMatches([]);
         setLoading(false);
@@ -98,7 +97,7 @@ export default function MatchRegistrationPage() {
         .from('match_schedules')
         .select('id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants')
         .eq('status', 'scheduled')
-        .eq('club_id', decodeURIComponent(activeClubId))
+        .eq('club_id', activeClubId)
         .or(`match_date.gte.${todayStr},schedule_source.eq.tournament,description.ilike.%[대회 경기]%`)
         .is('generated_match_id', null)
         .order('match_date', { ascending: true })
@@ -278,7 +277,7 @@ export default function MatchRegistrationPage() {
     } finally {
       setLoading(false);
     }
-  }, [participantKeys, supabase]);
+  }, [participantKeys, supabase, clubId]);
 
   const registerForMatch = async (scheduleId: string, isWaitlist: boolean = false) => {
     if (!user) return;
