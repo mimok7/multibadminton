@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 
@@ -168,6 +169,9 @@ export async function POST(request: Request) {
     const resolved = await resolveProfileId();
     if ('error' in resolved) return resolved.error;
 
+    const cookieStore = await cookies();
+    const activeClubId = cookieStore.get('active_club_id')?.value || '';
+
     const body = await request.json().catch(() => ({}));
     const partnerId = typeof body.partnerId === 'string' && body.partnerId.trim() !== '' ? body.partnerId : null;
 
@@ -195,6 +199,7 @@ export async function POST(request: Request) {
           attended_at: today,
           status: newStatus,
           partner_user_id: partnerId,
+          club_id: activeClubId,
         },
         { onConflict: 'user_id,attended_at' }
       );
@@ -207,7 +212,7 @@ export async function POST(request: Request) {
     // 2. 오늘의 경기 일정에 대한 참가자 정보도 함께 업데이트 / 등록
     const { data: schedules } = await resolved.adminSupabase
       .from('match_schedules')
-      .select('id')
+      .select('id, club_id')
       .eq('match_date', today);
 
     if (schedules && schedules.length > 0) {
@@ -232,6 +237,7 @@ export async function POST(request: Request) {
               user_id: resolved.profileId,
               status: 'registered',
               partner_user_id: partnerId,
+              club_id: sched.club_id,
             });
         }
       }

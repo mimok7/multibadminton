@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER, type CoinSettlementMode } from '@/lib/coins';
@@ -98,6 +99,9 @@ function buildCoinDeltas(params: {
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
   const adminSupabase = getSupabaseAdminClient();
+
+  const cookieStore = await cookies();
+  const activeClubId = cookieStore.get('active_club_id')?.value || '';
 
   const {
     data: { user },
@@ -357,6 +361,7 @@ export async function POST(request: Request) {
           team2_score: normalizedTeam2Score,
           recorded_by: currentProfile.id,
           updated_at: new Date().toISOString(),
+          club_id: activeClubId
         });
       }
     }
@@ -375,6 +380,7 @@ export async function POST(request: Request) {
         created_by: createdBy,
         updated_by: updatedBy,
         updated_at: new Date().toISOString(),
+        club_id: activeClubId
       }, { onConflict: 'match_id' })
       .then(async (res) => {
         // 만약 컬럼이 없어서 에러가 발생한 경우 (PGRST204 등), 기존 컬럼만으로 재시도 (fallback)
@@ -387,6 +393,7 @@ export async function POST(request: Request) {
               winner_team1: winnerTeam1,
               team1_score: normalizedTeam1Score,
               team2_score: normalizedTeam2Score,
+              club_id: activeClubId
             }, { onConflict: 'match_id' });
         }
         return res;

@@ -7,7 +7,7 @@ export async function ensureFiveMatches(executedBy: string | null) {
   // 1. 활성화된 정기모임 템플릿 조회 (주말 토/일 제외)
   const { data: templates, error: templatesError } = await adminSupabase
     .from('recurring_match_templates')
-    .select('id, name, description, day_of_week, start_time, end_time, location, max_participants, is_active')
+    .select('id, name, description, day_of_week, start_time, end_time, location, max_participants, is_active, club_id')
     .eq('is_active', true)
     .neq('day_of_week', 0) // 일요일 제외
     .neq('day_of_week', 6); // 토요일 제외
@@ -91,6 +91,7 @@ export async function ensureFiveMatches(executedBy: string | null) {
             description,
             created_by: executedBy,
             updated_by: executedBy,
+            club_id: template.club_id,
           })
           .select('*')
           .single();

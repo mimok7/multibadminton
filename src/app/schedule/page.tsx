@@ -197,6 +197,10 @@ function ScheduleManagePage() {
       const scheduleInserts: MatchScheduleInsert[] = [];
       let assignedCount = 0;
 
+      const activeClubId = typeof document !== 'undefined'
+        ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
+        : '';
+
       for (let i = 0; i < matchesToAssign.length; i++) {
         const match = matchesToAssign[i];
         const slotIndex = Math.floor(i / bulkCourtCount);
@@ -215,7 +219,8 @@ function ScheduleManagePage() {
           court_number: courtNumber,
           scheduled_time: timeString,
           scheduled_date: selectedSession.session_date,
-          status: 'scheduled'
+          status: 'scheduled',
+          club_id: activeClubId
         });
 
         assignedCount++;

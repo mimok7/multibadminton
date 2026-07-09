@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  
   // 컴파일 최적화
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',

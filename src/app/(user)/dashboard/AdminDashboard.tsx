@@ -340,12 +340,17 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
         
         error = result.error;
       } else {
+        const activeClubId = typeof document !== 'undefined'
+          ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[2] || document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
+          : '';
+
         const result = await supabase
           .from('attendances')
           .insert({
             user_id: userId,
             attended_at: today,
-            status
+            status,
+            club_id: activeClubId
           });
         
         error = result.error;

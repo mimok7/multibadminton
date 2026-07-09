@@ -203,12 +203,17 @@ export default function MatchRegistration({
       }
 
       // 3. 등록 진행
+      const activeClubId = typeof document !== 'undefined'
+        ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
+        : '';
+
       const { error } = await supabase
         .from('match_participants')
         .insert([{
           match_schedule_id: schedule.id,
           user_id: participantId,
-          status: 'registered'
+          status: 'registered',
+          club_id: activeClubId
         }]);
 
       if (error) {

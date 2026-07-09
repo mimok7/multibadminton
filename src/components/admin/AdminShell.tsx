@@ -208,12 +208,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs font-semibold tracking-[0.12em] text-gray-400 sm:text-sm">
-                  {activeClubName ? `ADMIN | ${activeClubName}` : 'ADMIN'}
+                  {activeClubName ? activeClubName : 'ADMIN'}
                 </div>
                 <div className="truncate text-sm font-semibold text-gray-900 sm:hidden">
                   {profile?.full_name || profile?.username || '관리자'}
                 </div>
-                <div className="hidden text-sm text-gray-500 sm:block">관리자 영역</div>
+                <div className="hidden text-sm text-gray-500 sm:block">
+                  {activeClubName ? `${activeClubName} 관리자 영역` : '관리자 영역'}
+                </div>
               </div>
               <div className="flex gap-1.5 sm:gap-2">
                 {isMobileView && (

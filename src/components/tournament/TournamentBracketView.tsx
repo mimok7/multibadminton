@@ -1798,6 +1798,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
           team_type: selectedTeam.team_type,
           total_teams: teamCount,
           matches_per_player: matchesPerPlayer,
+          club_id: (selectedTeam as any).club_id,
         })
         .select()
         .single();
@@ -1807,6 +1808,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
       const matchesToInsert = generatedMatches.map((match) => ({
         ...match,
         tournament_id: tournamentData.id,
+        club_id: (selectedTeam as any).club_id,
       }));
 
       const { error: matchesError } = await supabase.from('tournament_matches').insert(matchesToInsert);
