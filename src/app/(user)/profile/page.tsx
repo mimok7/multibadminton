@@ -233,11 +233,17 @@ export default function ProfilePage() {
     }
 
     try {
-      const { data: settingsData, error: settingsError } = await (supabase as any)
+      let settingsQuery = (supabase as any)
         .from('member_rating_settings')
-        .select('start_date, end_date')
-        .eq('id', 1)
-        .maybeSingle();
+        .select('start_date, end_date');
+      if (targetClubId) {
+        settingsQuery = settingsQuery.eq('club_id', targetClubId);
+      } else {
+        settingsQuery = settingsQuery.eq('id', 1);
+      }
+      
+      const { data: settingsData, error: settingsError } = await settingsQuery.maybeSingle();
+      
       if (settingsError) {
         console.warn('API Error loading rating settings (Fallback applied):', settingsError.message);
         setRatingSettings({ start_date: null, end_date: null });
@@ -252,9 +258,13 @@ export default function ProfilePage() {
     }
 
     try {
-      const { data: votesData } = await (supabase as any)
+      let votesQuery = (supabase as any)
         .from('member_level_votes')
         .select('voter_id, subject_id, skill_level');
+      if (targetClubId) {
+        votesQuery = votesQuery.eq('club_id', targetClubId);
+      }
+      const { data: votesData } = await votesQuery;
 
       if (votesData) {
         setAllVotes(votesData);
@@ -367,13 +377,15 @@ export default function ProfilePage() {
 
         if (val === '') {
           if (oldVal !== '') {
-            promises.push(
-              (supabase as any)
-                .from('member_level_votes')
-                .delete()
-                .eq('voter_id', user.id)
-                .eq('subject_id', subjectId)
-            );
+            let delQuery = (supabase as any)
+              .from('member_level_votes')
+              .delete()
+              .eq('voter_id', user.id)
+              .eq('subject_id', subjectId);
+            if (clubId) {
+              delQuery = delQuery.eq('club_id', clubId);
+            }
+            promises.push(delQuery);
           }
         } else {
           promises.push(
@@ -385,8 +397,9 @@ export default function ProfilePage() {
                   subject_id: subjectId,
                   skill_level: val,
                   updated_at: new Date().toISOString(),
+                  ...(clubId ? { club_id: clubId } : {}),
                 },
-                { onConflict: 'voter_id, subject_id' }
+                { onConflict: 'club_id,voter_id,subject_id' }
               )
           );
         }

@@ -234,13 +234,25 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         setMyAttendanceStatus(null);
       }
 
+      const activeClubId = document.cookie
+        .split('; ')
+        .find(row => row.trim().startsWith('active_club_id='))
+        ?.split('=')[1];
+      const decodedClubId = activeClubId ? decodeURIComponent(activeClubId) : null;
+
       // 2. Fetch today's match schedules
-      const { data: schedulesData } = await supabase
+      let schedulesQuery = supabase
         .from('match_schedules')
         .select('id, match_date, max_participants, current_participants')
         .eq('match_date', today)
         .eq('status', 'scheduled')
         .is('generated_match_id', null);
+        
+      if (decodedClubId) {
+        schedulesQuery = schedulesQuery.eq('club_id', decodedClubId);
+      }
+      
+      const { data: schedulesData } = await schedulesQuery;
 
       const schedulesList = (schedulesData || []);
       setTodaySchedules(schedulesList);

@@ -251,6 +251,29 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+        // 쿠키에서 active_club_id 추출
+        const activeClubId = document.cookie
+          .split('; ')
+          .find(row => row.trim().startsWith('active_club_id='))
+          ?.split('=')[1];
+        const decodedClubId = activeClubId ? decodeURIComponent(activeClubId) : null;
+
+        let membersQuery = supabase.from('club_members').select('*', { count: 'exact', head: true });
+        let att1Query = supabase.from('attendances').select('*', { count: 'exact', head: true }).eq('attended_at', today);
+        let ms1Query = supabase.from('match_schedules').select('*', { count: 'exact', head: true });
+        let ms2Query = supabase.from('match_schedules').select('*', { count: 'exact', head: true }).gte('match_date', today).eq('status', 'scheduled');
+        let att2Query = supabase.from('attendances').select('user_id').gte('attended_at', sevenDaysAgo.toISOString().slice(0, 10));
+        let att3Query = supabase.from('attendances').select('status').eq('user_id', userId).eq('attended_at', today);
+
+        if (decodedClubId) {
+          membersQuery = membersQuery.eq('club_id', decodedClubId);
+          att1Query = att1Query.eq('club_id', decodedClubId);
+          ms1Query = ms1Query.eq('club_id', decodedClubId);
+          ms2Query = ms2Query.eq('club_id', decodedClubId);
+          att2Query = att2Query.eq('club_id', decodedClubId);
+          att3Query = att3Query.eq('club_id', decodedClubId);
+        }
+
         // 병렬로 모든 데이터 요청
         const [
           profilesResult,
@@ -262,12 +285,12 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
           myAttendanceResult
         ] = await Promise.allSettled([
           supabase.from('profiles').select('username, full_name').eq('id', userId),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }),
-          supabase.from('attendances').select('*', { count: 'exact', head: true }).eq('attended_at', today),
-          supabase.from('match_schedules').select('*', { count: 'exact', head: true }),
-          supabase.from('match_schedules').select('*', { count: 'exact', head: true }).gte('match_date', today).eq('status', 'scheduled'),
-          supabase.from('attendances').select('user_id').gte('attended_at', sevenDaysAgo.toISOString().slice(0, 10)),
-          supabase.from('attendances').select('status').eq('user_id', userId).eq('attended_at', today)
+          membersQuery,
+          att1Query,
+          ms1Query,
+          ms2Query,
+          att2Query,
+          att3Query
         ]);
 
         // 프로필 정보
