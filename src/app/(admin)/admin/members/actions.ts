@@ -1,14 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { isUserAdmin } from '@/lib/auth';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { DEFAULT_COIN_SETTINGS } from '@/lib/coins';
 
 // 사용자를 삭제하려면 서비스 키를 사용하는 별도의 관리자 클라이언트가 필요합니다.
 // 이 키는 절대로 노출되어서는 안 됩니다.
-const supabaseAdmin = getSupabaseAdminClient();
+const supabaseAdmin = await getFilteredAdminClient();
 
 async function isAdmin() {
     const supabase = await getSupabaseServerClient();

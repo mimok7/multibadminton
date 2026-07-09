@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 import type { ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getLevelNameFromCode, type LevelInfoMap } from '@/lib/level-info';
@@ -58,7 +58,7 @@ function parseGeneratedDescriptionOrder(description?: string | null) {
 export async function GET(request: Request) {
   try {
     const serverSupabase = await getSupabaseServerClient();
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = await getFilteredAdminClient();
 
     // 경기 후 자정을 기해서 만료된 게스트 자동 삭제 (백그라운드 실행)
     adminSupabase.rpc('delete_expired_guests').then(({ error }) => {

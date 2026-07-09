@@ -1,12 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getClubRole } from '@/lib/club-auth';
 import { isUserAdmin } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
-const supabaseAdmin = getSupabaseAdminClient();
+const supabaseAdmin = await getFilteredAdminClient();
 
 async function getManagerContext() {
     const supabase = await getSupabaseServerClient();

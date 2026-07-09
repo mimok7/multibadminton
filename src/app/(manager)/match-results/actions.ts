@@ -1,9 +1,9 @@
 'use server';
 
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 export async function fetchAdminMatchSessions() {
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const serverSupabase = await getSupabaseServerClient();
 
   const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
@@ -24,7 +24,7 @@ export async function fetchAdminMatchSessions() {
 }
 
 export async function fetchAdminMatchResults(filters: { dateFilter: string; statusFilter: string }) {
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const serverSupabase = await getSupabaseServerClient();
 
   const { data: { user }, error: authError } = await serverSupabase.auth.getUser();

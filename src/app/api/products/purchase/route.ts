@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId } from '@/lib/auth';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server';
 
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 });
   }
 
-  const adminSupabase = getSupabaseAdminClient() as any;
+  const adminSupabase = await getFilteredAdminClient() as any;
 
   try {
     // 1. 상품 및 사용자 잔액 조회

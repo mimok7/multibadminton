@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function POST(request: Request) {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ matches: [] });
     }
 
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = await getFilteredAdminClient();
     const { participantIds, status } = await request.json();
 
     if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getUserClubs } from '@/lib/club';
 import ClubSelectorClient from './ClubSelectorClient';
 import { setActiveClubAction as setServerActiveClub } from '@/app/actions/club';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getUserRole } from '@/lib/auth';
 
 export default async function SelectClubPage({
@@ -22,7 +22,7 @@ export default async function SelectClubPage({
 
   let clubs: any[] = [];
   if (isGlobalAdmin) {
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = getUnfilteredGlobalAdminClient();
     // 관리자는 가입 여부와 상관없이 모든 클럽 조회 가능
     const { data: allClubs, error } = await adminSupabase
       .from('clubs')

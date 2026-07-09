@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { getActiveClubId } from '@/lib/club';
 
@@ -21,7 +21,7 @@ function isAttendanceStatus(value: unknown): value is AttendanceStatus {
 async function resolveProfileId() {
   const [serverSupabase, adminSupabase] = await Promise.all([
     getSupabaseServerClient(),
-    Promise.resolve(getSupabaseAdminClient()),
+    Promise.resolve(await getFilteredAdminClient()),
   ]);
 
   const {

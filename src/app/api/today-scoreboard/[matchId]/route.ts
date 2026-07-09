@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole, getProfileByUserId } from '@/lib/auth';
 import { getActiveClubId } from '@/lib/club';
 import { syncSessionMatchFlow } from '@/lib/match-session-flow';
@@ -20,7 +20,7 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
     }
 
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = await getFilteredAdminClient();
 
     // 1. Fetch match_schedules (club_id filtered)
     const { data: scheduleMatch, error } = await adminSupabase
@@ -154,7 +154,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'No active club selected' }, { status: 400 });
     }
 
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = await getFilteredAdminClient();
     const { data: scheduleMatch, error: matchError } = await adminSupabase
       .from('match_schedules')
       .select('*')

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import type { Database } from '@/types/supabase';
 import { isUserAdmin } from '@/lib/auth';
 import { readMatchSettings } from '@/lib/match-settings';
@@ -30,7 +30,7 @@ type RecurringTemplateRow = Pick<
   | 'is_active'
 >;
 
-type AdminSupabaseClient = ReturnType<typeof getSupabaseAdminClient>;
+type AdminSupabaseClient = ReturnType<typeof getUnfilteredGlobalAdminClient>;
 
 const DAY_LABELS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
@@ -122,7 +122,7 @@ async function generateRecurringMatchesFallback(
   const executionTime = new Date().toISOString();
   const templateIds = selectedTemplateIds?.filter(Boolean) ?? [];
   const isManualSelectedGeneration = templateIds.length > 0;
-  const supabase = getSupabaseAdminClient();
+  const supabase = getUnfilteredGlobalAdminClient();
 
   let query = supabase
     .from('recurring_match_templates')

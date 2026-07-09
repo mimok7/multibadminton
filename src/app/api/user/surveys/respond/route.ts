@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function POST(request: Request) {
@@ -27,14 +27,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '클럽을 선택해주세요.' }, { status: 400 });
     }
 
-    const adminSupabase = getSupabaseAdminClient() as any;
+    const adminSupabase = await getFilteredAdminClient() as any;
 
     // 1. 설문조사가 활성화되어 있는지 확인 (club_id 필터링)
     const { data: survey, error: surveyError } = await adminSupabase
       .from('surveys')
       .select('is_active, options, max_responses, option_limits')
       .eq('id', surveyId)
-      .eq('club_id', clubId)
       .single();
 
     if (surveyError || !survey) {

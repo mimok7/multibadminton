@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId, getUserRole } from '@/lib/auth';
 import { getKoreaDate } from '@/lib/date';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 type ProfileLite = {
@@ -42,7 +42,7 @@ function getProfileName(profile?: ProfileLite | null) {
   return profile?.full_name || profile?.username || '선수';
 }
 
-async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabaseAdminClient>, today: string, clubId: string) {
+async function getTodayChallengePool(adminSupabase: any, today: string, clubId: string) {
   const { data: attendanceRows, error: attendanceError } = await adminSupabase
     .from('attendances')
     .select('user_id')
@@ -54,8 +54,8 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
     throw new Error(attendanceError.message);
   }
 
-  const presentUserIds = Array.from(
-    new Set((attendanceRows || []).map((row) => row.user_id).filter((value): value is string => Boolean(value))),
+  const presentUserIds: string[] = Array.from(
+    new Set((attendanceRows || []).map((row: any) => row.user_id).filter((value: any): value is string => Boolean(value))),
   );
 
   if (presentUserIds.length === 0) {
@@ -77,13 +77,13 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
   }
 
   const assignedScheduleIds = (assignedSchedules || [])
-    .map((schedule) => schedule.id)
-    .filter((value): value is string => Boolean(value));
+    .map((schedule: any) => schedule.id)
+    .filter((value: any): value is string => Boolean(value));
   const assignedGeneratedMatchIds = Array.from(
     new Set(
       (assignedSchedules || [])
-        .map((schedule) => schedule.generated_match_id)
-        .filter((value): value is number => typeof value === 'number'),
+        .map((schedule: any) => schedule.generated_match_id)
+        .filter((value: any): value is number => typeof value === 'number'),
     ),
   );
 
@@ -100,15 +100,15 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
       throw new Error(generatedMatchesError.message);
     }
 
-    (generatedMatches || []).forEach((match) => {
+    (generatedMatches || []).forEach((match: any) => {
       [
         match.team1_player1_id,
         match.team1_player2_id,
         match.team2_player1_id,
         match.team2_player2_id,
       ]
-        .filter((value): value is string => Boolean(value))
-        .forEach((value) => blockedUserIds.add(value));
+        .filter((value: any): value is string => Boolean(value))
+        .forEach((value: string) => blockedUserIds.add(value));
     });
   }
 
@@ -123,7 +123,7 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
   }
 
   if (todayTournaments && todayTournaments.length > 0) {
-    const tournamentIds = todayTournaments.map((t) => t.id);
+    const tournamentIds = todayTournaments.map((t: any) => t.id);
     const { data: activeTournamentMatches, error: activeMatchesError } = await adminSupabase
       .from('tournament_matches')
       .select('team1, team2')
@@ -136,9 +136,9 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
 
     if (activeTournamentMatches && activeTournamentMatches.length > 0) {
       const activePlayerNames = new Set<string>();
-      activeTournamentMatches.forEach((m) => {
-        (m.team1 || []).forEach((name) => activePlayerNames.add(name.trim()));
-        (m.team2 || []).forEach((name) => activePlayerNames.add(name.trim()));
+      activeTournamentMatches.forEach((m: any) => {
+        (m.team1 || []).forEach((name: string) => activePlayerNames.add(name.trim()));
+        (m.team2 || []).forEach((name: string) => activePlayerNames.add(name.trim()));
       });
 
       if (activePlayerNames.size > 0) {
@@ -152,7 +152,7 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
         }
 
         if (playerProfiles) {
-          playerProfiles.forEach((p) => blockedUserIds.add(p.id));
+          playerProfiles.forEach((p: any) => blockedUserIds.add(p.id));
         }
       }
     }
@@ -170,14 +170,14 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
   }
 
   const challengeBlockedUserIds = new Set<string>();
-  (challengeRows || []).forEach((row) => {
+  (challengeRows || []).forEach((row: any) => {
     [row.challenger_id, row.partner_id, row.opponent1_id, row.opponent2_id]
-      .filter((value): value is string => Boolean(value))
-      .forEach((value) => challengeBlockedUserIds.add(value));
+      .filter((value: any): value is string => Boolean(value))
+      .forEach((value: string) => challengeBlockedUserIds.add(value));
   });
 
   const eligibleUserIds = presentUserIds.filter(
-    (userId) => !blockedUserIds.has(userId) && !challengeBlockedUserIds.has(userId),
+    (userId: string) => !blockedUserIds.has(userId) && !challengeBlockedUserIds.has(userId),
   );
 
   const profileIdsForLookup = presentUserIds;
@@ -200,7 +200,7 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
     }
 
     const profilesById = new Map<string, ProfileLite>();
-    (profiles || []).forEach((profile) => {
+    (profiles || []).forEach((profile: any) => {
       profilesById.set(profile.id, profile);
     });
 
@@ -220,13 +220,13 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
   }
 
   const profilesById = new Map<string, ProfileLite>();
-  (profiles || []).forEach((profile) => {
-    profilesById.set(profile.id, profile);
+  (profiles || []).forEach((profile: any) => {
+    profilesById.set(profile.id, profile as ProfileLite);
   });
 
   const eligibilityMap = new Map<string, PlayerEligibility>();
 
-  eligibleUserIds.forEach((profileId) => {
+  eligibleUserIds.forEach((profileId: string) => {
     const profile = profilesById.get(profileId);
     if (!profile) {
       return;
@@ -235,8 +235,8 @@ async function getTodayChallengePool(adminSupabase: ReturnType<typeof getSupabas
     eligibilityMap.set(profileId, {
       id: profile.id,
       name: getProfileName(profile),
-      coin_balance: profile.coin_balance ?? null,
-      skill_level: profile.skill_level,
+      coin_balance: (profile.coin_balance as number | undefined) ?? null,
+      skill_level: profile.skill_level as string,
       today_match_count: 0,
     });
   });
@@ -300,7 +300,7 @@ function serializeChallenge(
 
 export async function GET() {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   const {
     data: { user },
@@ -396,7 +396,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   const {
     data: { user },

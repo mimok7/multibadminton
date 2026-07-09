@@ -131,7 +131,7 @@ export async function getUnfilteredSupabaseServerClient(): Promise<ServerSupabas
   return client;
 }
 
-export function getSupabaseAdminClient(): AdminSupabaseClient {
+export function getUnfilteredGlobalAdminClient(): AdminSupabaseClient {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -141,6 +141,6 @@ export function getSupabaseAdminClient(): AdminSupabaseClient {
 export async function getFilteredAdminClient(): Promise<AdminSupabaseClient> {
   const cookieStore = await cookies();
   const activeClubId = cookieStore.get('active_club_id')?.value;
-  const adminClient = getSupabaseAdminClient();
+  const adminClient = getUnfilteredGlobalAdminClient();
   return withClubFilter(adminClient, activeClubId) as AdminSupabaseClient;
 }

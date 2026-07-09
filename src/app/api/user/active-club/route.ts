@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
@@ -12,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ club: null });
     }
 
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = getUnfilteredGlobalAdminClient();
     let clubId = await getActiveClubId();
     let isClubValid = false;
     let memberData = null;

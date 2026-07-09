@@ -3,7 +3,7 @@ import { getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
 import { DEFAULT_MATCH_WAGER } from '@/lib/coins';
 import { notifyWaitingMatchesForSession } from '@/lib/match-preparation-notifications';
 import { syncSessionMatchFlow } from '@/lib/match-session-flow';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 type MatchRow = {
   id: number;
@@ -18,7 +18,7 @@ type MatchRow = {
 
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   const {
     data: { user },

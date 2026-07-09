@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId, isAdminRole } from '@/lib/auth';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 type MatchRow = {
@@ -15,7 +15,7 @@ type MatchRow = {
 
 async function getAuthorizedContext(matchId: number) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const {
     data: { user },
     error: authError,

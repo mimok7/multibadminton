@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server';
 
 export async function GET() {
   const serverSupabase = await getSupabaseServerClient();
@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const adminSupabase = getSupabaseAdminClient() as any;
+  const adminSupabase = await getFilteredAdminClient() as any;
   const { data: products, error } = await adminSupabase
     .from('products')
     .select('*')

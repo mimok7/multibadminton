@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('profiles')

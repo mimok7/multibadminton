@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId } from '@/lib/auth';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server';
 
 export async function GET() {
   const serverSupabase = await getSupabaseServerClient();
@@ -18,7 +18,7 @@ export async function GET() {
     return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
   }
 
-  const adminSupabase = getSupabaseAdminClient() as any;
+  const adminSupabase = await getFilteredAdminClient() as any;
   const { data: purchases, error } = await adminSupabase
     .from('product_purchases')
     .select(`

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId, isAdminRole } from '@/lib/auth';
-import { getSupabaseAdminClient, getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 async function requireAdmin() {
   const serverSupabase = await getSupabaseServerClient();

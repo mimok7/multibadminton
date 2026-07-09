@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient } from '@/lib/supabase-server';
 
-const supabaseAdmin = getSupabaseAdminClient();
+const supabaseAdmin = await getFilteredAdminClient();
 
 export async function getClubsWithMemberCount() {
     try {

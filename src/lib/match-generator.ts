@@ -1,8 +1,8 @@
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 
 export async function ensureFiveMatches(executedBy: string | null) {
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   // 1. 활성화된 정기모임 템플릿 조회 (주말 토/일 제외)
   const { data: templates, error: templatesError } = await adminSupabase

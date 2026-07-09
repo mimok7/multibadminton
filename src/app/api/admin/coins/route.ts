@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProfileByUserId, isAdminRole } from '@/lib/auth';
 import { DEFAULT_COIN_SETTINGS, INITIAL_COIN_BALANCE, type CoinSettlementMode } from '@/lib/coins';
 import { readCoinSettings, writeCoinSettings } from '@/lib/coin-settings';
-import { getSupabaseAdminClient, getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 async function requireAdmin() {
   const serverSupabase = await getSupabaseServerClient();

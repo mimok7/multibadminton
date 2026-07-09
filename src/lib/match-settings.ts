@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient } from '@/lib/supabase-server';
 
 export type MatchSettings = {
   autoGenerateEnabled: boolean;
@@ -10,7 +10,7 @@ const DEFAULT_MATCH_SETTINGS: MatchSettings = {
 
 export async function readMatchSettings(): Promise<MatchSettings> {
   try {
-    const supabase = getSupabaseAdminClient();
+    const supabase = await getFilteredAdminClient();
     const { data, error } = await (supabase as any)
       .from('match_settings')
       .select('auto_generate_enabled')
@@ -32,7 +32,7 @@ export async function readMatchSettings(): Promise<MatchSettings> {
 
 export async function writeMatchSettings(settings: MatchSettings): Promise<MatchSettings> {
   try {
-    const supabase = getSupabaseAdminClient();
+    const supabase = await getFilteredAdminClient();
     const { error } = await (supabase as any)
       .from('match_settings')
       .upsert({

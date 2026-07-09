@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
   try {
     const supabase = await getSupabaseServerClient();
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = await getFilteredAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {

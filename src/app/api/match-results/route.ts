@@ -5,7 +5,7 @@ import { readCoinSettings } from '@/lib/coin-settings';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER, type CoinSettlementMode } from '@/lib/coins';
 import { notifyWaitingMatchesForSession } from '@/lib/match-preparation-notifications';
 import { syncSessionMatchFlow } from '@/lib/match-session-flow';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 type MatchParticipantRow = {
   id: number;
@@ -98,7 +98,7 @@ function buildCoinDeltas(params: {
 
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   const cookieStore = await cookies();
   const activeClubId = cookieStore.get('active_club_id')?.value || '';
@@ -478,7 +478,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const { searchParams } = new URL(request.url);
   const matchId = Number(searchParams.get('match_id'));
 

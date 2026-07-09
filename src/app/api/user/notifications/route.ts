@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
@@ -19,12 +19,11 @@ export async function GET() {
       return NextResponse.json({ notifications: [] });
     }
 
-    const adminSupabase = getSupabaseAdminClient() as any;
+    const adminSupabase = await getFilteredAdminClient() as any;
     const { data: notifications, error } = await adminSupabase
       .from('notifications')
       .select('id, title, message, type, is_read, created_at, read_at, survey_id, surveys(id, question, description, options, is_active, max_responses, option_limits)')
       .eq('user_id', user.id)
-      .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -94,13 +93,12 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { ids, markAll } = body;
 
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = await getFilteredAdminClient() as any;
 
     let query = adminSupabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq('user_id', user.id)
-      .eq('club_id', clubId);
+      .eq('user_id', user.id);
 
     if (!markAll && Array.isArray(ids) && ids.length > 0) {
       query = query.in('id', ids);

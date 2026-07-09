@@ -184,81 +184,148 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
     coin_losses: number;
   } | null>(null);
 
+  // ── 통합 초기 데이터 로딩 (한 번의 흐름으로 모든 히어로 카드 데이터 로딩) ──
   useEffect(() => {
-    if (!userId) return;
-    async function checkClubManagerRole() {
-      try {
-        const res = await fetch('/api/user/active-club');
-        const data = await res.json();
-        if (data.club) {
-          setActiveClub(data.club);
-        }
-        if (data.member) {
-          setClubMemberInfo(data.member);
-        }
-        const role = data.clubRole;
-        if (role === 'owner' || role === 'admin' || role === 'manager') {
-          setIsClubManager(true);
-        }
-      } catch (err) {
-        console.error('Failed to check club manager role:', err);
-      }
-    }
-    void checkClubManagerRole();
-  }, [userId]);
- 
-  const fetchCoinStatus = async () => {
-    try {
-      const res = await fetch('/api/coins/settings');
-      const data = await res.json();
-      if (res.ok) {
-        setIsCoinEnabled(data.isCoinEnabled !== false);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+    if (!userId || !profile) return;
+    let cancelled = false;
 
+    const loadDashboardData = async () => {
+      try {
+        setLoadingAttendance(true);
+        const today = getKoreaDate();
+
+        // 1. 클럽 정보 + 코인 설정을 동시에 조회
+        const [clubRes, coinRes] = await Promise.all([
+          fetch('/api/user/active-club').catch(() => null),
+          fetch('/api/coins/settings').catch(() => null),
+        ]);
+
+        if (cancelled) return;
+
+        // 클럽 정보 처리
+        let resolvedClubId: string | undefined;
+        if (clubRes?.ok) {
+          const clubData = await clubRes.json();
+          if (clubData.club) {
+            setActiveClub(clubData.club);
+            resolvedClubId = clubData.club.id;
+          }
+          if (clubData.member) {
+            setClubMemberInfo(clubData.member);
+          }
+          const role = clubData.clubRole;
+          if (role === 'owner' || role === 'admin' || role === 'manager') {
+            setIsClubManager(true);
+          }
+        }
+
+        // 코인 설정 처리
+        if (coinRes?.ok) {
+          const coinData = await coinRes.json();
+          setIsCoinEnabled(coinData.isCoinEnabled !== false);
+        }
+
+        if (cancelled) return;
+
+        // 2. 출석 상태 + 오늘 일정을 동시에 조회
+        let schedulesQuery = supabase
+          .from('match_schedules')
+          .select('id, match_date, max_participants, current_participants')
+          .eq('match_date', today)
+          .eq('status', 'scheduled')
+          .is('generated_match_id', null);
+        if (resolvedClubId) {
+          schedulesQuery = schedulesQuery.eq('club_id', resolvedClubId);
+        }
+
+        const [attendanceRes, schedulesResult] = await Promise.all([
+          fetch(`/api/attendance/status?date=${today}`),
+          schedulesQuery.maybeSingle(),
+        ]);
+
+        if (cancelled) return;
+
+        // 출석 상태 처리
+        if (attendanceRes?.ok) {
+          const payload = await attendanceRes.json().catch(() => null);
+          setMyAttendanceStatus(normalizeAttendanceStatus(payload?.status));
+        } else {
+          setMyAttendanceStatus(null);
+        }
+
+        // 오늘 일정 처리
+        // NOTE: match_schedules는 하루에 하나만 있다고 가정 (maybeSingle)
+        const schedule = schedulesResult?.data ?? null;
+        const schedulesList = schedule ? [schedule] : [];
+        setTodaySchedules(schedulesList);
+
+        // 3. 참가 신청 상태 조회
+        const userProfileId = profile?.id || userId;
+        if (schedule && userProfileId) {
+          const { data: participations } = await supabase
+            .from('match_participants')
+            .select('id, status, match_schedule_id')
+            .eq('match_schedule_id', schedule.id)
+            .in('user_id', [userId, profile?.id].filter(Boolean) as string[])
+            .in('status', ['registered', 'waitlisted']);
+
+          if (participations && participations.length > 0) {
+            setIsRegisteredToday(true);
+            setTodayRegistration(participations[0]);
+          } else {
+            setIsRegisteredToday(false);
+            setTodayRegistration(null);
+          }
+        } else {
+          setIsRegisteredToday(false);
+          setTodayRegistration(null);
+        }
+      } catch (error) {
+        console.error('대시보드 데이터 로딩 오류:', error);
+      } finally {
+        if (!cancelled) setLoadingAttendance(false);
+      }
+    };
+
+    void loadDashboardData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, profile]);
+
+  /** 재조회용: 참가 신청 변경 후 다시 불러올 때 사용 */
   const fetchAttendanceAndRegistration = async () => {
-    if (!userId) return;
+    if (!userId || !profile) return;
     try {
       setLoadingAttendance(true);
       const today = getKoreaDate();
 
-      // 1. Fetch attendance status
+      // 1. 출석 상태
       const response = await fetch(`/api/attendance/status?date=${today}`);
       const payload = await response.json().catch(() => null);
-      if (response.ok) {
-        setMyAttendanceStatus(normalizeAttendanceStatus(payload?.status));
-      } else {
-        setMyAttendanceStatus(null);
-      }
+      setMyAttendanceStatus(response.ok ? normalizeAttendanceStatus(payload?.status) : null);
 
-      // 2. Fetch today's match schedules
-      let schedulesQuery = supabase
+      // 2. 오늘 일정 (클럽 필터 없이 전체 조회)
+      const { data: schedulesData } = await supabase
         .from('match_schedules')
         .select('id, match_date, max_participants, current_participants')
         .eq('match_date', today)
         .eq('status', 'scheduled')
-        .is('generated_match_id', null);
-        
-      if (activeClub?.id) {
-        schedulesQuery = schedulesQuery.eq('club_id', activeClub.id);
-      }
-      
-      const { data: schedulesData } = await schedulesQuery;
+        .is('generated_match_id', null)
+        .maybeSingle();
 
-      const schedulesList = (schedulesData || []);
+      const schedule = schedulesData ?? null;
+      const schedulesList = schedule ? [schedule] : [];
       setTodaySchedules(schedulesList);
 
-      // 3. Fetch today's registration
+      // 3. 참가 신청
       const userProfileId = profile?.id || userId;
-      if (schedulesList.length > 0 && userProfileId) {
-        const scheduleIds = schedulesList.map((s) => s.id);
+      if (schedule && userProfileId) {
         const { data: participations } = await supabase
           .from('match_participants')
           .select('id, status, match_schedule_id')
-          .in('match_schedule_id', scheduleIds)
+          .eq('match_schedule_id', schedule.id)
           .in('user_id', [userId, profile?.id].filter(Boolean) as string[])
           .in('status', ['registered', 'waitlisted']);
 
@@ -279,13 +346,6 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
       setLoadingAttendance(false);
     }
   };
-
-  useEffect(() => {
-    if (userId && profile) {
-      void fetchAttendanceAndRegistration();
-      void fetchCoinStatus();
-    }
-  }, [userId, profile, activeClub]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();

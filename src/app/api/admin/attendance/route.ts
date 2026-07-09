@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getSupabaseAdminClient, getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole } from '@/lib/auth';
 import { readCoinSettings } from '@/lib/coin-settings';
 
@@ -40,7 +40,7 @@ async function requireAdmin() {
 }
 
 async function syncAutoLinkedScheduleParticipants(params: {
-  adminSupabase: ReturnType<typeof getSupabaseAdminClient>;
+  adminSupabase: any;
   attendedAt: string;
   userIds: string[];
   status: AttendanceStatus;
@@ -76,7 +76,7 @@ async function syncAutoLinkedScheduleParticipants(params: {
     return { autoLinkedScheduleId };
   }
 
-  const existingByUserId = new Map((existingParticipants || []).map((participant) => [participant.user_id, participant]));
+  const existingByUserId = new Map((existingParticipants || []).map((participant: any) => [participant.user_id, participant]));
 
   if (status === 'present' || status === 'lesson') {
     const missingUserIds = userIds.filter((userId) => !existingByUserId.has(userId));
@@ -98,8 +98,8 @@ async function syncAutoLinkedScheduleParticipants(params: {
     }
 
     const reactivateParticipantIds = (existingParticipants || [])
-      .filter((participant) => participant.status !== 'registered' && participant.status !== 'attended')
-      .map((participant) => participant.id);
+      .filter((participant: any) => participant.status !== 'registered' && participant.status !== 'attended')
+      .map((participant: any) => participant.id);
 
     if (reactivateParticipantIds.length > 0) {
       const { error: reactivateError } = await adminSupabase
@@ -116,8 +116,8 @@ async function syncAutoLinkedScheduleParticipants(params: {
     }
   } else {
     const activeParticipantIds = (existingParticipants || [])
-      .filter((participant) => participant.status === 'registered' || participant.status === 'attended')
-      .map((participant) => participant.id);
+      .filter((participant: any) => participant.status === 'registered' || participant.status === 'attended')
+      .map((participant: any) => participant.id);
 
     if (activeParticipantIds.length > 0) {
       const { error: cancelError } = await adminSupabase

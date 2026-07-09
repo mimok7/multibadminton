@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole } from '@/lib/auth';
 import { createBalancedDoublesMatches, createMixedAndSameSexDoublesMatches, createRandomBalancedDoublesMatches } from '@/utils/match-utils';
 import type { Player } from '@/types';
@@ -106,7 +106,7 @@ function avoidConsecutiveMatches(
 }
 
 async function recoverTournamentMatches(
-  adminSupabase: ReturnType<typeof getSupabaseAdminClient>,
+  adminSupabase: any,
   tournament: TournamentRow
 ) {
   const { data: assignment, error: assignmentError } = await adminSupabase
@@ -308,7 +308,7 @@ async function recoverTournamentMatches(
 }
 
 async function fetchTeamAssignment(
-  adminSupabase: ReturnType<typeof getSupabaseAdminClient>,
+  adminSupabase: any,
   assignmentId: string | null | undefined
 ) {
   if (!assignmentId) {

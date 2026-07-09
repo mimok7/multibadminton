@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 import { getActiveClubId } from '@/lib/club';
 
 async function resolveProfileId() {
   const [serverSupabase, adminSupabase] = await Promise.all([
     getSupabaseServerClient(),
-    Promise.resolve(getSupabaseAdminClient()),
+    Promise.resolve(await getFilteredAdminClient()),
   ]);
 
   const {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId } from '@/lib/auth';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 
 type ChallengeRow = {
@@ -18,7 +18,7 @@ type ChallengeRow = {
 
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   const {
     data: { user },

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import fs from 'fs';
 import path from 'path';
 
 export async function GET() {
-  const supabase = getSupabaseAdminClient();
+  const supabase = getUnfilteredGlobalAdminClient();
   try {
     const sqlPath = path.join(process.cwd(), 'sql', '01_club_level_aliases.sql');
     const sql = fs.readFileSync(sqlPath, 'utf8');

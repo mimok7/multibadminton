@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { cookies } from 'next/headers';
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 
 type TeamAssignmentRow = {
@@ -138,7 +139,7 @@ async function fetchTeamAssignment(assignmentId: string | null | undefined) {
     return null;
   }
 
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const { data, error } = await adminSupabase
     .from('team_assignments')
     .select('id, assignment_date, round_number, title, team_type, racket_team, shuttle_team, team1, team2, team3, team4, pairs_data')
@@ -170,7 +171,7 @@ async function fetchTeamAssignmentsByTournament(tournaments: TournamentRow[]) {
     return {};
   }
 
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const { data, error } = await adminSupabase
     .from('team_assignments')
     .select('id, assignment_date, round_number, title, team_type, racket_team, shuttle_team, team1, team2, team3, team4, pairs_data')
@@ -300,7 +301,7 @@ async function recoverTournamentMatches(tournament: TournamentRow) {
     return { recovered: false };
   }
 
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
   const { data: assignment, error: assignmentError } = await adminSupabase
     .from('team_assignments')
     .select('id, assignment_date, round_number, title, team_type, racket_team, shuttle_team, team1, team2, team3, team4, pairs_data')
@@ -496,7 +497,10 @@ async function recoverTournamentMatches(tournament: TournamentRow) {
 
 export async function GET(request: Request) {
   try {
-    const adminSupabase = getSupabaseAdminClient();
+    const cookieStore = await cookies();
+    const activeClubId = cookieStore.get('active_club_id')?.value;
+
+    const adminSupabase = await getFilteredAdminClient();
     const requestUrl = new URL(request.url);
     const tournamentId = requestUrl.searchParams.get('tournament_id');
     const includeMatches = requestUrl.searchParams.get('include_matches');
@@ -505,11 +509,14 @@ export async function GET(request: Request) {
 
     // [Optimized Path] If a specific tournament_id is requested with matches
     if (tournamentId && (includeMatches === '1' || includeMatches === 'true')) {
-      const { data: selectedTournament, error: tError } = await adminSupabase
+      let tournamentQuery = adminSupabase
         .from('tournaments')
         .select('*')
-        .eq('id', tournamentId)
-        .maybeSingle();
+        .eq('id', tournamentId);
+      if (activeClubId) {
+        tournamentQuery = tournamentQuery.eq('club_id', activeClubId);
+      }
+      const { data: selectedTournament, error: tError } = await tournamentQuery.maybeSingle();
 
       if (tError || !selectedTournament || selectedTournament.tournament_date < todayStr) {
         return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
@@ -553,10 +560,14 @@ export async function GET(request: Request) {
       });
     }
 
-    const { data, error } = await adminSupabase
+    let listQuery = adminSupabase
       .from('tournaments')
       .select('*')
-      .gte('tournament_date', todayStr)
+      .gte('tournament_date', todayStr);
+    if (activeClubId) {
+      listQuery = listQuery.eq('club_id', activeClubId);
+    }
+    const { data, error } = await listQuery
       .order('round_number', { ascending: true })
       .order('tournament_date', { ascending: true })
       .order('created_at', { ascending: true });

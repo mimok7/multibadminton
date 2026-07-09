@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { cookies } from 'next/headers';
 import { CLUB_COOKIE_NAME } from '@/lib/club';
 
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
 
-    const adminSupabase = getSupabaseAdminClient();
+    const adminSupabase = getUnfilteredGlobalAdminClient();
 
     // 사용자의 활성 클럽 목록 조회 (실존하는 클럽만)
     const { data: userClubs, error } = await adminSupabase

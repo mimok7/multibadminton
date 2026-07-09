@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 import { readCoinSettings } from '@/lib/coin-settings';
 
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '이름을 두 글자 이상 입력해주세요.' }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdminClient();
+    const supabase = await getFilteredAdminClient();
     const todayStr = getKoreaDate();
 
     // 1. 오늘 열리는 경기 일정 중 정원이 남아 있는 일정을 가져온다.

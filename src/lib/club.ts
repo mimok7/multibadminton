@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { getSupabaseServerClient, getUnfilteredSupabaseServerClient, getSupabaseAdminClient } from './supabase-server';
+import { getSupabaseServerClient, getUnfilteredSupabaseServerClient, getFilteredAdminClient } from './supabase-server';
 
 export const CLUB_COOKIE_NAME = 'active_club_id';
 
@@ -18,7 +18,7 @@ export async function getUserClubs() {
     return [];
   }
 
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = await getFilteredAdminClient();
 
   const { data, error } = await adminSupabase
     .from('club_members')

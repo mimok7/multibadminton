@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId, getUserRole } from '@/lib/auth';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 export async function GET() {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = getUnfilteredGlobalAdminClient();
 
   const {
     data: { user },
@@ -50,7 +50,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = getUnfilteredGlobalAdminClient();
 
   const {
     data: { user },
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
 // PUT is for admins to update status/completed_at
 export async function PUT(request: Request) {
   const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = getSupabaseAdminClient();
+  const adminSupabase = getUnfilteredGlobalAdminClient();
 
   const {
     data: { user },

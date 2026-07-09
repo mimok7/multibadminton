@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import type { AdminUser } from '@/types'
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server'
+import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server'
 import { isUserAdmin } from '@/lib/auth'
 import UserManagementClient from './UserManagementClient'
 import type { Database } from '@/types/supabase'
@@ -34,7 +34,7 @@ export default async function AdminMembersPage({
   if (!(await isUserAdmin(supabase, user))) redirect('/unauthorized')
 
   // 3) 사용자 목록 및 부가 데이터 병렬 조회
-  const supabaseAdmin = getSupabaseAdminClient()
+  const supabaseAdmin = await getFilteredAdminClient()
   const today = new Date()
   const cutoff = new Date(today)
   cutoff.setDate(today.getDate() - 30)

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 
 export async function GET(request: Request) {
   try {
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = getSupabaseAdminClient();
+    const supabase = getUnfilteredGlobalAdminClient();
 
     // archive_expired_brackets RPC 호출
     const { error } = await (supabase as any).rpc('archive_expired_brackets');
