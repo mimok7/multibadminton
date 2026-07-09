@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 
 export default function ManagerDashboardPage() {
   const { profile, loading, isAdmin } = useUser();
+  const { clubName } = useClub();
   const router = useRouter();
 
   const [isMobile, setIsMobile] = useState(true);
@@ -38,7 +40,9 @@ export default function ManagerDashboardPage() {
         <div className="flex items-start justify-between gap-3 px-2">
           <div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold leading-tight">⚙️ 매니저 대시보드</h1>
+              <h1 className="text-xl font-semibold leading-tight">
+                {clubName ? `🏸 ${clubName} 매니저 대시보드` : '⚙️ 매니저 대시보드'}
+              </h1>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
               <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-100">

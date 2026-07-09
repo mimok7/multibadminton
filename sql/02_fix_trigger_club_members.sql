@@ -10,10 +10,14 @@ SET row_security = off
 AS $$
 DECLARE
   matched_profile_id uuid;
-  default_club_id uuid;
+  target_club_id uuid;
 BEGIN
-  -- Get default club id
-  SELECT id INTO default_club_id FROM public.clubs ORDER BY created_at ASC LIMIT 1;
+  -- Get club id from user metadata, fallback to the oldest club (default club)
+  IF NULLIF(NEW.raw_user_meta_data ->> 'club_id', '') IS NOT NULL THEN
+    target_club_id := (NEW.raw_user_meta_data ->> 'club_id')::uuid;
+  ELSE
+    SELECT id INTO target_club_id FROM public.clubs ORDER BY created_at ASC LIMIT 1;
+  END IF;
 
   -- If this auth user is already linked, do nothing.
   SELECT p.id
@@ -23,10 +27,10 @@ BEGIN
   LIMIT 1;
 
   IF matched_profile_id IS NOT NULL THEN
-    -- Make sure they are in club_members of default club
-    IF default_club_id IS NOT NULL THEN
+    -- Make sure they are in club_members of default/target club
+    IF target_club_id IS NOT NULL THEN
       INSERT INTO public.club_members (club_id, user_id, role, status)
-      VALUES (default_club_id, matched_profile_id, 'member', 'active')
+      VALUES (target_club_id, matched_profile_id, 'member', 'active')
       ON CONFLICT (club_id, user_id) DO NOTHING;
     END IF;
     RETURN NEW;
@@ -49,10 +53,10 @@ BEGIN
       updated_at = now()
     WHERE id = matched_profile_id;
 
-    -- Make sure they are in club_members of default club
-    IF default_club_id IS NOT NULL THEN
+    -- Make sure they are in club_members of default/target club
+    IF target_club_id IS NOT NULL THEN
       INSERT INTO public.club_members (club_id, user_id, role, status)
-      VALUES (default_club_id, matched_profile_id, 'member', 'active')
+      VALUES (target_club_id, matched_profile_id, 'member', 'active')
       ON CONFLICT (club_id, user_id) DO NOTHING;
     END IF;
 
@@ -80,11 +84,11 @@ BEGIN
   )
   RETURNING id INTO matched_profile_id;
 
-  -- Make sure they are in club_members of default club
-  IF default_club_id IS NOT NULL THEN
+  -- Make sure they are in club_members of default/target club
+  IF target_club_id IS NOT NULL THEN
     INSERT INTO public.club_members (club_id, user_id, role, status)
     VALUES (
-      default_club_id, 
+      target_club_id, 
       matched_profile_id, 
       CASE WHEN (NEW.raw_user_meta_data ->> 'role') = 'admin' THEN 'admin'
            WHEN (NEW.raw_user_meta_data ->> 'role') = 'manager' THEN 'manager'

@@ -18,6 +18,7 @@ type GenerateRecurringMatchesPayload = {
 type RecurringTemplateRow = Pick<
   Database['public']['Tables']['recurring_match_templates']['Row'],
   | 'id'
+  | 'club_id'
   | 'name'
   | 'description'
   | 'day_of_week'
@@ -54,11 +55,12 @@ function findNextMatchingDate(base: Date, dayOfWeek: number) {
 async function hasExistingSchedule(
   supabase: AdminSupabaseClient,
   matchDate: string,
-  template: Pick<RecurringTemplateRow, 'start_time' | 'end_time' | 'location'>
+  template: Pick<RecurringTemplateRow, 'start_time' | 'end_time' | 'location' | 'club_id'>
 ) {
   const { data: existingSchedule, error } = await supabase
     .from('match_schedules')
     .select('id')
+    .eq('club_id', template.club_id!)
     .eq('match_date', matchDate)
     .eq('start_time', template.start_time)
     .eq('end_time', template.end_time)
@@ -77,7 +79,7 @@ async function createScheduleFromTemplate(
   matchDate: string,
   template: Pick<
     RecurringTemplateRow,
-    'name' | 'description' | 'day_of_week' | 'start_time' | 'end_time' | 'location' | 'max_participants'
+    'club_id' | 'name' | 'description' | 'day_of_week' | 'start_time' | 'end_time' | 'location' | 'max_participants'
   >,
   executedBy?: string | null
 ): Promise<boolean> {
@@ -87,6 +89,7 @@ async function createScheduleFromTemplate(
   const { error } = await supabase
     .from('match_schedules')
     .insert({
+      club_id: template.club_id,
       match_date: matchDate,
       start_time: template.start_time,
       end_time: template.end_time,
@@ -123,7 +126,7 @@ async function generateRecurringMatchesFallback(
 
   let query = supabase
     .from('recurring_match_templates')
-    .select('id, name, description, day_of_week, start_time, end_time, location, max_participants, advance_days, is_active')
+    .select('id, club_id, name, description, day_of_week, start_time, end_time, location, max_participants, advance_days, is_active')
     .eq('is_active', true);
 
   if (templateIds.length > 0) {

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getClubRole } from '@/lib/club-auth';
+import { isUserAdmin } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
 const supabaseAdmin = getSupabaseAdminClient();
@@ -16,9 +17,18 @@ async function getManagerContext() {
     const activeClubId = cookieStore.get('active_club_id')?.value;
     if (!activeClubId) return null;
 
-    const role = await getClubRole(supabase, user.id, activeClubId);
-    if (!role || !['owner', 'admin', 'manager'].includes(role)) {
-        return null;
+    const isSysAdmin = await isUserAdmin(supabase, user);
+    let role: string | null = null;
+
+    if (isSysAdmin) {
+        const actualRole = await getClubRole(supabase, user.id, activeClubId);
+        role = actualRole || 'admin';
+    } else {
+        const actualRole = await getClubRole(supabase, user.id, activeClubId);
+        if (!actualRole || !['owner', 'admin', 'manager'].includes(actualRole)) {
+            return null;
+        }
+        role = actualRole;
     }
 
     return { user, clubId: activeClubId, role };

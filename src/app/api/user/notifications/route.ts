@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
   try {
@@ -13,11 +14,17 @@ export async function GET() {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+    }
+
     const adminSupabase = getSupabaseAdminClient() as any;
     const { data: notifications, error } = await adminSupabase
       .from('notifications')
       .select('id, title, message, type, is_read, created_at, read_at, survey_id, surveys(id, question, description, options, is_active, max_responses, option_limits)')
       .eq('user_id', user.id)
+      .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -79,6 +86,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     }
 
+    const clubId = await getActiveClubId();
+    if (!clubId) {
+      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+    }
+
     const body = await request.json();
     const { ids, markAll } = body;
 
@@ -87,7 +99,8 @@ export async function PATCH(request: Request) {
     let query = adminSupabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('club_id', clubId);
 
     if (!markAll && Array.isArray(ids) && ids.length > 0) {
       query = query.in('id', ids);

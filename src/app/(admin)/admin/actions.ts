@@ -159,3 +159,89 @@ export async function updateClubLevelAliases(clubId: string, aliases: Record<str
         return { error: error?.message || JSON.stringify(error) };
     }
 }
+
+export async function getClubManagers(clubId: string) {
+    try {
+        const { data, error } = await (supabaseAdmin as any)
+            .from('club_members')
+            .select(`
+                user_id,
+                role,
+                profiles (
+                    id,
+                    full_name,
+                    username,
+                    email
+                )
+            `)
+            .eq('club_id', clubId)
+            .in('role', ['owner', 'admin', 'manager']);
+
+        if (error) throw error;
+        
+        const managers = (data || []).map((row: any) => ({
+            user_id: row.user_id,
+            role: row.role,
+            full_name: row.profiles?.full_name,
+            username: row.profiles?.username,
+            email: row.profiles?.email
+        }));
+
+        return { managers };
+    } catch (error: any) {
+        return { error: error?.message || JSON.stringify(error) };
+    }
+}
+
+export async function searchUsers(query: string) {
+    try {
+        const trimmed = query.trim();
+        if (!trimmed) return { users: [] };
+
+        const { data, error } = await supabaseAdmin
+            .from('profiles')
+            .select('id, full_name, username, email')
+            .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+            .limit(10);
+
+        if (error) throw error;
+        return { users: data || [] };
+    } catch (error: any) {
+        return { error: error?.message || JSON.stringify(error) };
+    }
+}
+
+export async function addClubManager(clubId: string, userId: string) {
+    try {
+        const { error } = await (supabaseAdmin as any)
+            .from('club_members')
+            .upsert({
+                club_id: clubId,
+                user_id: userId,
+                role: 'manager',
+                status: 'active'
+            }, { onConflict: 'club_id,user_id' });
+
+        if (error) throw error;
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error: any) {
+        return { error: error?.message || JSON.stringify(error) };
+    }
+}
+
+export async function removeClubManager(clubId: string, userId: string) {
+    try {
+        const { error } = await (supabaseAdmin as any)
+            .from('club_members')
+            .delete()
+            .eq('club_id', clubId)
+            .eq('user_id', userId);
+
+        if (error) throw error;
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error: any) {
+        return { error: error?.message || JSON.stringify(error) };
+    }
+}

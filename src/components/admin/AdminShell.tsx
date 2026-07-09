@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { RequireAdmin } from '@/components/AuthGuard';
 import { useUser } from '@/hooks/useUser';
+import { getSupabaseClient } from '@/lib/supabase';
 import { SECTIONS } from './menuConfig';
 
 function getGroupColors(color: string) {
@@ -42,6 +43,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const { profile } = useUser();
   const homeHref = profile?.role === 'manager' ? '/manager/admin' : '/admin';
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const handleLogout = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
   const [isDesktopSidebarVisible, setIsDesktopSidebarVisible] = useState(true);
   const [isMobileView, setIsMobileView] = useState(false);
   const [activeClubName, setActiveClubName] = useState<string>('');
@@ -102,7 +109,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   };
 
   const visibleSections = useMemo(() => {
-    const sectionsCopy = JSON.parse(JSON.stringify(SECTIONS)) as typeof SECTIONS;
+    let sectionsCopy = JSON.parse(JSON.stringify(SECTIONS)) as typeof SECTIONS;
+
+    // 관리자가 아닌 경우 시스템 관리 메뉴 제외
+    if (profile?.role !== 'admin') {
+      sectionsCopy = sectionsCopy.filter(section => section.title !== '⚙️ 시스템 관리');
+    }
     
     if (profile?.role === 'manager') {
       return sectionsCopy.map(section => {
@@ -208,30 +220,34 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs font-semibold tracking-[0.12em] text-gray-400 sm:text-sm">
-                  {activeClubName ? activeClubName : 'ADMIN'}
+                  {activeClubName ? `🏸 ${activeClubName}` : 'ADMIN'}
                 </div>
                 <div className="truncate text-sm font-semibold text-gray-900 sm:hidden">
-                  {profile?.full_name || profile?.username || '관리자'}
+                  {activeClubName ? '관리자 영역' : (profile?.full_name || profile?.username || '관리자')}
                 </div>
                 <div className="hidden text-sm text-gray-500 sm:block">
                   {activeClubName ? `${activeClubName} 관리자 영역` : '관리자 영역'}
                 </div>
               </div>
               <div className="flex gap-1.5 sm:gap-2">
-                {isMobileView && (
-                  <Link
-                    href={homeHref}
-                    className="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                  >
-                    ⚙️ 홈
-                  </Link>
-                )}
+                <Link
+                  href={homeHref}
+                  className="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 sm:px-3"
+                >
+                  ⚙️ 관리자 홈
+                </Link>
                 <Link
                   href="/"
                   className="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 sm:px-3"
                 >
                   🏠 사용자 홈
                 </Link>
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex items-center rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs sm:text-sm font-medium text-red-700 hover:bg-red-100 sm:px-3"
+                >
+                  🚪 로그아웃
+                </button>
                 {isMobileView ? (
                   <button
                     type="button"

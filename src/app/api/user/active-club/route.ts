@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
@@ -17,7 +17,9 @@ export async function GET() {
       return NextResponse.json({ club: null });
     }
 
-    const { data, error } = await supabase
+    const adminSupabase = getSupabaseAdminClient();
+
+    const { data, error } = await adminSupabase
       .from('clubs')
       .select('id, name, code')
       .eq('id', clubId)
@@ -27,18 +29,22 @@ export async function GET() {
       return NextResponse.json({ club: null, clubRole: null });
     }
 
-    // 클럽 내 사용자의 역할을 가져옴
-    const { data: memberData } = await supabase
+    // 클럽 내 사용자의 역할 및 스탯을 가져옴
+    const { data: memberData } = await adminSupabase
       .from('club_members')
-      .select('role')
+      .select('role, coin_balance, coin_wins, coin_losses')
       .eq('club_id', clubId)
       .eq('user_id', user.id)
       .single();
 
-    return NextResponse.json({ club: data, clubRole: (memberData as any)?.role || null });
+    return NextResponse.json({ 
+      club: data, 
+      clubRole: (memberData as any)?.role || null,
+      member: memberData || null
+    });
 
   } catch (error) {
     console.error('Error fetching active club:', error);
-    return NextResponse.json({ club: null, clubRole: null }, { status: 500 });
+    return NextResponse.json({ club: null, clubRole: null, member: null }, { status: 500 });
   }
 }

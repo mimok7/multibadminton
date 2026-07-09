@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { setActiveClubAction } from '@/app/actions/club';
@@ -66,6 +66,19 @@ export default function ClubSelectorClient({
     );
   }
 
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'owner':
+        return '소유자';
+      case 'admin':
+        return '관리자';
+      case 'manager':
+        return '매니저';
+      default:
+        return '일반 회원';
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-center text-white mb-6">입장할 클럽을 선택하세요</h2>
@@ -96,7 +109,7 @@ export default function ClubSelectorClient({
                 <h3 className="text-xl font-bold text-emerald-400 group-hover:text-emerald-300 transition-colors">
                   {club.name}
                 </h3>
-                <p className="text-sm text-slate-400 mt-1">권한: {c.role === 'admin' ? '관리자' : '일반 회원'}</p>
+                <p className="text-sm text-slate-400 mt-1">권한: {getRoleLabel(c.role)}</p>
               </div>
               <div className="text-slate-500 group-hover:text-emerald-400 transition-colors">
                 {loading === club.id ? (

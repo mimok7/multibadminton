@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '라켓 뚱보단',
-    short_name: '라켓 뚱보단',
+    name: '배드민턴',
+    short_name: '배드민턴',
     description: '배드민턴 클럽 사용자와 관리자를 위한 일정 및 운영 앱',
     start_url: '/',
     scope: '/',

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProfileByUserId, isAdminRole } from '@/lib/auth';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 
 type MatchRow = {
   id: number;
@@ -118,6 +119,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+  }
+
   const body = await request.json().catch(() => null);
   const matchId = Number(body?.match_id);
   const action = body?.action || 'propose'; // 'propose' or 'respond'
@@ -213,6 +219,7 @@ export async function POST(request: Request) {
           profile_id: pid,
           wager_amount: propAny.wager_amount,
           updated_at: new Date().toISOString(),
+          club_id: clubId,
         }));
 
         await adminSupabase.from('match_coin_bets').upsert(betUpserts, { onConflict: 'match_id,profile_id' });

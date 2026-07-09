@@ -2,9 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { Plus, Settings, Users, Calendar, X, Save, ArrowRight } from 'lucide-react';
-import { createClub, getClubLevelAliases, updateClubLevelAliases, deleteClub } from './actions';
+import { createClub, deleteClub, getClubManagers, searchUsers, addClubManager, removeClubManager } from './actions';
 import { setActiveClubAction } from '@/app/actions/club';
-import { SKILL_LEVEL_CODES } from '@/lib/skill-levels';
 import { useRouter } from 'next/navigation';
 
 interface Club {
@@ -23,9 +22,12 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
     const router = useRouter();
     const [clubs, setClubs] = useState<Club[]>(initialClubs);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isAliasModalOpen, setIsAliasModalOpen] = useState(false);
+    const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
     const [selectedClub, setSelectedClub] = useState<Club | null>(null);
-    const [aliases, setAliases] = useState<Record<string, string>>({});
+    const [clubManagers, setClubManagers] = useState<any[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
     
     // Create Club state
     const [newClub, setNewClub] = useState({ name: '', code: '', description: '', phone: '', address: '', manager_name: '' });
@@ -66,41 +68,67 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
         });
     };
 
-    const handleOpenAliases = (club: Club) => {
+    const handleOpenManagerSetting = (club: Club) => {
         setSelectedClub(club);
+        setSearchQuery('');
+        setSearchResults([]);
         startTransition(async () => {
-            const result = await getClubLevelAliases(club.id);
+            const result = await getClubManagers(club.id);
             if (result.error) {
-                alert(`설정을 불러오는 중 오류가 발생했습니다: ${result.error}`);
+                alert(`매니저 정보를 불러오는 중 오류가 발생했습니다: ${result.error}`);
             } else {
-                const aliasMap = (result.aliases || []).reduce(
-                    (acc: Record<string, string>, item: any) => ({ ...acc, [item.level_code]: item.alias }),
-                    {} as Record<string, string>
-                );
-                
-                // Fill missing with defaults
-                const fullAliases = SKILL_LEVEL_CODES.reduce(
-                    (acc: Record<string, string>, code: string) => ({ ...acc, [code]: aliasMap[code] || code }),
-                    {} as Record<string, string>
-                );
-                
-                setAliases(fullAliases);
-                setIsAliasModalOpen(true);
+                setClubManagers(result.managers || []);
+                setIsManagerModalOpen(true);
             }
         });
     };
 
-    const handleSaveAliases = () => {
+    const handleSearchUsers = async (query: string) => {
+        setSearchQuery(query);
+        if (query.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+        setIsSearching(true);
+        const result = await searchUsers(query);
+        setIsSearching(false);
+        if (result.users) {
+            setSearchResults(result.users);
+        }
+    };
+
+    const handleAddManager = (userId: string) => {
         if (!selectedClub) return;
+        
+        if (clubManagers.some((m) => m.user_id === userId)) {
+            alert('이미 이 클럽의 매니저로 등록된 사용자입니다.');
+            return;
+        }
 
         startTransition(async () => {
-            const result = await updateClubLevelAliases(selectedClub.id, aliases);
+            const result = await addClubManager(selectedClub.id, userId);
             if (result.error) {
-                alert(`설정 저장 실패: ${result.error}`);
+                alert(`매니저 추가 실패: ${result.error}`);
             } else {
-                alert('등급 별칭이 저장되었습니다.');
-                setIsAliasModalOpen(false);
-                router.refresh();
+                const reload = await getClubManagers(selectedClub.id);
+                setClubManagers(reload.managers || []);
+                setSearchQuery('');
+                setSearchResults([]);
+            }
+        });
+    };
+
+    const handleRemoveManager = (userId: string) => {
+        if (!selectedClub) return;
+        if (!confirm('정말로 이 사용자의 매니저 권한을 해제하시겠습니까?')) return;
+
+        startTransition(async () => {
+            const result = await removeClubManager(selectedClub.id, userId);
+            if (result.error) {
+                alert(`매니저 해제 실패: ${result.error}`);
+            } else {
+                const reload = await getClubManagers(selectedClub.id);
+                setClubManagers(reload.managers || []);
             }
         });
     };
@@ -173,7 +201,7 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                         <button
                                             onClick={async () => {
                                                 await setActiveClubAction(club.id);
-                                                window.open('/manager', '_blank');
+                                                window.location.href = '/manager';
                                             }}
                                             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
                                         >
@@ -181,11 +209,11 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                             매니저 화면
                                         </button>
                                         <button
-                                            onClick={() => handleOpenAliases(club)}
+                                            onClick={() => handleOpenManagerSetting(club)}
                                             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
                                         >
-                                            <Settings className="size-3.5 text-slate-400" />
-                                            등급 설정
+                                            <Users className="size-3.5 text-slate-400" />
+                                            매니저 설정
                                         </button>
                                         <button
                                             onClick={() => handleDeleteClub(club)}
@@ -297,52 +325,101 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                 </div>
             )}
 
-            {/* Level Alias Modal */}
-            {isAliasModalOpen && selectedClub && (
+            {/* Manager Setting Modal */}
+            {isManagerModalOpen && selectedClub && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-2xl bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="w-full max-w-lg bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between border-b border-slate-100 p-6">
                             <div>
-                                <h2 className="text-lg font-bold text-slate-900">[{selectedClub.name}] 등급 별칭 설정</h2>
-                                <p className="text-xs text-slate-500 mt-0.5">클럽에 맞춰 각 등급의 표시 이름을 설정합니다.</p>
+                                <h2 className="text-lg font-bold text-slate-900">[{selectedClub.name}] 매니저 설정</h2>
+                                <p className="text-xs text-slate-500 mt-0.5">클럽을 관리할 매니저를 지정하고 해제합니다.</p>
                             </div>
                             <button
-                                onClick={() => setIsAliasModalOpen(false)}
+                                onClick={() => setIsManagerModalOpen(false)}
                                 className="text-slate-400 hover:text-slate-600 transition"
                             >
                                 <X className="size-5" />
                             </button>
                         </div>
-                        <div className="p-6 max-h-[60vh] overflow-y-auto grid gap-4 sm:grid-cols-2">
-                            {SKILL_LEVEL_CODES.map((code) => (
-                                <div key={code} className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-600">
-                                        {code} 별칭
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={aliases[code] || ''}
-                                        onChange={(e) => setAliases({ ...aliases, [code]: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3.5 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                        placeholder={code}
-                                    />
-                                </div>
-                            ))}
+                        
+                        <div className="p-6 space-y-6">
+                            {/* 현재 매니저 목록 */}
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-700 mb-2">지정된 매니저 목록</h3>
+                                {clubManagers.length === 0 ? (
+                                    <div className="text-center py-4 border border-dashed border-slate-200 rounded-lg text-sm text-slate-400">
+                                        등록된 매니저가 없습니다.
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden">
+                                        {clubManagers.map((manager) => (
+                                            <div key={manager.user_id} className="flex items-center justify-between px-4 py-3 bg-slate-50/50">
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-semibold text-slate-950">
+                                                        {manager.full_name || manager.username || '이름 없음'}
+                                                    </span>
+                                                    <span className="text-xs text-slate-500">{manager.email}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveManager(manager.user_id)}
+                                                    className="rounded px-2.5 py-1 text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                                                >
+                                                    해제
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 새로운 매니저 임명 (사용자 검색) */}
+                            <div className="pt-4 border-t border-slate-100">
+                                <h3 className="text-sm font-bold text-slate-700 mb-2">새로운 매니저 지정 (사용자 검색)</h3>
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => handleSearchUsers(e.target.value)}
+                                    placeholder="이름 또는 이메일 검색 (2자 이상)"
+                                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                
+                                {isSearching && (
+                                    <div className="text-center py-3 text-xs text-slate-400">검색 중...</div>
+                                )}
+
+                                {!isSearching && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+                                    <div className="text-center py-3 text-xs text-slate-400">검색 결과가 없습니다.</div>
+                                )}
+
+                                {!isSearching && searchResults.length > 0 && (
+                                    <div className="mt-2 max-h-40 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-100">
+                                        {searchResults.map((user) => (
+                                            <div key={user.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-semibold text-slate-800">
+                                                        {user.full_name || user.username || '이름 없음'}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-500">{user.email}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleAddManager(user.id)}
+                                                    className="rounded px-2.5 py-1 text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700"
+                                                >
+                                                    임명
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+
+                        <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50 px-6 py-4">
                             <button
-                                onClick={() => setIsAliasModalOpen(false)}
-                                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                                onClick={() => setIsManagerModalOpen(false)}
+                                className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 transition"
                             >
-                                취소
-                            </button>
-                            <button
-                                onClick={handleSaveAliases}
-                                disabled={isPending}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition disabled:opacity-50"
-                            >
-                                <Save className="size-4" />
-                                {isPending ? '저장 중...' : '별칭 저장'}
+                                닫기
                             </button>
                         </div>
                     </div>

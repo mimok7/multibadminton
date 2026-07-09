@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSupabaseServerClient } from '@/lib/supabase-server'
 import { getClubRole } from '@/lib/club-auth'
+import { isUserAdmin } from '@/lib/auth'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
 import ClubSettingsClient from './ClubSettingsClient'
 import { cookies } from 'next/headers'
@@ -17,9 +18,12 @@ export default async function ClubSettingsPage() {
   const activeClubId = cookieStore.get('active_club_id')?.value;
   if (!activeClubId) redirect('/')
 
-  const clubRole = await getClubRole(supabase, user.id, activeClubId)
-  if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
-      redirect('/unauthorized')
+  const isSysAdmin = await isUserAdmin(supabase, user)
+  if (!isSysAdmin) {
+    const clubRole = await getClubRole(supabase, user.id, activeClubId)
+    if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
+        redirect('/unauthorized')
+    }
   }
 
   // Fetch aliases

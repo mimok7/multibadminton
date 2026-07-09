@@ -175,6 +175,37 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
   const [todaySchedules, setTodaySchedules] = useState<any[]>([]);
   const [statusSaving, setStatusSaving] = useState(false);
   const [isCoinEnabled, setIsCoinEnabled] = useState(true);
+  const [isClubManager, setIsClubManager] = useState(false);
+  const [activeClub, setActiveClub] = useState<{ id: string; name: string } | null>(null);
+  const [clubMemberInfo, setClubMemberInfo] = useState<{
+    role: string;
+    coin_balance: number;
+    coin_wins: number;
+    coin_losses: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    async function checkClubManagerRole() {
+      try {
+        const res = await fetch('/api/user/active-club');
+        const data = await res.json();
+        if (data.club) {
+          setActiveClub(data.club);
+        }
+        if (data.member) {
+          setClubMemberInfo(data.member);
+        }
+        const role = data.clubRole;
+        if (role === 'owner' || role === 'admin' || role === 'manager') {
+          setIsClubManager(true);
+        }
+      } catch (err) {
+        console.error('Failed to check club manager role:', err);
+      }
+    }
+    void checkClubManagerRole();
+  }, [userId]);
  
   const fetchCoinStatus = async () => {
     try {
@@ -442,6 +473,12 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         <section className="rounded-[24px] bg-[#0f172a] px-4 py-3 text-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.85)]">
           <div className="flex items-start justify-between gap-3 px-2">
             <div>
+              {activeClub && (
+                <div className="text-[11px] text-emerald-400 font-bold mb-1.5 flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  {activeClub.name}
+                </div>
+              )}
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold leading-tight">{displayName}</h1>
                 {profile?.is_guest && (
@@ -450,26 +487,26 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
                   </span>
                 )}
                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-100">
-                  승 {profile?.coin_wins ?? 0}
+                  승 {clubMemberInfo?.coin_wins ?? 0}
                 </span>
                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-100">
-                  패 {profile?.coin_losses ?? 0}
+                  패 {clubMemberInfo?.coin_losses ?? 0}
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-100">레벨 {levelLabel}</span>
                 {isCoinEnabled && (
                   <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-100">
-                    코인 {profile?.coin_balance ?? 0}
+                    코인 {clubMemberInfo?.coin_balance ?? 0}
                   </span>
                 )}
-                {userIsAdmin && (
+                {(userIsAdmin || isClubManager) && (
                   <Link
-                    href={profile?.role === 'admin' ? '/admin' : '/manager'}
+                    href="/manager"
                     className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-slate-100 transition hover:bg-white/20"
                   >
                     <Shield className="size-3.5" />
-                    {profile?.role === 'admin' ? '관리자 홈' : '매니저 홈'}
+                    매니저 홈
                   </Link>
                 )}
               </div>

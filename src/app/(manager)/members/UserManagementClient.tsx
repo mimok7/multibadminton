@@ -219,10 +219,6 @@ export default function UserManagementClient({
     };
 
     const handleDelete = async (user: AdminUser) => {
-        if (!isCurrentUserAdmin) {
-            alert("삭제 권한이 없습니다.");
-            return;
-        }
         if (user.id === myUserId) {
             alert("자기 자신은 삭제할 수 없습니다.");
             return;
@@ -738,7 +734,6 @@ export default function UserManagementClient({
                                         ) : (
                                             <select
                                                 value={normalizeEditableRole(draft.role)}
-                                                disabled={!isCurrentUserAdmin}
                                                 onChange={(e) => updateDraft(user.id, { role: e.target.value as 'user' | 'manager' })}
                                                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                             >
@@ -750,7 +745,6 @@ export default function UserManagementClient({
                                     <td className="px-4 py-3 align-top">
                                         <select
                                             value={currentLevelCode}
-                                            disabled={!isCurrentUserAdmin}
                                             onChange={(e) => updateDraft(user.id, { skill_level: e.target.value })}
                                             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         >
@@ -818,7 +812,7 @@ export default function UserManagementClient({
                                             <button
                                                 type="button"
                                                 onClick={() => handleDelete(user)}
-                                                disabled={isPending || user.id === myUserId || !isCurrentUserAdmin}
+                                                disabled={isPending || user.id === myUserId}
                                                 className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700 disabled:opacity-40"
                                             >
                                                 <Trash2 className="size-3.5" />
@@ -897,7 +891,6 @@ export default function UserManagementClient({
                                     ) : (
                                         <select
                                             value={normalizeEditableRole(draft.role)}
-                                            disabled={!isCurrentUserAdmin}
                                             onChange={(e) => updateDraft(user.id, { role: e.target.value as 'user' | 'manager' })}
                                             className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500"
                                         >
@@ -927,7 +920,6 @@ export default function UserManagementClient({
                                     <span className="text-xs text-slate-400 font-medium">급수</span>
                                     <select
                                         value={currentLevelCode}
-                                        disabled={!isCurrentUserAdmin}
                                         onChange={(e) => updateDraft(user.id, { skill_level: e.target.value })}
                                         className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500"
                                     >
@@ -990,7 +982,7 @@ export default function UserManagementClient({
                             <button
                                 type="button"
                                 onClick={() => handleDelete(user)}
-                                disabled={isPending || user.id === myUserId || !isCurrentUserAdmin}
+                                disabled={isPending || user.id === myUserId}
                                 className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40"
                             >
                                 <Trash2 className="size-3.5" />
@@ -1026,9 +1018,6 @@ export default function UserManagementClient({
                 <div className="relative z-10 mt-3 flex flex-wrap items-center gap-2 pt-3 border-t border-white/10 text-[11px] text-slate-200">
                     <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-1">
                         전체 회원: <span className="font-semibold text-white">{memberList.length}명</span>
-                    </span>
-                    <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-1">
-                        관리자: <span className="font-semibold text-white">{overview.adminCount}명</span>
                     </span>
                     <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-1">
                         매니저: <span className="font-semibold text-white">{overview.managerCount}명</span>
@@ -1584,20 +1573,6 @@ export default function UserManagementClient({
                             onChange={(e) => setNewMember((prev) => ({ ...prev, full_name: e.target.value }))}
                             placeholder="이름 (쉼표로 여러 명 일괄등록 가능. 예: 홍길동,김철수)"
                             className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm md:col-span-3"
-                        />
-                        <input
-                            type="email"
-                            value={newMember.email}
-                            onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
-                            placeholder="로그인 이메일 (선택, 미입력 시 자동 생성)"
-                            className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
-                        />
-                        <input
-                            type="password"
-                            value={newMember.password}
-                            onChange={(e) => setNewMember((prev) => ({ ...prev, password: e.target.value }))}
-                            placeholder="비밀번호 (선택, 기본: bad123!)"
-                            className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
                         />
                         <select
                             value={newMember.skill_level}

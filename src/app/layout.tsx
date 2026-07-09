@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const cookieStore = await cookies();
   const activeClubId = cookieStore.get('active_club_id')?.value;
   
-  let title = "라켓 뚱보단";
+  let title = "배드민턴";
   if (activeClubId) {
     try {
       const supabase = await getSupabaseServerClient();

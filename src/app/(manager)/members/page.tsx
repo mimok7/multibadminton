@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import type { AdminUser } from '@/types'
 import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server'
 import { getClubRole } from '@/lib/club-auth'
+import { isUserAdmin } from '@/lib/auth'
 import UserManagementClient from './UserManagementClient'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
 import { cookies } from 'next/headers'
@@ -33,9 +34,12 @@ export default async function ManagerMembersPage({
   const activeClubId = cookieStore.get('active_club_id')?.value;
   if (!activeClubId) redirect('/manager/match-assignment') // or somewhere
 
-  const clubRole = await getClubRole(supabase, user.id, activeClubId)
-  if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
-      redirect('/unauthorized')
+  const isSysAdmin = await isUserAdmin(supabase, user)
+  if (!isSysAdmin) {
+    const clubRole = await getClubRole(supabase, user.id, activeClubId)
+    if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
+        redirect('/unauthorized')
+    }
   }
 
   // 3) 사용자 목록 및 부가 데이터 병렬 조회
@@ -57,7 +61,8 @@ export default async function ManagerMembersPage({
           id, user_id, username, full_name, skill_level, gender, email, updated_at
         )
       `)
-      .eq('club_id', activeClubId),
+      .eq('club_id', activeClubId)
+      .neq('role', 'admin'),
     (filteredAdmin as any).from('club_level_aliases').select('level_code, alias').eq('club_id', activeClubId),
     (filteredAdmin as any).from('attendances').select('user_id, attended_at, status').eq('club_id', activeClubId).eq('status', 'present').order('attended_at', { ascending: false })
   ])

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Search, Camera, User, X, ArrowLeft } from 'lucide-react';
@@ -42,6 +43,7 @@ const formSchema = z.object({
 
 export default function ProfilePage() {
   const { user, profile, loading: userLoading } = useUser();
+  const { clubId, loading: clubLoading } = useClub();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const [members, setMembers] = useState<any[]>([]);
@@ -123,7 +125,7 @@ export default function ProfilePage() {
       alert('프로필 사진이 변경되었습니다.');
       
       // 상태 동기화를 위해 프로필 데이터 재조회
-      await loadRatingData(user.id);
+      await loadRatingData(user.id, clubId);
     } catch (err: any) {
       console.error('Avatar upload error:', err);
       alert(`프로필 사진 업로드 실패: ${err.message || '알 수 없는 오류'}`);
@@ -170,13 +172,42 @@ export default function ProfilePage() {
     }
   }, [user, profile, userLoading, router, form]);
 
-  const loadRatingData = async (currentUserId: string) => {
+  const loadRatingData = async (currentUserId: string, targetClubId: string | null) => {
     setLoadingData(true);
     let resolvedMembers: any[] = [];
     try {
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, full_name, username, email, skill_level, gender, avatar_url');
+      let profilesData: any[] = [];
+      if (targetClubId) {
+        const { data: memberRows, error: memberError } = await supabase
+          .from('club_members')
+          .select(`
+            profiles (
+              id,
+              full_name,
+              username,
+              email,
+              skill_level,
+              gender,
+              avatar_url
+            )
+          `)
+          .eq('club_id', targetClubId);
+
+        if (memberError) {
+          console.error('Error fetching club members:', memberError);
+        }
+        
+        if (memberRows) {
+          profilesData = memberRows
+            .map((row: any) => row.profiles)
+            .filter(Boolean);
+        }
+      } else {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, full_name, username, email, skill_level, gender, avatar_url');
+        profilesData = data || [];
+      }
       
       const collator = new Intl.Collator('ko');
       resolvedMembers = (profilesData || []).slice().sort((a: any, b: any) => {
@@ -261,11 +292,11 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    if (user) {
-      loadRatingData(user.id);
+    if (user && !clubLoading) {
+      loadRatingData(user.id, clubId);
       void fetchCoinStatus();
     }
-  }, [user]);
+  }, [user, clubId, clubLoading]);
 
   const handleDraftVote = (subjectId: string, levelCode: string) => {
     setDraftVotes((prev) => ({
@@ -378,7 +409,7 @@ export default function ProfilePage() {
         setModifiedVotes({});
       }
 
-      await loadRatingData(user.id);
+      await loadRatingData(user.id, clubId);
     } catch (err) {
       console.error('Error saving ratings:', err);
       alert('저장 중 알 수 없는 오류가 발생했습니다.');

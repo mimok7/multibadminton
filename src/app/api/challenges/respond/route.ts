@@ -13,6 +13,7 @@ type ChallengeRow = {
   partner_response: string;
   opponent1_response: string;
   opponent2_response: string;
+  club_id: string;
 };
 
 export async function POST(request: Request) {
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
           session_date: today,
           total_matches: 0,
           assigned_matches: 0,
+          club_id: challenge.club_id,
         })
         .select('id')
         .single();
@@ -134,6 +136,7 @@ export async function POST(request: Request) {
           team2_player1_id: challenge.opponent1_id,
           team2_player2_id: challenge.opponent2_id,
           status: 'scheduled',
+          club_id: challenge.club_id,
         })
         .select('id')
         .single();
@@ -147,6 +150,7 @@ export async function POST(request: Request) {
           scheduled_date: today,
           description: '[일반 경기] 제안 게임',
           status: 'scheduled',
+          club_id: challenge.club_id,
         });
       }
     }
@@ -161,6 +165,7 @@ export async function POST(request: Request) {
     message: `${responderName}님이 도전 요청에 ${statusLabel} 응답을 남겼습니다.`,
     type: 'general',
     is_read: false,
+    club_id: challenge.club_id,
   });
 
   return NextResponse.json({

@@ -59,6 +59,7 @@ export async function ensureFiveMatches(executedBy: string | null) {
       const { data: existingSlot, error: existingSlotError } = await adminSupabase
         .from('match_schedules')
         .select('id')
+        .eq('club_id', template.club_id!)
         .eq('match_date', dateStr)
         .eq('start_time', template.start_time)
         .eq('end_time', template.end_time)

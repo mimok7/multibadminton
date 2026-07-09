@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { RequireAdmin } from '@/components/AuthGuard';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { Button } from '@/components/ui/button';
 import type { Json } from '@/types/supabase';
 
@@ -40,6 +41,7 @@ const DAYS_OPTIONS = [
 
 export default function RecurringMatchPage() {
   const { user } = useUser();
+  const { clubId, loading: clubLoading } = useClub();
   const supabase = getSupabaseClient();
   const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
@@ -73,21 +75,25 @@ export default function RecurringMatchPage() {
 
   // 템플릿 목록 조회
   const fetchTemplates = async () => {
+    if (!clubId) return;
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from('recurring_templates_view')
-        .select('*')
-        .order('day_of_week')
-        .order('start_time');
-
-      if (error) {
-        console.error('정기모임 템플릿 조회 오류:', error);
-        return;
+      const response = await fetch(`/api/admin/recurring-templates?club_id=${clubId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch templates');
       }
 
-      setTemplates((data || []) as RecurringTemplate[]);
+      const result = await response.json();
+      const templatesData = result.templates || [];
+
+      const DAYS_MAP = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+      const resolved = templatesData.map((t: any) => ({
+        ...t,
+        day_name: t.day_of_week !== null && t.day_of_week !== undefined ? DAYS_MAP[t.day_of_week] : null
+      }));
+
+      setTemplates(resolved as RecurringTemplate[]);
     } catch (error) {
       console.error('정기모임 템플릿 조회 중 오류:', error);
     } finally {
@@ -96,8 +102,10 @@ export default function RecurringMatchPage() {
   };
 
   useEffect(() => {
-    fetchTemplates();
-  }, []);
+    if (!clubLoading && clubId) {
+      fetchTemplates();
+    }
+  }, [clubId, clubLoading]);
 
   // 새 템플릿 생성
   const handleCreateTemplate = async (e: React.FormEvent) => {
@@ -116,7 +124,7 @@ export default function RecurringMatchPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newTemplate),
+        body: JSON.stringify({ ...newTemplate, club_id: clubId }),
       });
 
       if (!response.ok) {

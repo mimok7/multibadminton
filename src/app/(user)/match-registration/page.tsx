@@ -77,6 +77,20 @@ export default function MatchRegistrationPage() {
   const fetchSchedulesAndParticipation = useCallback(async () => {
     try {
       setLoading(true);
+      
+      const activeClubId = document.cookie
+        .split('; ')
+        .find(row => row.trim().startsWith('active_club_id='))
+        ?.split('=')[1];
+
+      if (!activeClubId) {
+        console.error('active_club_id cookie not found');
+        setSchedules([]);
+        setUserMatches([]);
+        setLoading(false);
+        return;
+      }
+
       const todayStr = getKoreaDate();
       let schedulesList: MatchSchedule[] = [];
 
@@ -84,6 +98,7 @@ export default function MatchRegistrationPage() {
         .from('match_schedules')
         .select('id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants')
         .eq('status', 'scheduled')
+        .eq('club_id', decodeURIComponent(activeClubId))
         .or(`match_date.gte.${todayStr},schedule_source.eq.tournament,description.ilike.%[대회 경기]%`)
         .is('generated_match_id', null)
         .order('match_date', { ascending: true })

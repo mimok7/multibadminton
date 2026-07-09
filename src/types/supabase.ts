@@ -108,7 +108,7 @@ export type Database = {
   created_at: string;
   updated_at: string;
   partner_user_id: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -120,7 +120,7 @@ export type Database = {
   created_at?: string;
   updated_at?: string;
   partner_user_id?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -152,7 +152,7 @@ export type Database = {
   responded_at: string | null;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -169,7 +169,7 @@ export type Database = {
   responded_at?: string | null;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -193,7 +193,7 @@ export type Database = {
       "club_members": {
   Row: {
     id: string;
-  club_id: string;
+  club_id?: string;
   user_id: string;
   role: string;
   status: string;
@@ -205,7 +205,7 @@ export type Database = {
   };
   Insert: {
     id?: string;
-  club_id: string;
+  club_id?: string;
   user_id: string;
   role?: string;
   status?: string;
@@ -264,7 +264,7 @@ export type Database = {
   order_index: number | null;
   location: string | null;
   created_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -273,7 +273,7 @@ export type Database = {
   order_index?: number | null;
   location?: string | null;
   created_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -355,7 +355,7 @@ export type Database = {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: number;
@@ -371,7 +371,7 @@ export type Database = {
   completed_at?: string | null;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: number | null;
@@ -426,7 +426,7 @@ export type Database = {
   wager_amount: number;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: number;
@@ -435,7 +435,7 @@ export type Database = {
   wager_amount?: number;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: number | null;
@@ -457,7 +457,7 @@ export type Database = {
   status: string;
   notes: string | null;
   partner_user_id: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -467,7 +467,7 @@ export type Database = {
   status?: string;
   notes?: string | null;
   partner_user_id?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -489,7 +489,7 @@ export type Database = {
   status: string;
   updated_at: string;
   updated_by: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: number;
@@ -498,7 +498,7 @@ export type Database = {
   status?: string;
   updated_at?: string;
   updated_by?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: number | null;
@@ -519,7 +519,7 @@ export type Database = {
   team1_score: number;
   team2_score: number;
   created_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: number;
@@ -528,7 +528,7 @@ export type Database = {
   team1_score: number;
   team2_score: number;
   created_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: number | null;
@@ -563,7 +563,7 @@ export type Database = {
   updated_at: string;
   schedule_source: string;
   referee_id: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -586,7 +586,7 @@ export type Database = {
   updated_at?: string;
   schedule_source?: string;
   referee_id?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -623,7 +623,7 @@ export type Database = {
   assigned_matches: number;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -634,7 +634,7 @@ export type Database = {
   assigned_matches?: number;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -658,7 +658,7 @@ export type Database = {
   responses: Json | null;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     match_id?: number;
@@ -668,7 +668,7 @@ export type Database = {
   responses?: Json | null;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     match_id?: number | null;
@@ -690,7 +690,7 @@ export type Database = {
   skill_level: string;
   created_at: string | null;
   updated_at: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -699,7 +699,7 @@ export type Database = {
   skill_level: string;
   created_at?: string | null;
   updated_at?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -719,7 +719,7 @@ export type Database = {
   end_date: string | null;
   created_at: string | null;
   updated_at: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: number;
@@ -727,7 +727,7 @@ export type Database = {
   end_date?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: number | null;
@@ -753,7 +753,7 @@ export type Database = {
   survey_id: string | null;
   file_url: string | null;
   file_name: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -768,7 +768,7 @@ export type Database = {
   survey_id?: string | null;
   file_url?: string | null;
   file_name?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -794,7 +794,7 @@ export type Database = {
   product_id: string;
   coin_price: number;
   created_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -802,7 +802,7 @@ export type Database = {
   product_id: string;
   coin_price: number;
   created_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -824,7 +824,7 @@ export type Database = {
   created_at: string;
   updated_at: string;
   image_svg: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -835,7 +835,7 @@ export type Database = {
   created_at?: string;
   updated_at?: string;
   image_svg?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -864,7 +864,7 @@ export type Database = {
   recorded_by: string | null;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: number;
@@ -879,7 +879,7 @@ export type Database = {
   recorded_by?: string | null;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: number | null;
@@ -970,7 +970,7 @@ export type Database = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -986,7 +986,7 @@ export type Database = {
   created_by?: string | null;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -1085,7 +1085,7 @@ export type Database = {
   user_id: string;
   selected_option: string;
   created_at: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -1093,7 +1093,7 @@ export type Database = {
   user_id: string;
   selected_option: string;
   created_at?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -1115,7 +1115,7 @@ export type Database = {
   max_responses: number | null;
   option_limits: Json | null;
   created_at: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -1126,7 +1126,7 @@ export type Database = {
   max_responses?: number | null;
   option_limits?: Json | null;
   created_at?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -1157,7 +1157,7 @@ export type Database = {
   pairs_data: Json | null;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -1174,7 +1174,7 @@ export type Database = {
   pairs_data?: Json | null;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -1213,7 +1213,7 @@ export type Database = {
   updated_at: string;
   referee_id: string | null;
   referee_name: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -1232,7 +1232,7 @@ export type Database = {
   updated_at?: string;
   referee_id?: string | null;
   referee_name?: string | null;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;
@@ -1268,7 +1268,7 @@ export type Database = {
   matches_per_player: number;
   created_at: string;
   updated_at: string;
-  club_id: string;
+  club_id?: string;
   };
   Insert: {
     id?: string;
@@ -1282,7 +1282,7 @@ export type Database = {
   matches_per_player?: number;
   created_at?: string;
   updated_at?: string;
-  club_id: string;
+  club_id?: string;
   };
   Update: {
     id?: string | null;

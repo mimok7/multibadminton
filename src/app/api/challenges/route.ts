@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProfileByUserId, getUserRole } from '@/lib/auth';
 import { getKoreaDate } from '@/lib/date';
 import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 
 type ProfileLite = {
   id: string;
@@ -392,6 +393,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+  }
+
   const currentProfile = await getProfileByUserId(serverSupabase, user.id);
 
   if (!currentProfile) {
@@ -426,9 +432,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const invalidTarget = selectedIds.find((profileId) => !eligibilityMap.has(profileId));
-    if (invalidTarget) {
-      return NextResponse.json({ error: '선택한 선수 중 지금 도전할 수 없는 선수가 있습니다.' }, { status: 400 });
+    if (!eligibilityMap.has(partnerId)) {
+      return NextResponse.json({ error: '선택하신 파트너는 아직 대기/진행중 게임이 있습니다.' }, { status: 400 });
+    }
+
+    if (!eligibilityMap.has(opponent1Id) || !eligibilityMap.has(opponent2Id)) {
+      return NextResponse.json({ error: '선택하신 상대 선수 중 아직 대기/진행중 게임이 있는 분이 있습니다.' }, { status: 400 });
     }
 
     const { data: existingChallenge } = await adminSupabase
@@ -455,6 +464,7 @@ export async function POST(request: Request) {
         opponent1_id: opponent1Id,
         opponent2_id: opponent2Id,
         note,
+        club_id: clubId,
       })
       .select('*')
       .single();
@@ -476,6 +486,7 @@ export async function POST(request: Request) {
         message: `${challengerName}님이 ${partnerName}님과 함께 ${opponentNames}님에게 게임 제안을 보냈습니다. 게임 제안 페이지에서 수락 또는 보류를 선택해주세요.`,
         type: 'general',
         is_read: false,
+        club_id: clubId,
       })),
     );
 

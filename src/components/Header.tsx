@@ -78,7 +78,7 @@ export default function Header() {
               priority
               suppressHydrationWarning
             />
-            <span className="ml-2 text-sm font-semibold leading-none w-max">{activeClub?.name || '라켓 뚱보단'}</span>
+            <span className="ml-2 text-sm font-semibold leading-none w-max">{activeClub?.name || '배드민턴'}</span>
           </Link>
         </div>
 

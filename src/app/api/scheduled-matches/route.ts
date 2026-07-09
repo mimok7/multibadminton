@@ -78,9 +78,22 @@ export async function GET(request: Request) {
     const date = requestUrl.searchParams.get('date') || getKoreaDate();
     const userId = requestUrl.searchParams.get('userId') || '';
 
+    // 쿠키에서 active_club_id 추출
+    const cookieHeader = request.headers.get('cookie') || '';
+    const activeClubId = cookieHeader
+      .split('; ')
+      .find(row => row.trim().startsWith('active_club_id='))
+      ?.split('=')[1];
+
+    const decodedClubId = activeClubId ? decodeURIComponent(activeClubId) : null;
+    if (!decodedClubId) {
+      return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
+    }
+
     const { data: schedules, error: schedulesError } = await adminSupabase
       .from('match_schedules')
       .select('id, generated_match_id, match_date, scheduled_date, scheduled_time, start_time, court_number, location, description, status, match_result')
+      .eq('club_id', decodedClubId)
       .or(`match_date.eq.${date},scheduled_date.eq.${date}`)
       .order('scheduled_time', { ascending: true })
       .order('court_number', { ascending: true })

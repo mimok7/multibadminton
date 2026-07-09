@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DEFAULT_USER_REDIRECT, isSafeRedirectPath } from '@/lib/route-access';
+import { clearActiveClubAction } from '@/app/actions/club';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,11 @@ type ProfileMatch = {
 };
 
 export default function LoginPage() {
+  useEffect(() => {
+    // 로그인 화면에 진입하면 이전의 활성화 클럽 쿠키를 확실하게 삭제
+    clearActiveClubAction().catch((err) => console.error('Failed to clear active club:', err));
+  }, []);
+
   const supabase = getSupabaseClient();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,59 +35,61 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [autoFillMessage, setAutoFillMessage] = useState('');
+  const [foundClubs, setFoundClubs] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
-
+ 
   // For homonym selection
   const [matchedProfiles, setMatchedProfiles] = useState<ProfileMatch[]>([]);
   const [showClubModal, setShowClubModal] = useState(false);
-
+ 
   const debugEnabled = process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS === 'true';
   const shouldRequirePasswordChange = (value: unknown) => value === true || value === 'true';
-
+ 
   const findProfilesByName = async (value: string, signal?: AbortSignal) => {
     const trimmedValue = value.trim();
     if (!trimmedValue) return null;
-
+ 
     const response = await fetch(`/api/auth/profile-email?fullName=${encodeURIComponent(trimmedValue)}`, {
       method: 'GET',
       cache: 'no-store',
       signal,
     });
-
+ 
     if (response.status === 404) return [];
-
+ 
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
       throw new Error(payload?.error || 'Profile lookup failed');
     }
-
+ 
     const payload = await response.json();
     return payload.profiles as ProfileMatch[];
   };
-
+ 
   const getLoginErrorMessage = (message?: string) => {
     const normalized = message?.toLowerCase() ?? '';
     if (normalized.includes('invalid login credentials')) return '아이디 또는 비밀번호가 올바르지 않습니다.';
     if (normalized.includes('email rate limit exceeded')) return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
     return message || '로그인 중 오류가 발생했습니다.';
   };
-
+ 
   const handleNameSearch = async () => {
     const trimmedFullName = fullName.trim();
     setError('');
     setMatchedProfiles([]);
     setShowClubModal(false);
-
+    setFoundClubs('');
+ 
     if (!trimmedFullName) {
       setAutoFillMessage('한글 이름을 입력해주세요.');
       setEmail('');
       return;
     }
-
+ 
     try {
       setLookupLoading(true);
       const profiles = await findProfilesByName(trimmedFullName);
-
+ 
       if (!profiles || profiles.length === 0) {
         setEmail('');
         setAutoFillMessage('등록된 한글 이름을 찾지 못했습니다.');
@@ -89,6 +97,10 @@ export default function LoginPage() {
         const p = profiles[0];
         setEmail(p.email);
         setAutoFillMessage(`✓ 계정을 찾았습니다. (초기 비밀번호: bad123!)`);
+        const clubNames = p.clubs && p.clubs.length > 0
+          ? p.clubs.map(c => c.name).join(', ')
+          : '소속 클럽 없음';
+        setFoundClubs(clubNames);
       } else {
         // Multiple profiles found
         setMatchedProfiles(profiles);
@@ -103,11 +115,15 @@ export default function LoginPage() {
       setLookupLoading(false);
     }
   };
-
+ 
   const handleSelectProfile = (profile: ProfileMatch) => {
     setEmail(profile.email);
     setShowClubModal(false);
     setAutoFillMessage(`✓ 계정을 찾았습니다. (초기 비밀번호: bad123!)`);
+    const clubNames = profile.clubs && profile.clubs.length > 0
+      ? profile.clubs.map(c => c.name).join(', ')
+      : '소속 클럽 없음';
+    setFoundClubs(clubNames);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -204,7 +220,7 @@ export default function LoginPage() {
             <div className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-slate-100/60">
               <Image
                 src="/maintenance_badminton.png"
-                alt="라켓 뚱보단 로고"
+                alt="배드민턴 로고"
                 width={128}
                 height={128}
                 className="h-28 w-28 object-contain sm:h-32 sm:w-32"
@@ -245,6 +261,7 @@ export default function LoginPage() {
                     setEmail('');
                     setError('');
                     setAutoFillMessage('');
+                    setFoundClubs('');
                   }}
                   placeholder="예: 김진호"
                   className="w-full h-12 rounded-xl"
@@ -265,6 +282,11 @@ export default function LoginPage() {
               {autoFillMessage && (
                 <p className={`text-[11px] font-semibold ${autoFillMessage.startsWith('✓') ? 'text-green-600' : 'text-amber-600'}`}>
                   {autoFillMessage}
+                </p>
+              )}
+              {foundClubs && (
+                <p className="text-[11px] font-semibold text-indigo-600 mt-1">
+                  소속 클럽: {foundClubs}
                 </p>
               )}
             </div>

@@ -5,6 +5,7 @@ import type { Database } from '@/types/supabase';
 type BrowserSupabaseClient = SupabaseClient<Database>;
 
 let supabaseInstance: BrowserSupabaseClient | null = null;
+let cachedActiveClubId: string | null | undefined = undefined;
 const serverSupabasePlaceholder = {} as BrowserSupabaseClient;
 
 export const getSupabaseClient = (): BrowserSupabaseClient => {
@@ -14,7 +15,15 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
     return serverSupabasePlaceholder;
   }
 
-  if (supabaseInstance) {
+  // active_club_id 쿠키 읽기
+  let activeClubId: string | null = null;
+  const match = document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/);
+  if (match) {
+    activeClubId = decodeURIComponent(match[1]);
+  }
+
+  // 인스턴스가 존재하고 캐싱된 클럽 ID가 현재 쿠키와 같으면 재사용
+  if (supabaseInstance && cachedActiveClubId === activeClubId) {
     return supabaseInstance;
   }
 
@@ -35,13 +44,6 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
       },
     }
   ) as unknown as BrowserSupabaseClient;
-
-  // active_club_id 쿠키 읽기
-  let activeClubId = null;
-  const match = document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/);
-  if (match) {
-    activeClubId = decodeURIComponent(match[1]);
-  }
 
   const TABLES_WITH_CLUB_ID = [
     'match_schedules', 
@@ -111,6 +113,7 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
   }
 
   supabaseInstance = client;
+  cachedActiveClubId = activeClubId;
   return supabaseInstance;
 };
 
