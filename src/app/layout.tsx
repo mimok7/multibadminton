@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { cookies } from "next/headers";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
 import "./globals.css";
 import ConsoleSilencer from "@/components/ConsoleSilencer";
 import PWARegister from "@/components/PWARegister";
@@ -13,32 +11,15 @@ import { AppDataProvider } from "@/contexts/AppDataContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export async function generateMetadata(): Promise<Metadata> {
-  const cookieStore = await cookies();
-  const activeClubId = cookieStore.get('active_club_id')?.value;
-  
-  let title = "배드민턴";
-  if (activeClubId) {
-    try {
-      const supabase = await getSupabaseServerClient();
-      const { data } = await (supabase as any).from('clubs').select('name').eq('id', activeClubId).single();
-      if (data?.name) {
-        title = data.name;
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  return {
-    title,
+export const metadata: Metadata = {
+    title: "배드민턴",
     description: "참가자들로 경기를 자동으로 생성합니다.",
-    applicationName: title,
+    applicationName: "배드민턴",
     manifest: "/manifest.webmanifest",
     appleWebApp: {
       capable: true,
       statusBarStyle: "default",
-      title: title,
+      title: "배드민턴",
     },
     icons: {
       icon: [
@@ -50,8 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
       ],
       shortcut: ["/icon-192.png"],
     },
-  };
-}
+};
 
 export const viewport: Viewport = {
   themeColor: "#2563eb",

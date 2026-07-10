@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { getProfileByUserId } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -7,6 +9,12 @@ export async function POST(request: NextRequest) {
 
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: '환경 변수가 설정되지 않았습니다.' }, { status: 500 });
+  }
+
+  const serverSupabase = await getSupabaseServerClient();
+  const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
   }
 
   // service_role 권한으로 Supabase 관리자 클라이언트 생성
@@ -18,14 +26,9 @@ export async function POST(request: NextRequest) {
     // multipart/form-data에서 파일과 사용자 ID 추출
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
-    const userId = formData.get('userId') as string | null;
 
     if (!file) {
       return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 });
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: '사용자 ID가 없습니다.' }, { status: 400 });
     }
 
     // 파일 크기 검증 (5MB 제한)
@@ -33,8 +36,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '파일 크기는 5MB를 초과할 수 없습니다.' }, { status: 400 });
     }
 
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      return NextResponse.json({ error: '지원하지 않는 이미지 형식입니다.' }, { status: 400 });
+    }
+
+    const profile = await getProfileByUserId(adminClient, user.id);
+    if (!profile) {
+      return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
     // 고유 파일명 생성
-    const fileName = `${userId}/avatar_${Date.now()}.jpg`;
+    const fileName = `${user.id}/avatar_${Date.now()}.jpg`;
 
     // 파일을 ArrayBuffer로 변환
     const arrayBuffer = await file.arrayBuffer();
@@ -58,6 +70,16 @@ export async function POST(request: NextRequest) {
     const { data: { publicUrl } } = adminClient.storage
       .from('avatars')
       .getPublicUrl(fileName);
+
+    const { error: profileUpdateError } = await adminClient
+      .from('profiles')
+      .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq('id', profile.id);
+
+    if (profileUpdateError) {
+      await adminClient.storage.from('avatars').remove([fileName]);
+      return NextResponse.json({ error: `프로필 갱신 실패: ${profileUpdateError.message}` }, { status: 500 });
+    }
 
     return NextResponse.json({ 
       success: true, 

@@ -18,14 +18,6 @@ export default async function ClubSettingsPage() {
   const activeClubId = cookieStore.get('active_club_id')?.value;
   if (!activeClubId) redirect('/')
 
-  const isSysAdmin = await isUserAdmin(supabase, user)
-  if (!isSysAdmin) {
-    const clubRole = await getClubRole(supabase, user.id, activeClubId)
-    if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
-        redirect('/unauthorized')
-    }
-  }
-
   // Fetch aliases
   const { data: aliasesRows } = await (supabase as any)
     .from('club_level_aliases')

@@ -116,14 +116,6 @@ export default function ProfilePage() {
 
       const publicUrl = result.publicUrl;
 
-      // profiles 테이블 갱신 (avatar_url 필드)
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
-
       setAvatarUrl(publicUrl);
       alert('프로필 사진이 변경되었습니다.');
       

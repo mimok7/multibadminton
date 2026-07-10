@@ -1,5 +1,0 @@
- ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (108kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
- ⚠ Fast Refresh had to perform a full reload due to a runtime error.
- ⚠ Cross origin request detected from 192.168.1.10 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
-Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins

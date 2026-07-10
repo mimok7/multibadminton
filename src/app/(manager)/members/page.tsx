@@ -34,14 +34,6 @@ export default async function ManagerMembersPage({
   const activeClubId = cookieStore.get('active_club_id')?.value;
   if (!activeClubId) redirect('/manager/match-assignment') // or somewhere
 
-  const isSysAdmin = await isUserAdmin(supabase, user)
-  if (!isSysAdmin) {
-    const clubRole = await getClubRole(supabase, user.id, activeClubId)
-    if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
-        redirect('/unauthorized')
-    }
-  }
-
   // 3) 사용자 목록 및 부가 데이터 병렬 조회
   // Note: Use filtered admin client to bypass RLS issues for manager
   const filteredAdmin = await getFilteredAdminClient()

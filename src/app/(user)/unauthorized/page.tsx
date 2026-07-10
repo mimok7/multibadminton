@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
@@ -10,6 +11,20 @@ import { AlertCircle } from 'lucide-react';
 export default function UnauthorizedPage() {
   const { user, profile, isAdmin } = useUser();
   const levelInfoMap = useLevelInfoMap();
+  const [clubRole, setClubRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      fetch('/api/user/active-club')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.clubRole) {
+            setClubRole(data.clubRole);
+          }
+        })
+        .catch((err) => console.error('Failed to fetch club role in unauthorized page:', err));
+    }
+  }, [user]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f5f7fb] p-4">
@@ -30,7 +45,18 @@ export default function UnauthorizedPage() {
             <h3 className="font-semibold text-slate-800 text-xs mb-2">현재 로그인 정보</h3>
             <div className="text-xs text-slate-600 space-y-1.5">
               <p><span className="font-medium text-slate-400">사용자:</span> {profile.full_name || profile.username || '이름 없음'}</p>
-              <p><span className="font-medium text-slate-400">권한:</span> {isAdmin ? '관리자' : '일반 사용자'}</p>
+              <p>
+                <span className="font-medium text-slate-400">권한:</span>{' '}
+                {isAdmin
+                  ? '관리자'
+                  : clubRole === 'owner'
+                  ? '클럽 소유자'
+                  : clubRole === 'admin'
+                  ? '클럽 관리자'
+                  : clubRole === 'manager'
+                  ? '매니저'
+                  : '일반 사용자'}
+              </p>
               <p><span className="font-medium text-slate-400">레벨:</span> {profile.skill_level_name || getLevelNameFromCode(levelInfoMap, profile.skill_level, profile.skill_level || '미지정')}</p>
             </div>
           </div>

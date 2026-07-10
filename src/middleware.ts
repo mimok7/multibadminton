@@ -10,6 +10,7 @@ import {
 } from '@/lib/route-access';
 import { getUserRole, getRoleFromUser } from '@/lib/auth';
 import { getClubRole } from '@/lib/club-auth';
+import { normalizeClubId } from '@/lib/club-scope';
 
 import type { NextRequest } from 'next/server';
 
@@ -31,7 +32,7 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   req.headers.set('x-pathname', pathname);
 
-  let res = NextResponse.next({
+  const res = NextResponse.next({
     request: {
       headers: req.headers,
     },
@@ -176,8 +177,6 @@ export async function middleware(req: NextRequest) {
     const role = await getUserRole(supabase, user);
     const isGlobalAdmin = role === 'admin';
     const isSystemManager = role === 'manager';
-    const isSuperUser = isGlobalAdmin || isSystemManager;
-
     // ──────────────────────────────────────────────
     // 1. 관리자 전용 라우트 (/admin, /admin-setup)
     // ──────────────────────────────────────────────
@@ -199,7 +198,8 @@ export async function middleware(req: NextRequest) {
       if (isGlobalAdmin) return res;
 
       // 시스템 매니저 → 클럽 선택 없이도 /manager, /manager/admin 등에 접근 가능
-      const hasClubCookie = req.cookies.has('active_club_id');
+      const activeClubId = normalizeClubId(req.cookies.get('active_club_id')?.value);
+      const hasClubCookie = Boolean(activeClubId);
       const isGlobalAdminPath = pathname.startsWith('/manager/admin') || pathname === '/manager';
 
       if (isSystemManager) {
@@ -229,10 +229,10 @@ export async function middleware(req: NextRequest) {
       }
 
       // 클럽 쿠키가 있으면 해당 클럽에서의 역할을 확인
-      const activeClubId = req.cookies.get('active_club_id')?.value;
       if (activeClubId) {
         const clubRole = await getClubRole(supabase, user.id, activeClubId);
         if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
+          console.log('[Middleware] Redirecting to /unauthorized', { activeClubId, clubRole, userId: user.id });
           const url = req.nextUrl.clone();
           url.pathname = '/unauthorized';
           return NextResponse.redirect(url);
@@ -246,7 +246,7 @@ export async function middleware(req: NextRequest) {
     // 3. 일반 사용자 홈 라우트 (/dashboard, /profile, /match-registration 등)
     // ──────────────────────────────────────────────
     if (isProtectedPath && !isAdminRoute && !isManagerRoute && pathname !== '/select-club' && pathname !== '/change-password') {
-      const hasClubCookie = req.cookies.has('active_club_id');
+      const hasClubCookie = Boolean(normalizeClubId(req.cookies.get('active_club_id')?.value));
       if (!hasClubCookie) {
         const url = req.nextUrl.clone();
         url.pathname = '/select-club';

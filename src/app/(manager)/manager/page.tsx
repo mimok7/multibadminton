@@ -24,15 +24,11 @@ export default function ManagerDashboardPage() {
 
   useEffect(() => {
     if (!loading) {
-      if (!profile) {
-        router.replace('/unauthorized');
-        return;
-      }
       if (!isMobile) {
         router.replace('/match-schedule');
       }
     }
-  }, [profile, loading, router, isMobile, isAdmin]);
+  }, [loading, router, isMobile]);
 
   return (
     <div className="px-1 py-2 sm:px-2">

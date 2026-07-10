@@ -21,7 +21,8 @@ import {
   calculatePlayerGameCounts,
   fetchTodayPlayers,
   fetchAvailableScheduleDates,
-  fetchGeneratedMatchesBySession
+  fetchGeneratedMatchesBySession,
+  fetchRegisteredSchedules
 } from './utils';
 
 import AttendanceStatus from './components/AttendanceStatus';
@@ -29,6 +30,7 @@ import MatchSessionStatus from './components/MatchSessionStatus';
 import MatchGenerationControls from './components/MatchGenerationControls';
 import GeneratedMatchesList from './components/GeneratedMatchesList';
 import MatchAssignmentManager from './components/MatchAssignmentManager';
+import AddAttendeeModal from './components/AddAttendeeModal';
 
 function PlayersPage() {
   const [todayPlayers, setTodayPlayers] = useState<ExtendedPlayer[] | null>(null);
@@ -40,6 +42,7 @@ function PlayersPage() {
   
   // 배정 관련 상태
   const [matchSessions, setMatchSessions] = useState<MatchSession[]>([]);
+  const [registeredSchedules, setRegisteredSchedules] = useState<any[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
   const [generatedMatches, setGeneratedMatches] = useState<GeneratedMatch[]>([]);
   const [selectedMatches, setSelectedMatches] = useState<Set<number>>(new Set());
@@ -56,6 +59,10 @@ function PlayersPage() {
   const [selectedGenDate, setSelectedGenDate] = useState<string>('');
   const [selectedPlayerIdsForGen, setSelectedPlayerIdsForGen] = useState<Set<string>>(new Set());
   const [registeredPlayersForGen, setRegisteredPlayersForGen] = useState<ExtendedPlayer[] | null>(null);
+
+  // 출석 추가 모달 상태
+  const [isAddAttendeeModalOpen, setIsAddAttendeeModalOpen] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   useEffect(() => {
     async function initializeData() {
@@ -88,14 +95,18 @@ function PlayersPage() {
   const fetchMatchSessions = async (dateOverride?: string) => {
     try {
       const base = dateOverride || selectedGenDate || getKoreaDate();
-      const { data: sessions, error } = await supabase
-        .from('match_sessions')
-        .select('*')
-        .eq('session_date', base)
-        .order('created_at', { ascending: false });
+      const [{ data: sessions, error }, schedules] = await Promise.all([
+        supabase
+          .from('match_sessions')
+          .select('*')
+          .eq('session_date', base)
+          .order('created_at', { ascending: false }),
+        fetchRegisteredSchedules(base)
+      ]);
 
       if (error) throw error;
       setMatchSessions(sessions || []);
+      setRegisteredSchedules(schedules);
     } catch (error) {
       console.error('경기 세션 조회 오류:', error);
     }
@@ -144,6 +155,89 @@ function PlayersPage() {
       console.error('생성된 경기 조회 오류:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 출석 수동 추가 함수
+  const handleAddAttendees = async (userIds: string[]) => {
+    if (!todayPlayers || isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    
+    try {
+      const today = getKoreaDate();
+      
+      const insertData = userIds.map(id => ({
+        user_id: id,
+        attended_at: today,
+        status: 'present'
+      }));
+      
+      const { error } = await supabase
+        .from('attendances')
+        .insert(insertData);
+        
+      if (error) {
+        console.error('출석자 추가 오류:', error);
+        alert('출석자 추가 중 오류가 발생했습니다.');
+        return;
+      }
+      
+      // 출석자 목록 새로고침
+      const players = await fetchTodayPlayers();
+      setTodayPlayers(players);
+      
+    } catch (err) {
+      console.error('출석 추가 처리 중 오류:', err);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // 선수의 출석 상태 업데이트 함수 (페이지/컴포넌트 리팩토링 후 누락된 기능 복원)
+  const updatePlayerStatus = async (playerId: string, status: ExtendedPlayer['status']) => {
+    if (!todayPlayers || isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    
+    try {
+      // 로컬 즉시 업데이트
+      const updatedPlayers = todayPlayers.map(player => 
+        player.id === playerId ? { ...player, status } : player
+      );
+      setTodayPlayers(updatedPlayers);
+      
+      const today = getKoreaDate();
+      const { error } = await supabase
+        .from('attendances')
+        .update({ status })
+        .match({ user_id: playerId, attended_at: today });
+        
+      if (error) console.error('상태 업데이트 오류:', error.message);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const bulkUpdatePlayerStatus = async (playerIds: string[], status: ExtendedPlayer['status']) => {
+    if (!todayPlayers || isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    
+    try {
+      // 로컬 즉시 업데이트
+      const updatedPlayers = todayPlayers.map(player => 
+        playerIds.includes(player.id) ? { ...player, status } : player
+      );
+      setTodayPlayers(updatedPlayers);
+      
+      const today = getKoreaDate();
+      const { error } = await supabase
+        .from('attendances')
+        .update({ status })
+        .in('user_id', playerIds)
+        .eq('attended_at', today);
+        
+      if (error) console.error('상태 업데이트 오류:', error.message);
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -439,20 +533,20 @@ function PlayersPage() {
     <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
       <div className="w-full">
         <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4">
+          <div className="px-6 py-4 border-b">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white">⚡ 경기 생성 관리</h1>
-                <p className="text-blue-100 text-sm md:text-base mt-1">출석한 선수들로 균형잡힌 경기를 생성하세요</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">⚡ 경기 생성 관리</h1>
+                <p className="text-gray-500 text-sm md:text-base mt-1">출석한 선수들로 균형잡힌 경기를 생성하세요</p>
               </div>
               <div className="mt-4 sm:mt-0 flex gap-2">
                 <Link href="/match-results">
-                  <Button variant="outline" className="bg-white text-blue-600 border-white hover:bg-blue-50">
+                  <Button variant="outline" className="text-blue-600 hover:bg-blue-50">
                     📋 배정 결과 확인
                   </Button>
                 </Link>
                 <Link href="/dashboard">
-                  <Button variant="outline" className="bg-white text-blue-600 border-white hover:bg-blue-50">
+                  <Button variant="outline" className="text-blue-600 hover:bg-blue-50">
                     🏠 대시보드
                   </Button>
                 </Link>
@@ -461,9 +555,32 @@ function PlayersPage() {
           </div>
           
           <div className="p-6">
-            <AttendanceStatus todayPlayers={todayPlayers} />
+            <AttendanceStatus 
+              todayPlayers={todayPlayers} 
+              onStatusChange={updatePlayerStatus}
+              onBulkStatusChange={bulkUpdatePlayerStatus}
+              headerActions={
+                <button
+                  type="button"
+                  onClick={() => setIsAddAttendeeModalOpen(true)}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 ml-2"
+                >
+                  ➕ 출석 추가
+                </button>
+              }
+            />
             
-            <MatchSessionStatus matchSessions={matchSessions} />
+            <AddAttendeeModal 
+              isOpen={isAddAttendeeModalOpen}
+              onClose={() => setIsAddAttendeeModalOpen(false)}
+              onAdd={handleAddAttendees}
+              existingUserIds={new Set(todayPlayers?.map(p => p.id) || [])}
+            />
+            
+            <MatchSessionStatus 
+              matchSessions={matchSessions} 
+              registeredSchedules={registeredSchedules}
+            />
 
             {/* 일정 선택 및 참가자 선택 섹션 */}
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded">

@@ -1,24 +1,25 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
+import { getProfileByUserId } from '@/lib/auth';
 
-function getDirectAdminClient() {
-  return createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+type ClubAuthClient = Parameters<typeof getProfileByUserId>[0];
 
 export async function getClubRole(
-  supabase: any,
+  supabase: ClubAuthClient,
   userId: string,
   clubId: string
 ): Promise<string | null> {
-  const adminClient = getDirectAdminClient();
-  const { data, error } = await adminClient
+  // profile id 조회 (auth.users id와 다를 수 있으므로 매핑)
+  const profile = await getProfileByUserId(supabase, userId);
+
+  if (!profile) return null;
+
+  const profileId = profile.id;
+
+  const { data, error } = await supabase
     .from('club_members')
     .select('role')
-    .eq('user_id', userId)
+    .eq('user_id', profileId)
     .eq('club_id', clubId)
+    .eq('status', 'active')
     .single();
 
   if (error || !data) return null;

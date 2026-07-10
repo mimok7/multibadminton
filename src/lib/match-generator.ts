@@ -23,7 +23,7 @@ export async function ensureFiveMatches(executedBy: string | null) {
 
   const todayDate = getKoreaDate();
   const [y, m, d] = todayDate.split('-').map(Number);
-  let current = new Date(y, m - 1, d);
+  const current = new Date(y, m - 1, d);
 
   const DAY_LABELS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const toDateOnly = (date: Date) => {
@@ -38,6 +38,40 @@ export async function ensureFiveMatches(executedBy: string | null) {
   let verifiedSchedulesCount = 0;
   const targetLimit = 5; // 항상 5개의 일정을 확보
   let safetyLimit = 0;
+
+  const rangeEnd = new Date(current);
+  rangeEnd.setDate(rangeEnd.getDate() + 90);
+  const { data: existingSchedules, error: existingSchedulesError } = await adminSupabase
+    .from('match_schedules')
+    .select('match_date, start_time, end_time, location')
+    .gte('match_date', todayDate)
+    .lte('match_date', toDateOnly(rangeEnd));
+
+  if (existingSchedulesError) {
+    console.error('Failed to preload recurring match schedules:', existingSchedulesError);
+    throw new Error('기존 경기 일정을 확인하지 못했습니다.');
+  }
+
+  const slotKey = (date: string | null, start: string | null, end: string | null, location: string | null) =>
+    `${date || ''}|${start || ''}|${end || ''}|${location || ''}`;
+  const occupiedSlots = new Set(
+    (existingSchedules || []).map((schedule) =>
+      slotKey(schedule.match_date, schedule.start_time, schedule.end_time, schedule.location)
+    )
+  );
+  const schedulesToInsert: Array<{
+    match_date: string;
+    start_time: string;
+    end_time: string;
+    location: string;
+    max_participants: number;
+    current_participants: number;
+    status: string;
+    description: string;
+    created_by: string | null;
+    updated_by: string | null;
+    club_id: string;
+  }> = [];
 
   // 최대 90일 후까지 탐색하며 5개의 평일 경기 일정을 검증/생성함
   while (verifiedSchedulesCount < targetLimit && safetyLimit < 90) {
@@ -55,59 +89,45 @@ export async function ensureFiveMatches(executedBy: string | null) {
     const dateStr = toDateOnly(current);
 
     for (const template of matchingTemplates) {
-      // 이미 해당 날짜에 동일한 조건의 일정이 있는지 확인
-      const { data: existingSlot, error: existingSlotError } = await adminSupabase
-        .from('match_schedules')
-        .select('id')
-        .eq('club_id', template.club_id!)
-        .eq('match_date', dateStr)
-        .eq('start_time', template.start_time)
-        .eq('end_time', template.end_time)
-        .eq('location', template.location)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingSlotError) {
-        console.error(`Check duplicate error for date ${dateStr}:`, existingSlotError);
-        continue;
-      }
-
-      if (existingSlot) {
+      const key = slotKey(dateStr, template.start_time, template.end_time, template.location);
+      if (occupiedSlots.has(key)) {
         skippedSchedules.push(`${dateStr} (${template.name})`);
       } else {
-        // 새 일정 생성
         const recurringSuffix = `정기모임 (${DAY_LABELS[template.day_of_week] || `${template.day_of_week}`})`;
         const description = [template.description?.trim() || template.name.trim(), recurringSuffix].join(' - ');
-
-        const { data: newSlot, error: insertError } = await adminSupabase
-          .from('match_schedules')
-          .insert({
-            match_date: dateStr,
-            start_time: template.start_time,
-            end_time: template.end_time,
-            location: template.location,
-            max_participants: template.max_participants ?? 20,
-            current_participants: 0,
-            status: 'scheduled',
-            description,
-            created_by: executedBy,
-            updated_by: executedBy,
-            club_id: template.club_id,
-          })
-          .select('*')
-          .single();
-
-        if (insertError) {
-          console.error(`Insert error for date ${dateStr}:`, insertError);
-        } else if (newSlot) {
-          createdSchedules.push(newSlot);
-        }
+        schedulesToInsert.push({
+          match_date: dateStr,
+          start_time: template.start_time,
+          end_time: template.end_time,
+          location: template.location,
+          max_participants: template.max_participants ?? 20,
+          current_participants: 0,
+          status: 'scheduled',
+          description,
+          created_by: executedBy,
+          updated_by: executedBy,
+          club_id: template.club_id!,
+        });
+        occupiedSlots.add(key);
       }
 
       verifiedSchedulesCount++;
     }
 
     current.setDate(current.getDate() + 1);
+  }
+
+  if (schedulesToInsert.length > 0) {
+    const { data: insertedSchedules, error: insertError } = await adminSupabase
+      .from('match_schedules')
+      .insert(schedulesToInsert)
+      .select('id, match_date, description');
+
+    if (insertError) {
+      console.error('Failed to batch insert recurring schedules:', insertError);
+      throw new Error('정기 경기 일정을 저장하지 못했습니다.');
+    }
+    createdSchedules.push(...(insertedSchedules || []));
   }
 
   return {

@@ -1,48 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import type { Database } from '@/types/supabase';
+import { CLUB_SCOPED_TABLES, normalizeClubId } from '@/lib/club-scope';
 
 type ServerSupabaseClient = ReturnType<typeof createServerClient<Database>>;
 type AdminSupabaseClient = ReturnType<typeof createClient<Database>>;
+let globalAdminClient: AdminSupabaseClient | null = null;
 
-const TABLES_WITH_CLUB_ID = [
-  'match_schedules', 
-  'generated_matches', 
-  'attendances', 
-  'team_assignments', 
-  'match_coin_bets',
-  'club_members',
-  'notifications',
-  'tournament_matches',
-  'profile_coin_transactions',
-  'club_level_aliases',
-  'match_sessions',
-  'match_participants',
-  'match_results',
-  'match_player_status',
-  'recurring_match_templates',
-  'tournaments',
-  'courts',
-  'products',
-  'product_purchases',
-  'surveys',
-  'survey_responses',
-  'challenge_requests',
-  'member_level_votes',
-  'member_rating_settings',
-  'match_wager_proposals'
-];
+function createAdminClient(): AdminSupabaseClient {
+  return createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+}
 
 export function withClubFilter(client: any, activeClubId: string | undefined | null) {
-  if (!activeClubId) return client;
+  if (!activeClubId) {
+    throw new Error('활성 클럽이 선택되지 않았습니다.');
+  }
 
   const originalFrom = client.from.bind(client);
 
   client.from = (table: string) => {
     const qb = originalFrom(table);
 
-    if (TABLES_WITH_CLUB_ID.includes(table)) {
+    if (CLUB_SCOPED_TABLES.has(table)) {
       // 1. select, update, delete 체이닝 인터셉트
       const methodsToIntercept = ['select', 'update', 'delete'];
       methodsToIntercept.forEach(method => {
@@ -62,9 +52,9 @@ export function withClubFilter(client: any, activeClubId: string | undefined | n
           qb[method] = (data: any, ...args: any[]) => {
             let modifiedData = data;
             if (Array.isArray(data)) {
-              modifiedData = data.map(d => ({ ...d, club_id: d.club_id || activeClubId }));
+              modifiedData = data.map(d => ({ ...d, club_id: activeClubId }));
             } else if (data && typeof data === 'object') {
-              modifiedData = { ...data, club_id: data.club_id || activeClubId };
+              modifiedData = { ...data, club_id: activeClubId };
             }
             return originalMethod(modifiedData, ...args);
           };
@@ -80,12 +70,13 @@ export function withClubFilter(client: any, activeClubId: string | undefined | n
 
 export async function getSupabaseServerClient(): Promise<ServerSupabaseClient> {
   const cookieStore = await cookies();
-  const activeClubId = cookieStore.get('active_club_id')?.value;
+  const activeClubId = normalizeClubId(cookieStore.get('active_club_id')?.value);
 
   const client = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: activeClubId ? { headers: { 'x-club-id': activeClubId } } : undefined,
       cookies: {
         getAll() {
           return cookieStore.getAll();
@@ -103,7 +94,8 @@ export async function getSupabaseServerClient(): Promise<ServerSupabaseClient> {
     }
   );
 
-  return withClubFilter(client, activeClubId);
+  // 세션 확인처럼 클럽과 무관한 Auth API는 활성 클럽 없이도 사용할 수 있어야 한다.
+  return activeClubId ? withClubFilter(client, activeClubId) : client;
 }
 
 export async function getUnfilteredSupabaseServerClient(): Promise<ServerSupabaseClient> {
@@ -132,15 +124,16 @@ export async function getUnfilteredSupabaseServerClient(): Promise<ServerSupabas
 }
 
 export function getUnfilteredGlobalAdminClient(): AdminSupabaseClient {
-  return createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  if (!globalAdminClient) {
+    globalAdminClient = createAdminClient();
+  }
+  return globalAdminClient;
 }
 
 export async function getFilteredAdminClient(): Promise<AdminSupabaseClient> {
   const cookieStore = await cookies();
-  const activeClubId = cookieStore.get('active_club_id')?.value;
-  const adminClient = getUnfilteredGlobalAdminClient();
+  const activeClubId = normalizeClubId(cookieStore.get('active_club_id')?.value);
+  // 필터 래퍼는 client.from을 수정하므로 요청 간 클럽 범위가 섞이지 않게 전용 인스턴스를 사용한다.
+  const adminClient = createAdminClient();
   return withClubFilter(adminClient, activeClubId) as AdminSupabaseClient;
 }

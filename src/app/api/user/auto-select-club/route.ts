@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { cookies } from 'next/headers';
 import { CLUB_COOKIE_NAME } from '@/lib/club';
+import { getProfileByUserId } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -23,12 +24,16 @@ export async function POST(request: Request) {
     }
 
     const adminSupabase = getUnfilteredGlobalAdminClient();
+    const profile = await getProfileByUserId(adminSupabase, user.id);
+    if (!profile) {
+      return NextResponse.json({ success: false, error: 'Profile not found' }, { status: 404 });
+    }
 
     // 사용자의 활성 클럽 목록 조회 (실존하는 클럽만)
     const { data: userClubs, error } = await adminSupabase
       .from('club_members')
       .select('club_id, clubs!inner(id)')
-      .eq('user_id', user.id)
+      .eq('user_id', profile.id)
       .eq('status', 'active');
 
     if (error) {

@@ -100,6 +100,7 @@ export default function UserManagementClient({
         gender: '',
         role: 'user',
     });
+    const [bulkNames, setBulkNames] = useState('');
 
     const isSuperAdmin = useMemo(() => {
         const me = users.find(u => u.id === myUserId);
@@ -364,6 +365,38 @@ export default function UserManagementClient({
                 gender: '',
                 role: 'user',
             });
+            router.refresh();
+        });
+    };
+
+    const handleCreateMemberBulk = () => {
+        if (!bulkNames.trim()) {
+            alert('회원 이름을 입력해 주세요.');
+            return;
+        }
+
+        startTransition(async () => {
+            const result = await createMembersBulk({
+                full_names: bulkNames,
+                skill_level: null,
+                role: 'user',
+            });
+
+            if (result?.error) {
+                alert(`일괄 추가 실패: ${result.error}`);
+                return;
+            }
+
+            const failCount = result.failCount ?? 0;
+            const successCount = result.successCount ?? 0;
+
+            if (failCount > 0) {
+                alert(`일부 회원 추가 실패 (${failCount}명). 성공: ${successCount}명.`);
+            } else {
+                alert(`성공적으로 일괄 추가되었습니다 (${successCount}명).`);
+            }
+
+            setBulkNames('');
             router.refresh();
         });
     };
@@ -1559,57 +1592,87 @@ export default function UserManagementClient({
             )}
 
             {selectedTab === 'create' && (
+                <div className="space-y-6">
                     <section className="rounded-lg border border-amber-200 bg-[linear-gradient(135deg,#fffaf0_0%,#fff5d6_100%)] p-4 sm:p-5">
                         <div className="max-w-4xl">
-                            <h2 className="text-lg font-semibold text-amber-900">새 회원 등록</h2>
+                            <h2 className="text-lg font-semibold text-amber-900">새 회원 개별 등록</h2>
                             <p className="mt-1 hidden text-sm text-amber-800 sm:block">
-                                새 회원을 등록하면 Supabase 인증(Auth) 계정과 프로필이 동시에 생성되어 즉시 로그인할 수 있습니다.
+                                단일 회원의 이름, 급수, 성별, 권한을 지정하여 등록합니다.
                             </p>
                         </div>
-                    <div className="mt-3 grid gap-2 sm:mt-5 sm:gap-3 md:grid-cols-3">
-                        <input
-                            type="text"
-                            value={newMember.full_name}
-                            onChange={(e) => setNewMember((prev) => ({ ...prev, full_name: e.target.value }))}
-                            placeholder="이름 (쉼표로 여러 명 일괄등록 가능. 예: 홍길동,김철수)"
-                            className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm md:col-span-3"
-                        />
-                        <select
-                            value={newMember.skill_level}
-                            disabled={!isCurrentUserAdmin}
-                            onChange={(e) => setNewMember((prev) => ({ ...prev, skill_level: e.target.value }))}
-                            className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-500"
-                        >
-                            {levelOptions.map((levelCode) => {
-                                const option = getLevelOptionMeta(levelCode);
-                                return (
-                                    <option key={levelCode} value={levelCode}>
-                                        {formatAdminLevelLabel(option) || levelCode}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                        <select
-                            value={newMember.gender}
-                            onChange={(e) => setNewMember((prev) => ({ ...prev, gender: e.target.value }))}
-                            className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
-                        >
-                            <option value="">성별 미지정</option>
-                            <option value="M">남성</option>
-                            <option value="F">여성</option>
-                            <option value="O">기타</option>
-                        </select>
-                        <button
-                            type="button"
-                            onClick={handleCreateMember}
-                            disabled={isPending}
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-                        >
-                            <UserPlus className="size-4" />
-                            회원 추가
-                        </button>
-                    </div>
-                </section>
+                        <div className="mt-3 grid gap-2 sm:mt-5 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+                            <input
+                                type="text"
+                                value={newMember.full_name}
+                                onChange={(e) => setNewMember((prev) => ({ ...prev, full_name: e.target.value }))}
+                                placeholder="이름 (예: 홍길동)"
+                                className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
+                            />
+                            <select
+                                value={newMember.skill_level}
+                                disabled={!isCurrentUserAdmin}
+                                onChange={(e) => setNewMember((prev) => ({ ...prev, skill_level: e.target.value }))}
+                                className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                            >
+                                {levelOptions.map((levelCode) => {
+                                    const option = getLevelOptionMeta(levelCode);
+                                    return (
+                                        <option key={levelCode} value={levelCode}>
+                                            {formatAdminLevelLabel(option) || levelCode}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                            <select
+                                value={newMember.gender}
+                                onChange={(e) => setNewMember((prev) => ({ ...prev, gender: e.target.value }))}
+                                className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
+                            >
+                                <option value="">성별 미지정</option>
+                                <option value="M">남성</option>
+                                <option value="F">여성</option>
+                                <option value="O">기타</option>
+                            </select>
+                            <button
+                                type="button"
+                                onClick={handleCreateMember}
+                                disabled={isPending}
+                                className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 transition-colors h-11"
+                            >
+                                <UserPlus className="size-4" />
+                                개별 추가
+                            </button>
+                        </div>
+                    </section>
+
+                    <section className="rounded-lg border border-amber-200 bg-[linear-gradient(135deg,#fffaf0_0%,#fff5d6_100%)] p-4 sm:p-5">
+                        <div className="max-w-4xl">
+                            <h2 className="text-lg font-semibold text-amber-900">새 회원 일괄 등록</h2>
+                            <p className="mt-1 hidden text-sm text-amber-800 sm:block">
+                                추가할 회원의 이름을 쉼표(,) 또는 줄바꿈으로 구분하여 입력하세요. (급수, 성별 등은 등록 후 목록에서 수정할 수 있습니다.)
+                            </p>
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:mt-5 sm:gap-3">
+                            <textarea
+                                value={bulkNames}
+                                onChange={(e) => setBulkNames(e.target.value)}
+                                placeholder="예: 홍길동, 김철수, 이영희"
+                                className="h-32 rounded-md border border-amber-300 bg-white p-3 text-sm resize-y"
+                            />
+                            <div className="flex justify-end mt-2">
+                                <button
+                                    type="button"
+                                    onClick={handleCreateMemberBulk}
+                                    disabled={isPending}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-500 px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+                                >
+                                    <UserPlus className="size-4" />
+                                    회원 일괄 추가
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             )}
 
             {selectedTab === 'rating-period' && (

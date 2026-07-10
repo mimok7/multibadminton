@@ -1,5 +1,5 @@
 
-> badminton-matcher@0.1.0 dev
+> badminton@0.1.0 dev
 > next dev
 
    ▲ Next.js 15.5.19
@@ -10,140 +10,10 @@
      · optimizePackageImports
 
  ✓ Starting...
- ✓ Ready in 3s
- ○ Compiling /middleware ...
- ✓ Compiled /middleware in 1661ms (185 modules)
- ○ Compiling /dashboard ...
- ✓ Compiled /dashboard in 12.3s (902 modules)
- GET /dashboard 200 in 12438ms
- GET /dashboard 200 in 3635ms
- GET /dashboard 200 in 355ms
- ○ Compiling /api/coin-settings ...
- ✓ Compiled /api/coin-settings in 4.9s (987 modules)
- GET /api/coin-settings 200 in 5514ms
- GET /api/attendance/status?date=2026-06-20 200 in 5719ms
- GET /dashboard 200 in 186ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 5907ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 5911ms
- ○ Compiling /api/match-results ...
- ✓ Compiled /api/match-results in 1090ms (998 modules)
- GET /manifest.webmanifest 200 in 1474ms
- GET /api/match-results?match_id=247 200 in 1404ms
- GET /api/match-bets?match_id=247 200 in 1509ms
- GET /dashboard 200 in 624ms
- ○ Compiling /today-matches ...
- ✓ Compiled /today-matches in 1320ms (1005 modules)
- GET /today-matches 200 in 1605ms
- GET /manifest.webmanifest 200 in 171ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 355ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 202ms
- GET /today-matches 200 in 248ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 273ms
- GET /dashboard 200 in 74ms
- GET /api/coin-settings 200 in 140ms
- GET /api/coin-settings 200 in 42ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 247ms
- GET /api/attendance/status?date=2026-06-20 200 in 239ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 270ms
- GET /manifest.webmanifest 200 in 101ms
- GET /api/attendance/status?date=2026-06-20 200 in 180ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 286ms
- GET /api/match-results?match_id=247 200 in 183ms
- GET /api/match-bets?match_id=247 200 in 267ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 339ms
- GET /dashboard 200 in 111ms
- GET /api/coin-settings 200 in 123ms
- GET /api/attendance/status?date=2026-06-20 200 in 192ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 211ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 241ms
- GET /api/match-results?match_id=247 200 in 85ms
- GET /api/match-bets?match_id=247 200 in 143ms
- POST /api/match-results 200 in 2040ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 161ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 161ms
- GET /api/match-results?match_id=271 200 in 112ms
- GET /api/match-bets?match_id=271 200 in 147ms
- GET /today-matches 200 in 57ms
- GET /manifest.webmanifest 200 in 41ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 172ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 138ms
- POST /api/match-results 200 in 1231ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 253ms
- ✓ Compiled in 2.8s (900 modules)
- GET /today-matches 200 in 318ms
- ✓ Compiled /manifest.webmanifest in 501ms (544 modules)
- GET /manifest.webmanifest 200 in 691ms
- ✓ Compiled in 1688ms (375 modules)
- GET /today-matches 200 in 254ms
- GET /manifest.webmanifest 200 in 589ms
- GET /dashboard 200 in 90ms
- ○ Compiling /api/coin-settings ...
- ✓ Compiled /api/coin-settings in 683ms (626 modules)
- ✓ Compiled (633 modules)
- GET /api/coin-settings 200 in 1265ms
- GET /api/coin-settings 200 in 47ms
- GET /api/attendance/status?date=2026-06-20 200 in 1381ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 1464ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 1501ms
- GET /api/attendance/status?date=2026-06-20 200 in 264ms
- ○ Compiling /api/match-bets ...
- ✓ Compiled /api/match-bets in 519ms (637 modules)
- ✓ Compiled (644 modules)
- GET /manifest.webmanifest 200 in 1481ms
- GET /api/match-results?match_id=271 200 in 1402ms
- GET /api/match-bets?match_id=271 200 in 1507ms
- GET /api/scheduled-matches?date=2026-06-20&userId=c664a224-4a60-4179-9594-e22c78cc57be 200 in 1601ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 1710ms
- ○ Compiling /admin ...
- ✓ Compiled /admin in 1367ms (1023 modules)
- GET /admin 200 in 1651ms
- GET /manifest.webmanifest 200 in 105ms
- ○ Compiling /admin/players-today ...
- ✓ Compiled /admin/players-today in 4.3s (1052 modules)
- GET /admin/players-today 200 in 4695ms
- GET /manifest.webmanifest 200 in 97ms
- ○ Compiling /api/admin/level-info ...
- ✓ Compiled /api/admin/level-info in 691ms (1054 modules)
- GET /api/admin/level-info 200 in 931ms
- GET /api/admin/level-info 200 in 1001ms
- GET /api/admin/level-info 200 in 144ms
- GET /api/admin/level-info 200 in 117ms
- GET /api/admin/level-info 200 in 122ms
- GET /api/admin/level-info 200 in 118ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 176ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 183ms
- ✓ Compiled in 1454ms (1068 modules)
- GET /admin/players-today 200 in 199ms
- GET /manifest.webmanifest 200 in 190ms
- ✓ Compiled in 819ms (394 modules)
- GET /admin/players-today 200 in 90ms
- GET /manifest.webmanifest 200 in 66ms
- GET /api/admin/level-info 200 in 282ms
- GET /api/admin/level-info 200 in 401ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 235ms
- ○ Compiling /admin/tournament-matches ...
- ✓ Compiled /admin/tournament-matches in 1303ms (1044 modules)
- GET /admin/tournament-matches 200 in 1602ms
- ○ Compiling /manifest.webmanifest ...
- ✓ Compiled /manifest.webmanifest in 1095ms (1052 modules)
- GET /manifest.webmanifest 200 in 1266ms
- GET /api/admin/level-info 200 in 1324ms
- GET /api/admin/level-info 200 in 1403ms
- GET /api/admin/tournaments 200 in 1512ms
- GET /api/admin/team-assignments 200 in 1520ms
- GET /api/admin/tournaments 200 in 147ms
- GET /api/admin/team-assignments 200 in 162ms
- GET /api/admin/tournaments 200 in 209ms
- GET /api/admin/tournaments 200 in 180ms
- GET /manifest.webmanifest 200 in 187ms
- DELETE /api/admin/team-assignments 200 in 176ms
- GET /api/admin/team-assignments 200 in 153ms
- GET /api/admin/team-assignments 200 in 180ms
- ○ Compiling /admin/tournament-bracket ...
- ✓ Compiled /admin/tournament-bracket in 1488ms (1055 modules)
- GET /admin/tournament-bracket?tournament=58b824e3-b705-4855-8431-960bdb331b2d 200 in 1764ms
- ○ Compiling /api/scheduled-matches ...
- ✓ Compiled /api/scheduled-matches in 658ms (674 modules)
- GET /manifest.webmanifest 200 in 1055ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 1275ms
- GET /api/scheduled-matches?date=2026-06-20 200 in 283ms
+ ✓ Ready in 4.7s
+ ○ Compiling /api/auth/profile-email ...
+ ✓ Compiled /api/auth/profile-email in 2s (389 modules)
+ POST /api/auth/profile-email 401 in 3381ms
+ ○ Compiling /api/setup-storage ...
+ ✓ Compiled /api/setup-storage in 1104ms (392 modules)
+ GET /api/setup-storage 403 in 1303ms

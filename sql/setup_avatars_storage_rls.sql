@@ -20,23 +20,36 @@ CREATE POLICY "avatars_public_read"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'avatars');
 
--- 3. avatars 버킷 파일 업로드 - 인증된 사용자만 가능
+-- 3. avatars 버킷 파일 업로드 - 본인 UUID 폴더만 가능
 CREATE POLICY "avatars_auth_insert"
   ON storage.objects FOR INSERT
   TO authenticated
-  WITH CHECK (bucket_id = 'avatars');
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  );
 
 -- 4. avatars 버킷 파일 수정 - 인증된 사용자만 가능
 CREATE POLICY "avatars_auth_update"
   ON storage.objects FOR UPDATE
   TO authenticated
-  USING (bucket_id = 'avatars');
+  USING (
+    bucket_id = 'avatars'
+    AND owner_id = (SELECT auth.uid()::text)
+  )
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  );
 
 -- 5. avatars 버킷 파일 삭제 - 인증된 사용자만 가능
 CREATE POLICY "avatars_auth_delete"
   ON storage.objects FOR DELETE
   TO authenticated
-  USING (bucket_id = 'avatars');
+  USING (
+    bucket_id = 'avatars'
+    AND owner_id = (SELECT auth.uid()::text)
+  );
 
 -- 정책 확인
 SELECT schemaname, tablename, policyname, roles, cmd, qual

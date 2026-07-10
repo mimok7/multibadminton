@@ -2,8 +2,20 @@ import { NextResponse } from 'next/server';
 import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import fs from 'fs';
 import path from 'path';
+import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { isUserAdmin } from '@/lib/auth';
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const serverSupabase = await getSupabaseServerClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user || !(await isUserAdmin(serverSupabase, user))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const supabase = getUnfilteredGlobalAdminClient();
   try {
     const sqlPath = path.join(process.cwd(), 'sql', '01_club_level_aliases.sql');

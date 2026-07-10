@@ -116,6 +116,20 @@ export const fetchAvailableScheduleDates = async (): Promise<AvailableDate[]> =>
   });
 };
 
+export const fetchRegisteredSchedules = async (date: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('match_schedules')
+    .select('id, generated_match_id, schedule_source, match_date, start_time, end_time, scheduled_time, court_number, description, location, status, current_participants, max_participants')
+    .eq('match_date', date)
+    .order('start_time', { ascending: true });
+
+  if (error) {
+    console.error('일정 상세 조회 오류:', error);
+    return [];
+  }
+  return data || [];
+};
+
 export const fetchGeneratedMatchesBySession = async (sessionId: string): Promise<GeneratedMatch[]> => {
   const { data: matches, error } = await supabase
     .from('generated_matches')
@@ -352,79 +366,74 @@ export const fetchRegisteredPlayersForDate = async (date: string): Promise<Exten
     const target = date;
     console.log(`참가자 조회 시작: 날짜 ${target}`);
 
-    // 1) 해당 날짜의 스케줄 조회 (예정/진행중 위주)
-    const { data: schedules, error: schedulesError } = await supabase
-      .from('match_schedules')
-      .select('id')
-      .eq('match_date', target);
+    // 서버 API를 호출하여 RLS를 우회하고 매니저 권한으로 모든 참가자 정보를 가져옴
+    const response = await fetch(`/api/admin/match-schedules?date=${target}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      cache: 'no-store'
+    });
 
-    if (schedulesError) {
-      console.error('❌ 일정 조회 오류:', schedulesError);
+    if (!response.ok) {
+      console.error('❌ 일정 조회 API 오류:', await response.text());
       return [];
     }
 
-    if (!schedules || schedules.length === 0) {
+    const payload = await response.json();
+    const schedules = payload.schedules || [];
+
+    if (schedules.length === 0) {
       console.log(`해당 날짜(${target})에 등록된 경기가 없습니다.`);
       return [];
     }
 
-    const scheduleIds = (schedules || []).map((s: any) => s.id);
-    console.log(`경기 일정 ${scheduleIds.length}개 발견:`, scheduleIds);
+    console.log(`경기 일정 ${schedules.length}개 발견`);
 
-    // 2) 해당 스케줄들의 참가자 중 registered 상태만
-    const { data: participants, error: participantsError } = await supabase
-      .from('match_participants')
-      .select('user_id, status, partner_user_id')
-      .in('match_schedule_id', scheduleIds)
-      .eq('status', 'registered');
-
-    if (participantsError) {
-      console.error('❌ 참가자 조회 오류:', participantsError);
-      return [];
-    }
-
-    if (!participants || participants.length === 0) {
+    // 해당 스케줄들의 참가자 추출
+    const allParticipants = schedules.flatMap((s: any) => s.participants || []);
+    
+    // 상태가 'registered' 또는 'attended' 인 참가자 필터링
+    const registeredParticipants = allParticipants.filter((p: any) => p.status === 'registered' || p.status === 'attended');
+    
+    if (registeredParticipants.length === 0) {
       console.log(`해당 경기들에 등록된 참가자가 없습니다.`);
       return [];
     }
+    
+    // 중복 제거를 위해 Map 사용 (가장 최근 등록된 참가 정보 기준 등)
+    const uniqueParticipants = new Map<string, any>();
+    registeredParticipants.forEach((p: any) => {
+      if (p.user_id) {
+        uniqueParticipants.set(p.user_id, p);
+      }
+    });
 
-    const userIds = Array.from(new Set((participants || []).map((p: any) => p.user_id).filter(Boolean)));
-    console.log(`참가자 ${userIds.length}명 발견:`, userIds);
-
-    if (userIds.length === 0) return [];
-
-    // 3) 프로필 조회 (id 기준 매칭)
-    const profiles = await fetchProfilesByUserIds(userIds);
-
-    if (!profiles || profiles.length === 0) {
-      console.log('참가자들의 프로필을 찾을 수 없습니다.');
-      return [];
-    }
-
-    const partnerMap = new Map((participants || []).map((p: any) => [p.user_id, p.partner_user_id]));
+    console.log(`참가자 ${uniqueParticipants.size}명 발견`);
 
     // 5) ExtendedPlayer 배열로 변환 (status는 absent로 초기화 - 실제 출석 데이터로 업데이트됨)
-    const players: ExtendedPlayer[] = (profiles || []).map((profile: any) => {
+    const players: ExtendedPlayer[] = Array.from(uniqueParticipants.values()).map((p: any) => {
+      const profile = p.profiles || {};
       const raw = (profile.skill_level || '').toString().toLowerCase();
       const normalized = normalizeLevel('', raw);
       const label = getAdminLevelDisplay(normalized);
-      const name = profile.full_name || profile.username || `선수-${String(profile.id).slice(0, 4)}`;
+      const name = profile.full_name || profile.username || `선수-${String(p.user_id || p.id).slice(0, 4)}`;
       return {
-        id: profile.user_id || profile.id,
+        id: p.user_id || p.id,
         name,
         skill_level: normalized,
         skill_label: label,
+        status: 'absent',
+        partner_user_id: p.partner_user_id || undefined,
         gender: profile.gender || '',
-        skill_code: '',
-        status: 'absent', // 초기 상태는 absent, 실제 출석 데이터로 업데이트됨
-        partner_user_id: partnerMap.get(profile.user_id || profile.id) || null,
-      } as ExtendedPlayer;
+        skill_code: ''
+      };
     });
 
-    console.log(`최종 참가자 데이터 ${players.length}명 생성 완료`);
     return players;
-  } catch (error) {
-    console.error('❌ 날짜별 참가자 조회 중 오류:', error);
+  } catch (err) {
+    console.error('참가자 목록 조회 중 오류:', err);
     return [];
   }
 };
+

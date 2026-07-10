@@ -35,13 +35,7 @@ export default function ManualPage() {
   const { profile, loading } = useUser();
   const router = useRouter();
 
-  useEffect(() => {
-    if (!loading) {
-      if (!profile || (profile.role !== 'admin' && profile.role !== 'manager')) {
-        router.replace('/unauthorized');
-      }
-    }
-  }, [profile, loading, router]);
+
 
   const menuItems = [
     { id: 'admin-players-today', label: '⚡ 오늘 경기 관리', icon: Swords, color: 'text-sky-500 bg-sky-50 hover:bg-sky-100/70' },

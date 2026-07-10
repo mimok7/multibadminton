@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Plus, Settings, Users, Calendar, X, Save, ArrowRight } from 'lucide-react';
-import { createClub, deleteClub, getClubManagers, searchUsers, addClubManager, removeClubManager } from './actions';
+import { createClub, updateClub, deleteClub, getClubManagers, searchUsers, addClubManager, removeClubManager } from './actions';
 import { setActiveClubAction } from '@/app/actions/club';
 import { useRouter } from 'next/navigation';
 
@@ -32,6 +32,10 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
     // Create Club state
     const [newClub, setNewClub] = useState({ name: '', code: '', description: '', phone: '', address: '', manager_name: '' });
     
+    // Edit Club state
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingClub, setEditingClub] = useState({ id: '', name: '', code: '', description: '', phone: '', address: '', manager_name: '' });
+
     const [isPending, startTransition] = useTransition();
 
     const handleCreateClub = () => {
@@ -49,6 +53,25 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                 else alert('클럽이 성공적으로 생성되었습니다.');
                 setIsCreateModalOpen(false);
                 setNewClub({ name: '', code: '', description: '', phone: '', address: '', manager_name: '' });
+                router.refresh();
+            }
+        });
+    };
+
+    const handleUpdateClub = () => {
+        if (!editingClub.name.trim() || !editingClub.code.trim()) {
+            alert('클럽 이름과 코드를 모두 입력해 주세요.');
+            return;
+        }
+
+        startTransition(async () => {
+            const result = await updateClub(editingClub.id, editingClub);
+            if (result.error) {
+                alert(`클럽 수정 실패: ${result.error}`);
+            } else {
+                if (result.warning) alert(result.warning);
+                else alert('클럽이 성공적으로 수정되었습니다.');
+                setIsEditModalOpen(false);
                 router.refresh();
             }
         });
@@ -83,14 +106,13 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
         });
     };
 
-    const handleSearchUsers = async (query: string) => {
-        setSearchQuery(query);
-        if (query.trim().length < 2) {
+    const executeSearch = async () => {
+        if (searchQuery.trim().length < 2 || !selectedClub) {
             setSearchResults([]);
             return;
         }
         setIsSearching(true);
-        const result = await searchUsers(query);
+        const result = await searchUsers(selectedClub.id, searchQuery);
         setIsSearching(false);
         if (result.users) {
             setSearchResults(result.users);
@@ -207,6 +229,24 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                         >
                                             <ArrowRight className="size-3.5" />
                                             매니저 화면
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setEditingClub({
+                                                    id: club.id,
+                                                    name: club.name,
+                                                    code: club.code,
+                                                    description: club.description || '',
+                                                    phone: club.phone || '',
+                                                    address: club.address || '',
+                                                    manager_name: club.manager_name || '',
+                                                });
+                                                setIsEditModalOpen(true);
+                                            }}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+                                        >
+                                            <Settings className="size-3.5 text-slate-400" />
+                                            수정
                                         </button>
                                         <button
                                             onClick={() => handleOpenManagerSetting(club)}
@@ -375,13 +415,27 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                             {/* 새로운 매니저 임명 (사용자 검색) */}
                             <div className="pt-4 border-t border-slate-100">
                                 <h3 className="text-sm font-bold text-slate-700 mb-2">새로운 매니저 지정 (사용자 검색)</h3>
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => handleSearchUsers(e.target.value)}
-                                    placeholder="이름 또는 이메일 검색 (2자 이상)"
-                                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                executeSearch();
+                                            }
+                                        }}
+                                        placeholder="이름 또는 이메일 검색 (2자 이상)"
+                                        className="flex-1 rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                    <button
+                                        onClick={executeSearch}
+                                        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition whitespace-nowrap"
+                                    >
+                                        검색
+                                    </button>
+                                </div>
                                 
                                 {isSearching && (
                                     <div className="text-center py-3 text-xs text-slate-400">검색 중...</div>
@@ -420,6 +474,100 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                 className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 transition"
                             >
                                 닫기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Edit Club Modal */}
+            {isEditModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between border-b border-slate-100 p-6">
+                            <h2 className="text-lg font-bold text-slate-900">클럽 정보 수정</h2>
+                            <button
+                                onClick={() => setIsEditModalOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 transition"
+                            >
+                                <X className="size-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">클럽 이름</label>
+                                <input
+                                    type="text"
+                                    value={editingClub.name}
+                                    onChange={(e) => setEditingClub({ ...editingClub, name: e.target.value })}
+                                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="예: 강남 배드민턴 클럽"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">클럽 코드 (중복 불가)</label>
+                                <input
+                                    type="text"
+                                    value={editingClub.code}
+                                    onChange={(e) => setEditingClub({ ...editingClub, code: e.target.value.toUpperCase() })}
+                                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="예: GANGNAM (영문 대문자)"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">담당자 명 (선택)</label>
+                                    <input
+                                        type="text"
+                                        value={editingClub.manager_name}
+                                        onChange={(e) => setEditingClub({ ...editingClub, manager_name: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        placeholder="홍길동"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">연락처 (선택)</label>
+                                    <input
+                                        type="text"
+                                        value={editingClub.phone}
+                                        onChange={(e) => setEditingClub({ ...editingClub, phone: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        placeholder="010-0000-0000"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">주소 (선택)</label>
+                                <input
+                                    type="text"
+                                    value={editingClub.address}
+                                    onChange={(e) => setEditingClub({ ...editingClub, address: e.target.value })}
+                                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="체육관 주소"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">설명 (선택)</label>
+                                <textarea
+                                    value={editingClub.description}
+                                    onChange={(e) => setEditingClub({ ...editingClub, description: e.target.value })}
+                                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 h-20 resize-none"
+                                    placeholder="클럽에 대한 짧은 설명을 적어주세요."
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+                            <button
+                                onClick={() => setIsEditModalOpen(false)}
+                                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                            >
+                                취소
+                            </button>
+                            <button
+                                onClick={handleUpdateClub}
+                                disabled={isPending}
+                                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition disabled:opacity-50"
+                            >
+                                {isPending ? '수정 중...' : '수정 완료'}
                             </button>
                         </div>
                     </div>

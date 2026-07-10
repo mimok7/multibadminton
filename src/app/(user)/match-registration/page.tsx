@@ -61,7 +61,7 @@ function formatMatchDate(value: string | null, options: Intl.DateTimeFormatOptio
 
 export default function MatchRegistrationPage() {
   const { user, profile } = useUser();
-  const { clubId } = useClub();
+  const { clubId, loading: clubLoading } = useClub();
   const supabase = getSupabaseClient();
   const participantProfileId = profile?.id ?? null;
   const levelInfoMap = useLevelInfoMap();
@@ -77,6 +77,9 @@ export default function MatchRegistrationPage() {
   const [showParticipants, setShowParticipants] = useState<string | null>(null);
 
   const fetchSchedulesAndParticipation = useCallback(async () => {
+    if (clubLoading) {
+      return;
+    }
     try {
       setLoading(true);
       
@@ -277,7 +280,7 @@ export default function MatchRegistrationPage() {
     } finally {
       setLoading(false);
     }
-  }, [participantKeys, supabase, clubId]);
+  }, [participantKeys, supabase, clubId, clubLoading]);
 
   const registerForMatch = async (scheduleId: string, isWaitlist: boolean = false) => {
     if (!user) return;
@@ -583,10 +586,10 @@ export default function MatchRegistrationPage() {
             </div>
 
             {loading ? (
-              <div className="py-8 text-center text-sm text-slate-500">목록을 불러오는 중입니다.</div>
+              <div className="py-8 text-center text-sm text-slate-500">잠시만 기다려 주세요.</div>
             ) : schedules.length === 0 ? (
-              <div className="mt-4 rounded-[20px] bg-slate-50 px-4 py-5 text-sm text-slate-600">
-                참가 가능한 경기가 없습니다. 새 일정이 등록되면 여기에서 바로 신청할 수 있습니다.
+              <div className="mt-4 rounded-[20px] bg-slate-50 px-4 py-5 text-sm text-slate-600 text-center font-medium">
+                참가 신청을 준비 중입니다. 잠시만 기다려 주세요.
               </div>
             ) : (
               <div className="mt-4 space-y-4">

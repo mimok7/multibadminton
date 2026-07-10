@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { isUserAdmin } from '@/lib/auth';
+
+async function requireAdmin() {
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return Boolean(user && await isUserAdmin(supabase, user));
+}
 
 export async function GET() {
+  if (!(await requireAdmin())) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -22,6 +33,9 @@ export async function GET() {
 }
 
 export async function POST() {
+  if (!(await requireAdmin())) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -73,6 +87,9 @@ export async function POST() {
 
 // Supabase PostgREST + service_role으로 직접 Storage RLS 정책 설정
 export async function PATCH() {
+  if (process.env.NODE_ENV === 'production' || !(await requireAdmin())) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -90,9 +107,9 @@ export async function PATCH() {
     `DROP POLICY IF EXISTS "avatars_auth_delete" ON storage.objects`,
     // 새 정책 생성
     `CREATE POLICY "avatars_public_read" ON storage.objects FOR SELECT USING (bucket_id = 'avatars')`,
-    `CREATE POLICY "avatars_auth_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'avatars')`,
-    `CREATE POLICY "avatars_auth_update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'avatars')`,
-    `CREATE POLICY "avatars_auth_delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'avatars')`,
+    `CREATE POLICY "avatars_auth_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = (SELECT auth.uid())::text)`,
+    `CREATE POLICY "avatars_auth_update" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'avatars' AND owner_id = (SELECT auth.uid()::text)) WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = (SELECT auth.uid())::text)`,
+    `CREATE POLICY "avatars_auth_delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'avatars' AND owner_id = (SELECT auth.uid()::text))`,
   ];
 
   const results: any[] = [];

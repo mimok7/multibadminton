@@ -1,6 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import { CLUB_SCOPED_TABLES, normalizeClubId } from '@/lib/club-scope';
 
 type BrowserSupabaseClient = SupabaseClient<Database>;
 
@@ -19,12 +20,16 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
   let activeClubId: string | null = null;
   const match = document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/);
   if (match) {
-    activeClubId = decodeURIComponent(match[1]);
+    activeClubId = normalizeClubId(match[1]);
   }
 
   // 인스턴스가 존재하고 캐싱된 클럽 ID가 현재 쿠키와 같으면 재사용
   if (supabaseInstance && cachedActiveClubId === activeClubId) {
     return supabaseInstance;
+  }
+
+  if (supabaseInstance && cachedActiveClubId !== activeClubId) {
+    void supabaseInstance.removeAllChannels();
   }
 
   try {
@@ -37,6 +42,7 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: activeClubId ? { headers: { 'x-club-id': activeClubId } } : undefined,
       auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -45,40 +51,12 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
     }
   ) as unknown as BrowserSupabaseClient;
 
-  const TABLES_WITH_CLUB_ID = [
-    'match_schedules', 
-    'generated_matches', 
-    'attendances', 
-    'team_assignments', 
-    'match_coin_bets',
-    'club_members',
-    'notifications',
-    'tournament_matches',
-    'profile_coin_transactions',
-    'club_level_aliases',
-    'match_sessions',
-    'match_participants',
-    'match_results',
-    'match_player_status',
-    'recurring_match_templates',
-    'tournaments',
-    'courts',
-    'products',
-    'product_purchases',
-    'surveys',
-    'survey_responses',
-    'challenge_requests',
-    'member_level_votes',
-    'member_rating_settings',
-    'match_wager_proposals'
-  ];
-
   if (activeClubId) {
     const originalFrom = client.from.bind(client);
     (client as any).from = (table: string) => {
       const qb = originalFrom(table as any);
 
-      if (TABLES_WITH_CLUB_ID.includes(table)) {
+      if (CLUB_SCOPED_TABLES.has(table)) {
         // select, update, delete 체이닝 인터셉트
         const methodsToIntercept = ['select', 'update', 'delete'];
         methodsToIntercept.forEach(method => {
@@ -98,9 +76,9 @@ export const getSupabaseClient = (): BrowserSupabaseClient => {
             (qb as any)[method] = (data: any, ...args: any[]) => {
               let modifiedData = data;
               if (Array.isArray(data)) {
-                modifiedData = data.map(d => ({ ...d, club_id: d.club_id || activeClubId }));
+                modifiedData = data.map(d => ({ ...d, club_id: activeClubId }));
               } else if (data && typeof data === 'object') {
-                modifiedData = { ...data, club_id: data.club_id || activeClubId };
+                modifiedData = { ...data, club_id: activeClubId };
               }
               return originalMethod(modifiedData, ...args);
             };

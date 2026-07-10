@@ -60,11 +60,6 @@ export async function GET(request: Request) {
     const serverSupabase = await getSupabaseServerClient();
     const adminSupabase = await getFilteredAdminClient();
 
-    // 경기 후 자정을 기해서 만료된 게스트 자동 삭제 (백그라운드 실행)
-    adminSupabase.rpc('delete_expired_guests').then(({ error }) => {
-      if (error) console.error('⚙️ [Background] Failed to delete expired guests:', error);
-    });
-
     const {
       data: { user },
       error: authError,

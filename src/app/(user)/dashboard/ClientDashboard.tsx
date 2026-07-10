@@ -71,6 +71,14 @@ const quickLinks = [
     iconColor: 'text-purple-500',
   },
   {
+    href: '/ranking',
+    title: '클럽 랭킹',
+    description: '클럽 내 회원들의 코인 순위와 전적을 확인합니다.',
+    icon: Award,
+    hoverClass: 'hover:border-yellow-400 hover:bg-yellow-50/50',
+    iconColor: 'text-yellow-500',
+  },
+  {
     href: '/tournament-bracket',
     title: '대회 대진표',
     description: '대회 대진표를 확인합니다.',
@@ -551,12 +559,7 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         <section className="rounded-[24px] bg-[#0f172a] px-4 py-3 text-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.85)]">
           <div className="flex items-start justify-between gap-3 px-2">
             <div>
-              {activeClub && (
-                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-bold text-emerald-400 border border-emerald-400/20 shadow-sm">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  {activeClub.name}
-                </div>
-              )}
+
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold leading-tight">{displayName}</h1>
                 {profile?.is_guest && (

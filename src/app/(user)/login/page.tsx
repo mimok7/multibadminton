@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import Link from 'next/link';
 import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DEFAULT_USER_REDIRECT, isSafeRedirectPath } from '@/lib/route-access';
@@ -17,7 +16,6 @@ const INITIAL_TEMP_PASSWORD = 'bad123!';
 type ProfileMatch = {
   id: string;
   fullName: string;
-  email: string;
   username: string;
   hasLinkedUser: boolean;
   clubs: Array<{ id: string; name: string }>;
@@ -32,7 +30,7 @@ export default function LoginPage() {
 
   const supabase = getSupabaseClient();
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [selectedProfileId, setSelectedProfileId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +42,6 @@ export default function LoginPage() {
   const [matchedProfiles, setMatchedProfiles] = useState<ProfileMatch[]>([]);
   const [showClubModal, setShowClubModal] = useState(false);
  
-  const debugEnabled = process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS === 'true';
   const shouldRequirePasswordChange = (value: unknown) => value === true || value === 'true';
  
   const findProfilesByName = async (value: string, signal?: AbortSignal) => {
@@ -84,7 +81,7 @@ export default function LoginPage() {
  
     if (!trimmedFullName) {
       setAutoFillMessage('한글 이름을 입력해주세요.');
-      setEmail('');
+      setSelectedProfileId('');
       return;
     }
  
@@ -93,11 +90,11 @@ export default function LoginPage() {
       const profiles = await findProfilesByName(trimmedFullName);
  
       if (!profiles || profiles.length === 0) {
-        setEmail('');
+        setSelectedProfileId('');
         setAutoFillMessage('등록된 한글 이름을 찾지 못했습니다.');
       } else if (profiles.length === 1) {
         const p = profiles[0];
-        setEmail(p.email);
+        setSelectedProfileId(p.id);
         setAutoFillMessage(`✓ 계정을 찾았습니다. (초기 비밀번호: bad123!)`);
         const clubNames = p.clubs && p.clubs.length > 0
           ? p.clubs.map(c => c.name).join(', ')
@@ -110,7 +107,7 @@ export default function LoginPage() {
         setAutoFillMessage('동명이인이 있습니다. 클럽을 선택해주세요.');
       }
     } catch (err) {
-      setEmail('');
+      setSelectedProfileId('');
       const message = err instanceof Error ? err.message : undefined;
       setAutoFillMessage(message || '이메일 조회 중 문제가 발생했습니다.');
     } finally {
@@ -119,7 +116,7 @@ export default function LoginPage() {
   };
  
   const handleSelectProfile = (profile: ProfileMatch) => {
-    setEmail(profile.email);
+    setSelectedProfileId(profile.id);
     setShowClubModal(false);
     setAutoFillMessage(`✓ 계정을 찾았습니다. (초기 비밀번호: bad123!)`);
     const clubNames = profile.clubs && profile.clubs.length > 0
@@ -148,9 +145,9 @@ export default function LoginPage() {
         return;
       }
 
-      let resolvedEmail = email.trim().toLowerCase();
+      let resolvedProfileId = selectedProfileId;
 
-      if (!resolvedEmail) {
+      if (!resolvedProfileId) {
         // Auto-lookup fallback
         const profiles = await findProfilesByName(trimmedFullName);
         if (!profiles || profiles.length === 0) {
@@ -161,17 +158,24 @@ export default function LoginPage() {
           setError('동명이인이 있습니다. [검색] 버튼을 눌러 소속 클럽을 선택해주세요.');
           return;
         }
-        resolvedEmail = profiles[0].email.trim().toLowerCase();
-        setEmail(resolvedEmail);
+        resolvedProfileId = profiles[0].id;
+        setSelectedProfileId(resolvedProfileId);
       }
 
-      const { data: signInData, error: loginError } = await supabase.auth.signInWithPassword({
-        email: resolvedEmail,
-        password: trimmedPassword
+      const loginResponse = await fetch('/api/auth/profile-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: resolvedProfileId, password: trimmedPassword }),
       });
+      const loginPayload = await loginResponse.json().catch(() => null);
+      if (!loginResponse.ok || !loginPayload?.session) {
+        setError(getLoginErrorMessage(loginPayload?.error));
+        return;
+      }
 
-      if (loginError) {
-        setError(getLoginErrorMessage(loginError.message));
+      const { data: signInData, error: loginError } = await supabase.auth.setSession(loginPayload.session);
+      if (loginError || !signInData.session) {
+        setError(getLoginErrorMessage(loginError?.message));
         return;
       }
 
@@ -227,7 +231,7 @@ export default function LoginPage() {
         router.push(nextPath);
       }, 300);
 
-    } catch (error) {
+    } catch {
       setError('로그인 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -280,7 +284,7 @@ export default function LoginPage() {
                   value={fullName}
                   onChange={(e) => {
                     setFullName(e.target.value);
-                    setEmail('');
+                    setSelectedProfileId('');
                     setError('');
                     setAutoFillMessage('');
                     setFoundClubs('');

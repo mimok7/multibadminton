@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { isAdminOrManagerRole } from '@/lib/auth';
@@ -25,29 +25,25 @@ export default function AuthGuard({
   
   const [clubRole, setClubRole] = useState<string | null>(null);
   const [isCheckingClub, setIsCheckingClub] = useState(false);
-  const clubFetchedRef = useRef(false);
+  const [hasCheckedClub, setHasCheckedClub] = useState(false);
 
   const userId = user?.id;
+  const isGlobalSuperUser = isAdmin || isAdminOrManagerRole(profile?.role);
+  
+  // 클럽 권한 확인이 필요한 경우인지 판단
+  const needsClubCheck = requireAdmin && !!userId && !isGlobalSuperUser && !hasCheckedClub;
 
   useEffect(() => {
     // 관리자 권한이 필요하지만 글로벌 관리자가 아닌 경우 클럽 내 역할 확인
-    // 이미 확인했거나 확인 중이면 실행하지 않음
-    if (
-      requireAdmin &&
-      userId &&
-      !isAdmin &&
-      !isAdminOrManagerRole(profile?.role) &&
-      !clubFetchedRef.current &&
-      !isCheckingClub
-    ) {
+    if (needsClubCheck && !isCheckingClub) {
       let isMounted = true;
-      clubFetchedRef.current = true;
       setIsCheckingClub(true);
 
       const timeoutId = window.setTimeout(() => {
         if (isMounted) {
           setClubRole('timeout');
           setIsCheckingClub(false);
+          setHasCheckedClub(true);
         }
       }, CLUB_ROLE_TIMEOUT_MS);
 
@@ -58,6 +54,7 @@ export default function AuthGuard({
           if (isMounted) {
             setClubRole(data.clubRole || 'none');
             setIsCheckingClub(false);
+            setHasCheckedClub(true);
           }
         })
         .catch(err => {
@@ -66,18 +63,24 @@ export default function AuthGuard({
           if (isMounted) {
             setClubRole('error');
             setIsCheckingClub(false);
+            setHasCheckedClub(true);
           }
         });
+        
       return () => {
         isMounted = false;
         window.clearTimeout(timeoutId);
+        // React StrictMode remount fix
+        setIsCheckingClub(false);
       };
     }
-  }, [requireAdmin, userId, isAdmin, profile?.role, isCheckingClub]);
+  }, [needsClubCheck, isCheckingClub]);
 
-  const loading = userLoading || isCheckingClub;
+  // 유저 정보 로딩 중이거나, 클럽 권한 확인이 필요한데 아직 확인 중/전인 경우 로딩 상태로 간주
+  const loading = userLoading || isCheckingClub || needsClubCheck;
+  
   const isClubManager = clubRole === 'manager' || clubRole === 'admin' || clubRole === 'owner';
-  const canAccessAdmin = isAdmin || isAdminOrManagerRole(profile?.role) || isClubManager;
+  const canAccessAdmin = isGlobalSuperUser || isClubManager;
 
   useEffect(() => {
     if (loading) return;
@@ -90,10 +93,11 @@ export default function AuthGuard({
 
     // 관리자 권한이 필요한 페이지인데 관리자가 아닌 경우
     if (requireAdmin && (!userId || !canAccessAdmin)) {
+      console.log('[AuthGuard] Redirecting to /unauthorized!', { requireAdmin, userId, canAccessAdmin, clubRole, isGlobalSuperUser, isClubManager, isCheckingClub, hasCheckedClub, loading });
       router.replace('/unauthorized');
       return;
     }
-  }, [userId, loading, isAdmin, canAccessAdmin, requireAuth, requireAdmin, router, redirectTo]);
+  }, [userId, loading, canAccessAdmin, requireAuth, requireAdmin, router, redirectTo, user, clubRole, isGlobalSuperUser, isClubManager, isCheckingClub, hasCheckedClub]);
 
   // 로딩 중일 때
   if (loading) {
@@ -101,7 +105,7 @@ export default function AuthGuard({
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          <p className="text-gray-600">사용자 정보 확인 중...</p>
+          <p className="text-gray-600">사용자 권한 확인 중...</p>
         </div>
       </div>
     );
@@ -112,7 +116,7 @@ export default function AuthGuard({
     return null; // 리다이렉트 중이므로 아무것도 렌더링하지 않음
   }
 
-  // 관리자 권한이 필요한데 관리자가 아닌 경우
+  // 관리자 권한이 필요한인데 관리자가 아닌 경우
   if (requireAdmin && (!userId || !canAccessAdmin)) {
     return null; // 리다이렉트 중이므로 아무것도 렌더링하지 않음
   }

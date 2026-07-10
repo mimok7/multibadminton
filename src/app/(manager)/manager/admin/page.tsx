@@ -13,11 +13,7 @@ export default async function AdminPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect('/login');
 
-    // 2. Double check global admin or manager role
-    const role = await getUserRole(supabase, user);
-    if (role !== 'admin' && role !== 'manager') {
-        redirect('/unauthorized');
-    }
+
 
     // 3. Fetch clubs data
     const result = await getClubsWithMemberCount();

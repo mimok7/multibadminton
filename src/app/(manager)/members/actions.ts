@@ -195,7 +195,7 @@ export async function createMembersBulk(payload: { full_names: string; skill_lev
     const ctx = await getManagerContext();
     if (!ctx) return { error: '추가 권한이 없습니다.' };
 
-    const names = payload.full_names.split(',').map(n => n.trim()).filter(Boolean);
+    const names = payload.full_names.split(/[,\n]/).map(n => n.trim()).filter(Boolean);
     if (names.length === 0) return { error: '추가할 회원 이름을 입력해 주세요.' };
 
     const results = [];

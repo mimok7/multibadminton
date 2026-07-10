@@ -13,6 +13,20 @@ export async function GET() {
     }
 
     const adminSupabase = getUnfilteredGlobalAdminClient();
+    
+    // profiles 테이블에서 user_id 또는 id가 user.id인 profile 조회
+    const { data: profile } = await adminSupabase
+      .from('profiles')
+      .select('id, role')
+      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (!profile) {
+      return NextResponse.json({ club: null, clubRole: null, member: null });
+    }
+
+    const profileId = profile.id;
     let clubId = await getActiveClubId();
     let isClubValid = false;
     let memberData = null;
@@ -33,12 +47,21 @@ export async function GET() {
           .from('club_members')
           .select('role, coin_balance, coin_wins, coin_losses, status')
           .eq('club_id', clubId)
-          .eq('user_id', user.id)
+          .eq('user_id', profileId)
           .single();
 
         if (member && member.status === 'active') {
           isClubValid = true;
           memberData = member;
+        } else if (profile.role === 'admin') {
+          // 시스템 최고 관리자는 클럽 멤버가 아니어도 접근 가능
+          isClubValid = true;
+          memberData = {
+            role: 'admin',
+            coin_balance: 0,
+            coin_wins: 0,
+            coin_losses: 0,
+          };
         }
       }
     }
@@ -48,7 +71,7 @@ export async function GET() {
       const { data: userClubs } = await adminSupabase
         .from('club_members')
         .select('club_id, role, coin_balance, coin_wins, coin_losses, clubs!inner(id, name, code)')
-        .eq('user_id', user.id)
+        .eq('user_id', profileId)
         .eq('status', 'active');
 
       if (userClubs && userClubs.length > 0) {

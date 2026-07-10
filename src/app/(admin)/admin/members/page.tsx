@@ -5,6 +5,7 @@ import { isUserAdmin } from '@/lib/auth'
 import UserManagementClient from './UserManagementClient'
 import type { Database } from '@/types/supabase'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
+import { getActiveClubId } from '@/lib/club'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,8 @@ export default async function AdminMembersPage({
 
   // 3) 사용자 목록 및 부가 데이터 병렬 조회
   const supabaseAdmin = await getFilteredAdminClient()
+  const activeClubId = await getActiveClubId()
+  if (!activeClubId) redirect('/select-club')
   const today = new Date()
   const cutoff = new Date(today)
   cutoff.setDate(today.getDate() - 30)
@@ -52,7 +55,7 @@ export default async function AdminMembersPage({
     supabaseAdmin.from('level_info').select('id, code, name, description, score').order('score', { ascending: false, nullsFirst: false }),
     supabaseAdmin.from('profiles').select('id, user_id, coin_wins, coin_losses'),
     (supabaseAdmin as any).from('member_rating_settings').select('start_date, end_date').eq('id', 1).maybeSingle(),
-    Promise.resolve(supabaseAdmin.rpc('get_attendance_summary')).catch(() => ({ data: null })),
+    Promise.resolve(supabaseAdmin.rpc('get_attendance_summary', { p_club_id: activeClubId })).catch(() => ({ data: null })),
     supabaseAdmin.from('attendances').select('user_id, attended_at, status').gte('attended_at', cutoffDate).eq('status', 'present').order('attended_at', { ascending: false })
   ])
 

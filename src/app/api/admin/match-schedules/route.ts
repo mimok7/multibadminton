@@ -66,33 +66,46 @@ export async function GET(request: Request) {
       const normalizedQuery = profilesQueryParam.trim();
 
       let profilesQuery = adminSupabase
-        .from('profiles')
-        .select('id, user_id, username, full_name')
+        .from('club_members')
+        .select('user_id, status, profiles!inner(id, user_id, username, full_name)')
+        .eq('status', 'active')
         .not('user_id', 'is', null)
         .limit(shouldFetchAllProfiles ? 500 : 20);
 
       if (normalizedQuery.length > 0) {
         const escapedQuery = normalizedQuery.replace(/[%_,]/g, (value) => `\\${value}`);
         profilesQuery = profilesQuery.or(
-          `username.ilike.%${escapedQuery}%,full_name.ilike.%${escapedQuery}%`
+          `username.ilike.%${escapedQuery}%,full_name.ilike.%${escapedQuery}%`,
+          { referencedTable: 'profiles' }
         );
-      } else {
-        profilesQuery = profilesQuery.order('full_name', { ascending: true }).order('username', { ascending: true });
       }
 
-      const { data: profilesData, error: profilesError } = await profilesQuery;
+      // Note: We can't easily order by related table via standard query builder without raw SQL,
+      // but we can sort the results in JavaScript below since it's limited to 500 max.
+      
+      const { data: membersData, error: profilesError } = await profilesQuery;
 
       if (profilesError) {
         console.error('Admin profiles search error:', profilesError);
         return NextResponse.json({ error: 'Failed to search profiles' }, { status: 500 });
       }
 
-      const profiles = (profilesData || []).map((profile) => ({
-        id: profile.id,
-        user_id: profile.user_id,
-        username: profile.username,
-        full_name: profile.full_name,
-      }));
+      let profiles = (membersData || [])
+        .map((row: any) => ({
+          id: row.profiles.id,
+          user_id: row.profiles.user_id,
+          username: row.profiles.username,
+          full_name: row.profiles.full_name,
+        }));
+        
+      // Sort alphabetically
+      if (normalizedQuery.length === 0) {
+        profiles.sort((a, b) => {
+          const aName = a.full_name || a.username || '';
+          const bName = b.full_name || b.username || '';
+          return aName.localeCompare(bName, 'ko-KR');
+        });
+      }
 
       return NextResponse.json({ profiles });
     }

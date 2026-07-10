@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { setActiveClubAction } from '@/app/actions/club';
@@ -27,14 +27,22 @@ export default function ClubSelectorClient({
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/';
   const [loading, setLoading] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSelect = async (clubId: string) => {
     setLoading(clubId);
+    setErrorMessage(null);
     try {
-      await setActiveClubAction(clubId);
+      const result = await setActiveClubAction(clubId);
+      if (!result.success) {
+        setErrorMessage(result.error || '클럽을 선택하지 못했습니다.');
+        setLoading(null);
+        return;
+      }
       router.push(redirectTo);
     } catch (error) {
       console.error('Failed to set club:', error);
+      setErrorMessage('클럽을 선택하지 못했습니다. 잠시 후 다시 시도해 주세요.');
       setLoading(null);
     }
   };
@@ -82,6 +90,11 @@ export default function ClubSelectorClient({
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-center text-white mb-6">입장할 클럽을 선택하세요</h2>
+      {errorMessage && (
+        <p role="alert" className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {errorMessage}
+        </p>
+      )}
       {isGlobalAdmin && (
         <Button 
           variant="outline" 
@@ -97,11 +110,13 @@ export default function ClubSelectorClient({
           if (!club) return null;
           
           return (
-            <button
+            <Button
               key={club.id}
+              type="button"
+              variant="ghost"
               onClick={() => handleSelect(club.id)}
               disabled={loading !== null}
-              className={`p-6 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all text-left flex items-center justify-between group ${
+              className={`h-auto min-h-10 w-full p-6 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all text-left flex items-center justify-between group ${
                 loading === club.id ? 'opacity-70 cursor-not-allowed' : ''
               }`}
             >
@@ -118,7 +133,7 @@ export default function ClubSelectorClient({
                   '입장하기 →'
                 )}
               </div>
-            </button>
+            </Button>
           );
         })}
       </div>
