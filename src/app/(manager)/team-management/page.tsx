@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getKoreaDate } from '@/lib/date';
+import { fetchAdminMembers } from './actions';
 import {
   fetchLevelInfoMap,
   getLevelNameFromCode,
@@ -389,21 +390,10 @@ export default function TeamManagementPage() {
 
   const fetchMemberPlayers = async () => {
     try {
-      const [profilesResult, levelInfoResult] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, username, full_name, skill_level, gender')
-          .order('username', { ascending: true }),
+      const [profilesData, levelInfoResult] = await Promise.all([
+        fetchAdminMembers(),
         fetchLevelInfoMap(supabase),
       ]);
-
-      const { data: profilesData, error } = profilesResult;
-
-      if (error) {
-        console.error('회원 목록 조회 오류:', error);
-        setMemberPlayers([]);
-        return;
-      }
 
       setLevelInfoMap(levelInfoResult);
       setMemberPlayers((profilesData || []).map((profile) => ({
