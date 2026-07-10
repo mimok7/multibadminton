@@ -194,7 +194,7 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
 
   // ── 통합 초기 데이터 로딩 (한 번의 흐름으로 모든 히어로 카드 데이터 로딩) ──
   useEffect(() => {
-    if (!userId || !profile) return;
+    if (!userId) return;
     let cancelled = false;
 
     const loadDashboardData = async () => {
@@ -304,7 +304,7 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
 
   /** 재조회용: 참가 신청 변경 후 다시 불러올 때 사용 */
   const fetchAttendanceAndRegistration = async () => {
-    if (!userId || !profile) return;
+    if (!userId) return;
     try {
       setLoadingAttendance(true);
       const today = getKoreaDate();
