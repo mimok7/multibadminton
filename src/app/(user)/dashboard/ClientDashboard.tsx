@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, CalendarDays, Gift, LogOut, Shield, Swords, Target, Trophy, UserCircle2, Zap, Bell, BookOpen, MessageSquarePlus, Award } from 'lucide-react';
+import { ArrowRight, CalendarDays, Gift, LogOut, Shield, Swords, Target, Trophy, UserCircle2, Zap, Bell, BookOpen, MessageSquarePlus } from 'lucide-react';
 
 import MatchNotifications from '@/components/MatchNotifications';
 import { Button } from '@/components/ui/button';
@@ -70,14 +70,7 @@ const quickLinks = [
     hoverClass: 'hover:border-purple-400 hover:bg-purple-50/50',
     iconColor: 'text-purple-500',
   },
-  {
-    href: '/ranking',
-    title: '클럽 랭킹',
-    description: '클럽 내 회원들의 코인 순위와 전적을 확인합니다.',
-    icon: Award,
-    hoverClass: 'hover:border-yellow-400 hover:bg-yellow-50/50',
-    iconColor: 'text-yellow-500',
-  },
+
   {
     href: '/tournament-bracket',
     title: '대회 대진표',

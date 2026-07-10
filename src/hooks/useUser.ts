@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/lib/supabase';
-import { type AppProfile, getRoleFromUser, getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
+import { type AppProfile, getRoleFromUser, isAdminOrManagerRole } from '@/lib/auth';
+import { fetchProfileServer } from '@/app/actions/profile';
 
 type Profile = AppProfile;
 
@@ -49,7 +50,7 @@ export function useUser() {
 
     const profilePromise = pendingProfileRequest?.userId === userId
       ? pendingProfileRequest.promise
-      : getProfileByUserId(supabase, userId);
+      : fetchProfileServer(userId);
 
     if (!pendingProfileRequest || pendingProfileRequest.userId !== userId) {
       pendingProfileRequest = { userId, promise: profilePromise };
