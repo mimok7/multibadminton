@@ -21,6 +21,7 @@ interface MatchAssignmentManagerProps {
   loading: boolean;
   onFetchGeneratedMatches: (sessionId: string) => Promise<void>;
   onBulkAssign: () => Promise<void>;
+  onDeleteSession: (sessionId: string) => Promise<void>;
 }
 
 export default function MatchAssignmentManager({
@@ -36,7 +37,8 @@ export default function MatchAssignmentManager({
   levelInfoMap = {},
   loading,
   onFetchGeneratedMatches,
-  onBulkAssign
+  onBulkAssign,
+  onDeleteSession
 }: MatchAssignmentManagerProps) {
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -277,27 +279,68 @@ export default function MatchAssignmentManager({
       
       {/* 세션 선택 및 배정 관리 */}
       <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            생성된 경기 세션 선택:
+        <div className="mb-6">
+          <label className="block text-sm font-bold text-gray-700 mb-3">
+            생성된 경기 세션 선택 및 관리:
           </label>
-          <select
-            value={selectedSessionId}
-            onChange={async (e) => {
-              setSelectedSessionId(e.target.value);
-              if (e.target.value) {
-                await onFetchGeneratedMatches(e.target.value);
-              }
-            }}
-            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">세션을 선택하세요</option>
-            {matchSessions.map(session => (
-              <option key={session.id} value={session.id}>
-                {session.session_name} ({session.total_matches}경기, 배정완료: {session.assigned_matches}경기)
-              </option>
-            ))}
-          </select>
+          {matchSessions.length === 0 ? (
+            <div className="text-gray-500 text-sm py-4 border border-dashed border-gray-200 rounded-lg text-center bg-gray-50/50">
+              오늘 생성된 경기 세션이 없습니다. 상단에서 경기를 먼저 생성해 주세요.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {matchSessions.map(session => {
+                const isSelected = selectedSessionId === session.id;
+                return (
+                  <div
+                    key={session.id}
+                    className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50/40 shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50/80'
+                    }`}
+                  >
+                    <div className="mb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-bold text-gray-900 text-sm truncate" title={session.session_name}>
+                          {session.session_name}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteSession(session.id)}
+                          className="text-red-400 hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50"
+                          title="세션 삭제"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        총 {session.total_matches}경기 (배정 완료: {session.assigned_matches}경기)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (isSelected) {
+                          setSelectedSessionId('');
+                        } else {
+                          setSelectedSessionId(session.id);
+                          await onFetchGeneratedMatches(session.id);
+                        }
+                      }}
+                      className={`w-full py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
+                        isSelected
+                          ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {isSelected ? '선택됨 (취소하려면 클릭)' : '세션 선택'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 배정할 날짜 선택 */}

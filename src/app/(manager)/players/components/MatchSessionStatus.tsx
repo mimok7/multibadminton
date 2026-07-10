@@ -302,16 +302,6 @@ export default function MatchSessionStatus({
                                   {generatedSchedules.length}개
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAssignedModalView('sequence');
-                                  setIsAssignedMatchesModalOpen(true);
-                                }}
-                                className="mt-3 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
-                              >
-                                상세 대진표 보기
-                              </button>
                             </div>
                           )}
                         </div>
@@ -326,7 +316,7 @@ export default function MatchSessionStatus({
             {hasMatchSessions && (
               <div>
                 <div className="mb-2 text-sm font-medium text-blue-900">생성된 경기 세션</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {matchSessions.map((session) => (
                     <div key={session.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-white rounded border gap-4">
                       <div className="flex-1 min-w-0">

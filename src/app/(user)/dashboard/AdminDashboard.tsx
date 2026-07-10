@@ -582,16 +582,16 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
             </div>
           </Link>
           
-          <Link href="/match-results">
+          <Link href="/players-scheduled">
             <div className="bg-teal-50 border-2 border-teal-200 hover:border-teal-300 p-5 rounded-lg hover:bg-teal-100 transition-all duration-200 transform hover:scale-105">
               <div className="flex items-start justify-between mb-3">
                 <div className="text-2xl">📊</div>
                 <div className="bg-teal-100 text-teal-800 px-2 py-1 rounded text-xs font-medium">
-                  회원 기능
+                  관리자 전용
                 </div>
               </div>
-              <h4 className="text-base font-semibold text-teal-900 mb-2">경기 배정 현황</h4>
-              <p className="text-sm text-gray-600 leading-relaxed">배정된 경기 현황과 일정을 확인하세요</p>
+              <h4 className="text-base font-semibold text-teal-900 mb-2">배정된 게임 목록</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">배정된 게임 현황과 일정을 확인하세요</p>
             </div>
           </Link>
           

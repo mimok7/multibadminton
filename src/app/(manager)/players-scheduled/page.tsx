@@ -80,13 +80,13 @@ const formatSessionName = (session: { session_date: string, session_name: string
   return dateStr ? `${dateStr}_${session.session_name}` : session.session_name;
 };
 
-function MatchResultsPage() {
+function PlayersScheduledPage() {
   const [rawMatches, setRawMatches] = useState<AssignedMatch[]>([]);
   const [sortField, setSortField] = useState<string>('default');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [matchSessions, setMatchSessions] = useState<MatchSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('upcoming');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -166,6 +166,62 @@ function MatchResultsPage() {
           );
 
       setRawMatches(finalMatches as AssignedMatch[]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteMatch = async (match: AssignedMatch) => {
+    if (!match || !match.generated_match || !match.generated_match.session) return;
+    
+    const confirmMsg = `정말로 이 경기(경기 #${match.generated_match.match_number})를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch(`/api/admin/match-sessions/${match.generated_match.session.id}/matches`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId: match.generated_match.id })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || '경기 삭제 중 오류');
+      
+      alert('경기가 성공적으로 삭제되었습니다.');
+      await fetchAssignedMatches();
+    } catch (err) {
+      console.error('경기 삭제 오류:', err);
+      alert(getFriendlyErrorMessage(err));
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string, sessionName: string) => {
+    if (!confirm(`정말로 세션 "${sessionName}"과 해당 세션에 배정된 모든 게임을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/match-sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || '세션 삭제에 실패했습니다.');
+      }
+      
+      alert('세션이 성공적으로 삭제되었습니다.');
+      
+      if (selectedSession === sessionId) {
+        setSelectedSession('all');
+      }
+      
+      await fetchMatchSessions();
+      await fetchAssignedMatches();
+    } catch (error) {
+      console.error('❌ 세션 삭제 중 오류:', error);
+      alert(`세션 삭제 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     } finally {
       setLoading(false);
     }
@@ -332,7 +388,17 @@ function MatchResultsPage() {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-800">게임 {gm.match_number}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-800">게임 {gm.match_number}</span>
+            <button
+              type="button"
+              onClick={() => handleDeleteMatch(match)}
+              className="text-red-500 hover:text-red-700 p-0.5 text-xs"
+              title="경기 삭제"
+            >
+              🗑️
+            </button>
+          </div>
           {getStatusBadge(match.status)}
         </div>
         
@@ -419,9 +485,19 @@ function MatchResultsPage() {
         <div>
           {/* 카드 헤더 */}
           <div className="flex justify-between items-center pb-2 border-b border-gray-100 mb-2.5">
-            <span className="text-sm font-bold text-gray-800">
-              경기 {match.generated_match?.match_number}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold text-gray-800">
+                경기 {match.generated_match?.match_number}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleDeleteMatch(match)}
+                className="text-red-500 hover:text-red-700 p-0.5"
+                title="경기 삭제"
+              >
+                🗑️
+              </button>
+            </div>
             {getStatusBadge(match.status)}
           </div>
 
@@ -598,6 +674,15 @@ function MatchResultsPage() {
             <Button onClick={submitResult} disabled={submitting} size="sm" className="h-7 px-2.5 text-xs font-semibold">
               {submitting ? '중...' : match.generated_match?.match_result ? '수정' : '저장'}
             </Button>
+            <button
+              type="button"
+              onClick={() => handleDeleteMatch(match)}
+              disabled={submitting}
+              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-md transition-all text-xs"
+              title="경기 삭제"
+            >
+              🗑️
+            </button>
           </div>
         </td>
       </tr>
@@ -696,10 +781,10 @@ function MatchResultsPage() {
             <div className="space-y-0.5 pl-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-3 py-0.5 text-[11px] font-semibold text-indigo-300">
                 <Trophy className="h-3.5 w-3.5" />
-                경기결과
+                배정된 게임
               </span>
-              <h1 className="text-xl font-bold tracking-tight">오늘 참가자 승률 TOP 5</h1>
-              <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">오늘 참가한 선수들의 승률 순위와 경기 결과를 확인합니다.</p>
+              <h1 className="text-xl font-bold tracking-tight">배정된 게임 목록</h1>
+              <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">진행 중인 게임 및 예정된 게임의 목록과 결과를 관리합니다.</p>
             </div>
             <Link href="/admin">
               <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
@@ -741,188 +826,162 @@ function MatchResultsPage() {
         ) : (
           <>
 
-        {/* 필터 컨트롤 */}
-        <div className="mb-4 rounded-lg bg-white p-3 shadow-sm sm:mb-6 sm:p-6">
-          <h3 className="mb-3 text-base font-medium text-gray-900 sm:mb-4 sm:text-lg">🔍 필터 설정</h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-            {/* 세션 필터 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">경기 세션</label>
-              <select
-                value={selectedSession}
-                onChange={(e) => setSelectedSession(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="all">전체 세션</option>
-                {matchSessions.map(session => (
-                  <option key={session.id} value={session.id}>
-                    {formatSessionName(session)}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            {/* 날짜 필터 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">날짜</label>
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="all">전체 날짜</option>
-                <option value="today">오늘</option>
-                <option value="upcoming">예정된 경기</option>
-                <option value="past">지난 경기</option>
-              </select>
-            </div>
 
-            {/* 상태 필터 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">상태</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="all">전체 상태</option>
-                <option value="scheduled">예정됨</option>
-                <option value="in_progress">진행중</option>
-                <option value="completed">완료됨</option>
-                <option value="cancelled">취소됨</option>
-              </select>
-            </div>
-
-            {/* 새로고침 버튼 */}
-            <div className="flex items-end">
-              <Button
-                onClick={fetchAssignedMatches}
-                disabled={loading}
-                className="w-full"
-              >
-                {loading ? '새로고침 중...' : '🔄 새로고침'}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* 통계 카드 */}
-        <div className="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:gap-6 md:grid-cols-4">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-3 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">📊</div>
-                </div>
-                <div className="ml-3 w-0 flex-1 sm:ml-5">
-                  <dl>
-                    <dt className="truncate text-xs font-medium text-gray-500 sm:text-sm">총 배정 경기</dt>
-                    <dd className="text-sm font-medium text-gray-900 sm:text-lg">{assignedMatches.length}경기</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-3 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">⏰</div>
-                </div>
-                <div className="ml-3 w-0 flex-1 sm:ml-5">
-                  <dl>
-                    <dt className="truncate text-xs font-medium text-gray-500 sm:text-sm">예정된 경기</dt>
-                    <dd className="text-sm font-medium text-gray-900 sm:text-lg">
-                      {assignedMatches.filter(m => m.status === 'scheduled').length}경기
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-3 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">✅</div>
-                </div>
-                <div className="ml-3 w-0 flex-1 sm:ml-5">
-                  <dl>
-                    <dt className="truncate text-xs font-medium text-gray-500 sm:text-sm">완료된 경기</dt>
-                    <dd className="text-sm font-medium text-gray-900 sm:text-lg">
-                      {assignedMatches.filter(m => m.status === 'completed').length}경기
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-3 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">🏟️</div>
-                </div>
-                <div className="ml-3 w-0 flex-1 sm:ml-5">
-                  <dl>
-                    <dt className="truncate text-xs font-medium text-gray-500 sm:text-sm">총 세션</dt>
-                    <dd className="text-sm font-medium text-gray-900 sm:text-lg">{matchSessions.length}개</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 승률 TOP 5 리더보드 */}
+        {/* 배정된 게임 목록 */}
         <div className="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
-          <div className="border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 bg-gray-50/50">
-            <h3 className="text-base font-medium text-gray-900 sm:text-lg">🏆 참가자 승률 TOP 5</h3>
+          <div className="border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gray-50/50">
+            <div>
+              <h3 className="text-base font-medium text-gray-900 sm:text-lg">배정된 게임 목록</h3>
+              <p className="mt-1 text-xs text-gray-500 sm:text-sm">총 {assignedMatches.length}개의 배정된 게임</p>
+            </div>
+            
+            {/* 보기 방식 토글 */}
+            <div className="flex items-center bg-gray-150 p-0.5 rounded-lg self-start sm:self-auto border border-gray-200/50">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 flex items-center gap-1 ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-blue-600 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                🎴 4열 카드 보기
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 flex items-center gap-1 ${
+                  viewMode === 'table'
+                    ? 'bg-white text-blue-600 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                📋 테이블 보기
+              </button>
+            </div>
           </div>
-          {todayLeaderboard.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-              오늘 완료된 경기가 없습니다.
+
+          {assignedMatches.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-4">🤷‍♂️</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">배정된 게임이 없습니다</h3>
+              <p className="text-gray-500 mb-4">게임을 생성하고 배정해보세요</p>
+              <Link href="/players">
+                <Button>게임 생성하러 가기</Button>
+              </Link>
+            </div>
+          ) : viewMode === 'table' ? (
+            <div className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 select-none">
+                    <tr>
+                      <th 
+                        onClick={() => handleSort('number')}
+                        className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        회차 {renderSortIndicator('number')}
+                      </th>
+                      <th 
+                        onClick={() => handleSort('session')}
+                        className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        경기 세션 {renderSortIndicator('session')}
+                      </th>
+                      <th 
+                        onClick={() => handleSort('team1')}
+                        className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        라켓팀 (팀 1) {renderSortIndicator('team1')}
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        점수 입력
+                      </th>
+                      <th 
+                        onClick={() => handleSort('team2')}
+                        className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        셔틀팀 (팀 2) {renderSortIndicator('team2')}
+                      </th>
+                      <th 
+                        onClick={() => handleSort('status')}
+                        className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        상태 {renderSortIndicator('status')}
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        결과 및 저장
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {groupedMatches.map((group) => (
+                      <Fragment key={group.session?.id || 'none'}>
+                        {/* 세션 구분 행 */}
+                        <tr className="bg-slate-100/70">
+                          <td colSpan={7} className="px-4 py-2 text-xs font-bold text-slate-700 border-y border-slate-200">
+                            <div className="flex items-center justify-between">
+                              <span>📅 {formatSessionName(group.session)} ({group.matches.length}개 경기)</span>
+                              {group.session?.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSession(group.session.id, formatSessionName(group.session))}
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 border border-red-200 rounded text-[10px] font-semibold transition-all"
+                                >
+                                  🗑️ 세션 전체 삭제
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {group.matches.map((match) => (
+                          <MatchResultTableRow
+                            key={match.id}
+                            match={match}
+                            onSaved={() => fetchAssignedMatches()}
+                          />
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">순위</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">이름</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">승률</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">승/경기</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {todayLeaderboard.map((player, index) => (
-                    <tr key={player.name} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                          index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                          index === 1 ? 'bg-slate-200 text-slate-700' :
-                          index === 2 ? 'bg-amber-100 text-amber-800' :
-                          'bg-slate-50 text-slate-500'
-                        }`}>
-                          {index + 1}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {player.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-blue-600">
-                        {player.winRate}%
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
-                        {player.wins}승 / {player.matches}전
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            /* Card Grid View (4 columns) grouped by session */
+            <div className="p-4 sm:p-6 bg-gray-50/50 flex flex-col gap-6">
+              {groupedMatches.map((group) => (
+                <div key={group.session?.id || 'none'} className="border-b border-gray-100 pb-6 last:border-0 last:pb-0">
+                  {/* 세션 헤더 */}
+                  <div className="bg-slate-100 px-4 py-2.5 rounded-lg font-bold text-xs sm:text-sm text-slate-700 mb-4 flex items-center justify-between border border-slate-200">
+                    <span>📅 {formatSessionName(group.session)}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 font-normal">{group.matches.length}개 게임</span>
+                      {group.session?.id && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSession(group.session.id, formatSessionName(group.session))}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 border border-red-200 rounded text-[10px] font-semibold transition-all"
+                        >
+                          🗑️ 세션 전체 삭제
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {group.matches.map((match) => (
+                      <MatchResultGridCard
+                        key={match.id}
+                        match={match}
+                        onSaved={() => fetchAssignedMatches()}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -933,10 +992,10 @@ function MatchResultsPage() {
 );
 }
 
-export default function ProtectedMatchResultsPage() {
+export default function ProtectedPlayersScheduledPage() {
   return (
     <RequireAdmin>
-      <MatchResultsPage />
+      <PlayersScheduledPage />
     </RequireAdmin>
   );
 }

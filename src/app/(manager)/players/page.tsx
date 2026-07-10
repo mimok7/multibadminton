@@ -29,7 +29,7 @@ import AttendanceStatus from './components/AttendanceStatus';
 import MatchSessionStatus from './components/MatchSessionStatus';
 import MatchGenerationControls from './components/MatchGenerationControls';
 import GeneratedMatchesList from './components/GeneratedMatchesList';
-import MatchAssignmentManager from './components/MatchAssignmentManager';
+
 
 function PlayersPage() {
   const [todayPlayers, setTodayPlayers] = useState<ExtendedPlayer[] | null>(null);
@@ -50,6 +50,7 @@ function PlayersPage() {
 
   // 경기 배정 타입 상태
   const [assignType, setAssignType] = useState<'today' | 'scheduled'>('today');
+  const [generationMode, setGenerationMode] = useState<string>('레벨');
   // 세션명 자동 생성으로 전환 (입력 상태 제거)
   
   // 일정 관리를 위한 상태
@@ -93,17 +94,12 @@ function PlayersPage() {
   const fetchMatchSessions = async (dateOverride?: string) => {
     try {
       const base = dateOverride || selectedGenDate || getKoreaDate();
-      const [{ data: sessions, error }, schedules] = await Promise.all([
-        supabase
-          .from('match_sessions')
-          .select('*')
-          .eq('session_date', base)
-          .order('created_at', { ascending: false }),
-        fetchRegisteredSchedules(base)
-      ]);
-
-      if (error) throw error;
-      setMatchSessions(sessions || []);
+      const response = await fetch(`/api/admin/match-sessions?date=${base}`);
+      const data = await response.json().catch(() => null);
+      const sessions = data?.sessions || [];
+      
+      const schedules = await fetchRegisteredSchedules(base);
+      setMatchSessions(sessions);
       setRegisteredSchedules(schedules);
     } catch (error) {
       console.error('경기 세션 조회 오류:', error);
@@ -148,9 +144,45 @@ function PlayersPage() {
   const fetchGeneratedMatches = async (sessionId: string) => {
     try {
       setLoading(true);
-      setGeneratedMatches(await fetchGeneratedMatchesBySession(sessionId));
+      const response = await fetch(`/api/admin/match-sessions/${sessionId}/matches`);
+      const data = await response.json().catch(() => null);
+      setGeneratedMatches(data?.matches || []);
     } catch (error) {
       console.error('생성된 경기 조회 오류:', error);
+      setGeneratedMatches([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm('정말로 이 세션을 삭제하시겠습니까? 세션에 연결된 모든 대진 정보가 삭제됩니다.')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/match-sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || '세션 삭제에 실패했습니다.');
+      }
+      
+      alert('세션이 성공적으로 삭제되었습니다.');
+      
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId('');
+        setGeneratedMatches([]);
+      }
+      
+      await fetchMatchSessions();
+      await fetchAvailableDates();
+    } catch (error) {
+      console.error('❌ 세션 삭제 중 오류:', error);
+      alert(`세션 삭제 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     } finally {
       setLoading(false);
     }
@@ -219,6 +251,7 @@ function PlayersPage() {
     
     setLoading(true);
     setIsManualMode(false);
+    setGenerationMode('레벨');
     try {
       const basePool = selectedGenDate && registeredPlayersForGen
         ? registeredPlayersForGen
@@ -262,6 +295,7 @@ function PlayersPage() {
 
     setLoading(true);
     setIsManualMode(false);
+    setGenerationMode('랜덤');
     try {
       const basePool = selectedGenDate && registeredPlayersForGen
         ? registeredPlayersForGen
@@ -294,6 +328,7 @@ function PlayersPage() {
 
     setLoading(true);
     setIsManualMode(false);
+    setGenerationMode('혼복');
     try {
       const basePool = selectedGenDate && registeredPlayersForGen
         ? registeredPlayersForGen
@@ -349,6 +384,7 @@ function PlayersPage() {
     setMatches(emptyMatches);
     setPlayerGameCounts({});
     setIsManualMode(true);
+    setGenerationMode('수동');
   };
 
   const handleDirectAssign = async () => {
@@ -360,14 +396,13 @@ function PlayersPage() {
     setLoading(true);
     try {
       const assignmentDate = selectedGenDate || getKoreaDate();
-      const mode = assignType === 'today' ? '오늘' : '예정';
       const response = await fetch('/api/admin/match-sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           matches,
           session_date: assignmentDate,
-          mode,
+          mode: generationMode,
         }),
       });
       const result = await response.json().catch(() => null);
@@ -500,11 +535,6 @@ function PlayersPage() {
                 <p className="text-gray-500 text-sm md:text-base mt-1">출석한 선수들로 균형잡힌 경기를 생성하세요</p>
               </div>
               <div className="mt-4 sm:mt-0 flex gap-2">
-                <Link href="/match-results">
-                  <Button variant="outline" className="text-blue-600 hover:bg-blue-50">
-                    📋 배정 결과 확인
-                  </Button>
-                </Link>
                 <Link href="/dashboard">
                   <Button variant="outline" className="text-blue-600 hover:bg-blue-50">
                     🏠 대시보드
@@ -570,20 +600,7 @@ function PlayersPage() {
               }}
             />
             
-            <MatchAssignmentManager
-              matchSessions={matchSessions}
-              selectedSessionId={selectedSessionId}
-              setSelectedSessionId={setSelectedSessionId}
-              generatedMatches={generatedMatches}
-              selectedMatches={selectedMatches}
-              setSelectedMatches={setSelectedMatches}
-              availableDates={availableDates}
-              selectedAssignDate={selectedAssignDate}
-              setSelectedAssignDate={setSelectedAssignDate}
-              loading={loading}
-              onFetchGeneratedMatches={fetchGeneratedMatches}
-              onBulkAssign={handleBulkAssign}
-            />
+
           </div>
         </div>
       </div>

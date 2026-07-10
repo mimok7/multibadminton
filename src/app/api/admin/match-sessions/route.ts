@@ -238,7 +238,7 @@ export async function POST(request: Request) {
     }
 
     const sessionBatchNumber = (count ?? 0) + 1;
-    const sessionName = `경기일자 ${sessionBatchNumber}`;
+    const sessionName = `${sessionDate} ${sessionBatchNumber}회차 ${mode}`;
 
     const { data: sessionData, error: sessionError } = await adminContext.adminSupabase
       .from('match_sessions')
