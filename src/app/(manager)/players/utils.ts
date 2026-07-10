@@ -248,112 +248,53 @@ export const calculatePlayerGameCounts = (matches: any[]) => {
 export const fetchTodayPlayers = async (): Promise<ExtendedPlayer[]> => {
   try {
     const today = getKoreaDate();
-    
-    // 출석 데이터 조회
-    const { data: attendanceData, error } = await supabase
-      .from('attendances')
-      .select('id, user_id, status, attended_at, partner_user_id')
-      .eq('attended_at', today);
-      
-    if (error) {
-      console.error('❌ 출석자 조회 오류:', error);
-      return [];
-    }
-    
-    if (!attendanceData || attendanceData.length === 0) {
-      return [];
-    }
-    
-    // 사용자 ID 추출 후 프로필 데이터 조회
-    const userIds = attendanceData.map(a => a.user_id).filter(Boolean);
-    
-    if (userIds.length === 0) {
-      return [];
-    }
-    
-    // 프로필 데이터와 레벨 정보를 병렬로 조회
-    const [profilesData, levelInfoMap] = await Promise.all([
-      fetchProfilesByUserIds(userIds),
-      fetchLevelInfoMap(supabase),
-    ]);
-      
-    // 레벨 정보를 객체로 변환
-    const levelMap: Record<string, string> = {};
-    Object.entries(levelInfoMap).forEach(([code, meta]) => {
-      levelMap[code] = meta.name || '';
+
+    const response = await fetch(`/api/admin/attendance?attendedAt=${encodeURIComponent(today)}`, {
+      method: 'GET',
+      cache: 'no-store',
     });
-    
-    if (profilesData && profilesData.length > 0) {
-      // 프로필 데이터를 기반으로 선수 정보 생성
-      const playersWithProfiles = profilesData
-        .map((profile: any) => {
-          const userId = profile.id;
-          
-          // 기본 skill_level 설정
-          let skill_level = profile.skill_level ? String(profile.skill_level).toLowerCase() : 'n';
-          
-          const normalizedLevel = normalizeLevel('', skill_level);
-          const skill_label = getAdminLevelDisplay(normalizedLevel);
-          
-          // 이름 설정
-          const playerName = profile.full_name || profile.username || `선수-${profile.id.substring(0, 4)}`;
-          
-          // 해당 사용자의 출석 상태 찾기
-          const attendance = attendanceData?.find((a: any) => a.user_id === userId);
-          const status = normalizeAttendanceStatus(attendance?.status);
-          
-          return {
-            id: profile.id,
-            name: playerName,
-            skill_level: normalizedLevel,
-            skill_label,
-            gender: profile.gender || '',
-            skill_code: '',
-            status,
-            partner_user_id: attendance?.partner_user_id || null,
-          };
-        })
-        .filter((p: any) => p.id);
-      
-      // 프로필이 없는 출석자들을 위한 기본 선수 정보 생성
-      const profiledUserIds = playersWithProfiles.map(p => p.id);
-      const missingProfileUsers = userIds.filter(id => !profiledUserIds.includes(id));
-      
-      const playersWithoutProfiles = missingProfileUsers.map(userId => {
-        const attendance = attendanceData?.find((a: any) => a.user_id === userId);
-        const status = normalizeAttendanceStatus(attendance?.status);
-        
-        return {
-          id: userId,
-          name: `선수-${userId.substring(0, 8)}`,
-          skill_level: 'e2',
-          skill_label: getAdminLevelDisplay('e2'),
-          gender: '',
-          skill_code: '',
-          status,
-          partner_user_id: attendance?.partner_user_id || null,
-        };
-      });
-      
-      // 모든 선수 데이터 결합
-      return [...playersWithProfiles, ...playersWithoutProfiles];
-    } else {
-      const fallbackPlayers = attendanceData.map((attendance: any) => {
-        const attendance_status = normalizeAttendanceStatus(attendance.status);
-        return {
-          id: attendance.user_id,
-          name: `선수-${attendance.user_id.substring(0, 8)}`,
-          skill_level: 'e2',
-          skill_label: getAdminLevelDisplay('e2'),
-          gender: '',
-          skill_code: '',
-          status: attendance_status,
-          partner_user_id: attendance.partner_user_id || null,
-        };
-      });
-      
-      return fallbackPlayers;
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.error('❌ 출석자 조회 API 오류:', payload);
+      return [];
     }
+
+    const players: unknown[] = Array.isArray(payload?.players) ? payload.players : [];
+    return players
+      .filter((player: unknown): player is Record<string, unknown> => Boolean(player) && typeof player === 'object')
+      .map((player) => {
+        const id = typeof player.id === 'string' ? player.id : '';
+        const normalizedLevel = normalizeLevel(
+          '',
+          typeof player.skill_level === 'string' ? player.skill_level : 'E2'
+        );
+
+        return {
+          id,
+          name:
+            typeof player.name === 'string' && player.name.trim()
+              ? player.name
+              : `선수-${id.slice(0, 8)}`,
+          skill_level: normalizedLevel,
+          skill_label:
+            typeof player.skill_label === 'string' && player.skill_label.trim()
+              ? player.skill_label
+              : getAdminLevelDisplay(normalizedLevel),
+          score:
+            typeof player.score === 'number' && Number.isFinite(player.score)
+              ? player.score
+              : undefined,
+          gender: typeof player.gender === 'string' ? player.gender : '',
+          skill_code: normalizedLevel,
+          status: normalizeAttendanceStatus(
+            typeof player.status === 'string' ? player.status : undefined
+          ),
+          partner_user_id:
+            typeof player.partner_user_id === 'string' ? player.partner_user_id : null,
+        };
+      })
+      .filter((player) => Boolean(player.id));
   } catch (fetchError) {
     console.error('❌ 데이터 조회 중 오류:', fetchError);
     return [];

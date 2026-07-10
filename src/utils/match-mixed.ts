@@ -1,8 +1,9 @@
 import { Player, Match, Team } from '@/types';
 import { getTeamFairnessScore, getTeamMatchScore, getTeamScore, jitter, reorderMatchesToAvoidConsecutive, MAX_TEAM_SCORE_DIFF } from './match-helpers';
 
-const isMale = (p: Player) => (p.gender || '').toLowerCase() === 'm' || (p.gender || '').toLowerCase() === 'male' || (p.gender || '').toLowerCase() === 'man';
-const isFemale = (p: Player) => (p.gender || '').toLowerCase() === 'f' || (p.gender || '').toLowerCase() === 'female' || (p.gender || '').toLowerCase() === 'woman' || (p.gender || '').toLowerCase() === 'w';
+const normalizeGender = (gender?: string) => String(gender || '').trim().toLowerCase();
+const isMale = (p: Player) => ['m', 'male', 'man', '남', '남성'].includes(normalizeGender(p.gender));
+const isFemale = (p: Player) => ['f', 'female', 'woman', 'w', '여', '여성'].includes(normalizeGender(p.gender));
 
 export function createMixedAndSameSexDoublesMatches(playersInput: Player[], minGamesPerPlayer = 1): Match[] {
   if (!Array.isArray(playersInput) || playersInput.length < 4) return [];

@@ -30,12 +30,12 @@ import MatchSessionStatus from './components/MatchSessionStatus';
 import MatchGenerationControls from './components/MatchGenerationControls';
 import GeneratedMatchesList from './components/GeneratedMatchesList';
 import MatchAssignmentManager from './components/MatchAssignmentManager';
-import AddAttendeeModal from './components/AddAttendeeModal';
 
 function PlayersPage() {
   const [todayPlayers, setTodayPlayers] = useState<ExtendedPlayer[] | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [isManualMode, setIsManualMode] = useState(false);
   const [playerGameCounts, setPlayerGameCounts] = useState<Record<string, number>>({});
   const [perPlayerMinGames, setPerPlayerMinGames] = useState<number>(1);
   const [assignTarget, setAssignTarget] = useState<'attendees' | 'participants'>('attendees');
@@ -60,8 +60,6 @@ function PlayersPage() {
   const [selectedPlayerIdsForGen, setSelectedPlayerIdsForGen] = useState<Set<string>>(new Set());
   const [registeredPlayersForGen, setRegisteredPlayersForGen] = useState<ExtendedPlayer[] | null>(null);
 
-  // 출석 추가 모달 상태
-  const [isAddAttendeeModalOpen, setIsAddAttendeeModalOpen] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   useEffect(() => {
@@ -158,38 +156,6 @@ function PlayersPage() {
     }
   };
 
-  // 출석 수동 추가 함수
-  const handleAddAttendees = async (userIds: string[]) => {
-    if (!todayPlayers || isUpdatingStatus) return;
-    setIsUpdatingStatus(true);
-    
-    try {
-      const today = getKoreaDate();
-      
-      const response = await fetch('/api/admin/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds, attendedAt: today, status: 'present' }),
-      });
-
-      if (!response.ok) {
-        const result = await response.json().catch(() => null);
-        console.error('출석자 추가 오류:', result);
-        alert(result?.error || '출석자 추가 중 오류가 발생했습니다.');
-        return;
-      }
-      
-      // 출석자 목록 새로고침
-      const players = await fetchTodayPlayers();
-      setTodayPlayers(players);
-      
-    } catch (err) {
-      console.error('출석 추가 처리 중 오류:', err);
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
-
   // 선수의 출석 상태 업데이트 함수 (페이지/컴포넌트 리팩토링 후 누락된 기능 복원)
   const updatePlayerStatus = async (playerId: string, status: ExtendedPlayer['status']) => {
     if (!todayPlayers || isUpdatingStatus) return;
@@ -252,6 +218,7 @@ function PlayersPage() {
     if (!todayPlayers) return;
     
     setLoading(true);
+    setIsManualMode(false);
     try {
       const basePool = selectedGenDate && registeredPlayersForGen
         ? registeredPlayersForGen
@@ -294,6 +261,7 @@ function PlayersPage() {
     if (!todayPlayers) return;
 
     setLoading(true);
+    setIsManualMode(false);
     try {
       const basePool = selectedGenDate && registeredPlayersForGen
         ? registeredPlayersForGen
@@ -325,6 +293,7 @@ function PlayersPage() {
     if (!todayPlayers) return;
 
     setLoading(true);
+    setIsManualMode(false);
     try {
       const basePool = selectedGenDate && registeredPlayersForGen
         ? registeredPlayersForGen
@@ -363,6 +332,25 @@ function PlayersPage() {
     }
   };
 
+  const handleManualAssign = () => {
+    const presentPlayers = (todayPlayers || []).filter((player) => player.status === 'present');
+    if (presentPlayers.length < 4) {
+      alert('수동 배정을 하려면 출석 선수가 최소 4명 필요합니다.');
+      return;
+    }
+
+    const matchCount = Math.max(1, Math.ceil((presentPlayers.length * perPlayerMinGames) / 4));
+    const emptyMatches = Array.from({ length: matchCount }, (_, index) => ({
+      id: `manual-${Date.now()}-${index}`,
+      team1: { player1: null, player2: null },
+      team2: { player1: null, player2: null },
+    })) as unknown as Match[];
+
+    setMatches(emptyMatches);
+    setPlayerGameCounts({});
+    setIsManualMode(true);
+  };
+
   const handleDirectAssign = async () => {
     if (matches.length === 0) {
       alert('배정할 경기가 없습니다.');
@@ -371,63 +359,29 @@ function PlayersPage() {
 
     setLoading(true);
     try {
-      if (!selectedGenDate) {
-        alert('배정할 경기 일정을 선택해주세요.');
-        setLoading(false);
-        return;
-      }
-      // 세션명 자동 생성: YYYY-MM-DD_모드_일련번호
+      const assignmentDate = selectedGenDate || getKoreaDate();
       const mode = assignType === 'today' ? '오늘' : '예정';
-      const { count } = await supabase
-        .from('match_sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('session_date', selectedGenDate);
-      const n = (count ?? 0) + 1;
-      const sessionName = `${selectedGenDate}_${mode}_${n}`;
-      
-      const activeClubId = typeof document !== 'undefined'
-        ? document.cookie.match(/(?:^|;\s*)active_club_id=([^;]*)/)?.[1] || ''
-        : '';
+      const response = await fetch('/api/admin/match-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matches,
+          session_date: assignmentDate,
+          mode,
+        }),
+      });
+      const result = await response.json().catch(() => null);
 
-      // 경기 세션 생성
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('match_sessions')
-        .insert({
-          session_name: sessionName,
-          total_matches: matches.length,
-          assigned_matches: assignType === 'today' ? matches.length : 0,
-          session_date: selectedGenDate,
-          club_id: activeClubId
-        })
-        .select()
-        .single();
-
-      if (sessionError) throw sessionError;
-
-      // 개별 경기 데이터 생성 (배정 순서 유지)
-      const matchData = matches.map((match, index) => ({
-        session_id: sessionData.id,
-        match_number: index + 1, // 배정 순서 그대로 경기 번호 부여
-        team1_player1_id: match.team1.player1.id,
-        team1_player2_id: match.team1.player2.id,
-        team2_player1_id: match.team2.player1.id,
-        team2_player2_id: match.team2.player2.id,
-        status: 'scheduled', // 초기 상태는 예정
-        created_at: new Date().toISOString(),
-        club_id: activeClubId
-      }));
-
-      const { error: matchError } = await supabase
-        .from('generated_matches')
-        .insert(matchData as any);
-
-      if (matchError) throw matchError;
+      if (!response.ok) {
+        throw new Error(result?.error || '경기 세션 저장에 실패했습니다.');
+      }
 
       alert(`✅ ${matches.length}개 경기가 ${assignType === 'today' ? '오늘 바로' : '예정으로'} 배정되었습니다!`);
       
       // 상태 초기화 및 새로고침
   setMatches([]);
   setPlayerGameCounts({});
+  setIsManualMode(false);
   setSelectedPlayerIdsForGen(new Set());
       await fetchMatchSessions();
       
@@ -565,22 +519,7 @@ function PlayersPage() {
               todayPlayers={todayPlayers} 
               onStatusChange={updatePlayerStatus}
               onBulkStatusChange={bulkUpdatePlayerStatus}
-              headerActions={
-                <button
-                  type="button"
-                  onClick={() => setIsAddAttendeeModalOpen(true)}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 ml-2"
-                >
-                  ➕ 출석 추가
-                </button>
-              }
-            />
-            
-            <AddAttendeeModal 
-              isOpen={isAddAttendeeModalOpen}
-              onClose={() => setIsAddAttendeeModalOpen(false)}
-              onAdd={handleAddAttendees}
-              existingUserIds={new Set(todayPlayers?.map(p => p.id) || [])}
+              disabled={isUpdatingStatus}
             />
             
             <MatchSessionStatus 
@@ -588,75 +527,6 @@ function PlayersPage() {
               registeredSchedules={registeredSchedules}
             />
 
-            {/* 일정 선택 및 참가자 선택 섹션 */}
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded">
-              <h3 className="text-lg font-semibold mb-3 text-amber-800">📅 경기 일정 & 참가자 선택</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">배정할 경기 날짜</label>
-                  <select
-                    className="w-full border rounded px-3 py-2 text-sm"
-                    value={selectedGenDate}
-                    onChange={(e) => setSelectedGenDate(e.target.value)}
-                  >
-                    <option value="">날짜를 선택하세요</option>
-                    {availableDates.map(d => (
-                      <option key={d.date} value={d.date}>
-                        {new Date(d.date).toLocaleDateString('ko-KR')} — 여유 {d.availableSlots}명, 장소 {d.location}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">선택된 날짜로 세션이 생성됩니다.</p>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">참가 선수 선택(미선택 시 {selectedGenDate ? '해당 날짜 신청자' : '출석자'} 전체)</label>
-                  <div className="max-h-44 overflow-auto border rounded">
-                    <ul className="divide-y">
-                      {(
-                        selectedGenDate
-                          ? (registeredPlayersForGen || [])
-                          : (todayPlayers || []).filter(p => p.status === 'present')
-                        ).map(p => {
-                        const isChecked = selectedPlayerIdsForGen.has(p.id);
-                        return (
-                          <li key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                setSelectedPlayerIdsForGen(prev => {
-                                  const next = new Set(prev);
-                                  if (e.target.checked) next.add(p.id); else next.delete(p.id);
-                                  return next;
-                                });
-                              }}
-                            />
-                            <span className="flex-1 truncate">{p.name}</span>
-                            <span className="text-xs text-gray-500">{(p.skill_level || 'E2').toUpperCase()}</span>
-                            <span className="text-xs text-gray-500">{(p.gender || '').toString()}</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                  <div className="mt-2 flex gap-2 text-xs">
-                    <button
-                      className="px-2 py-1 border rounded hover:bg-gray-50"
-                      onClick={() => setSelectedPlayerIdsForGen(new Set((selectedGenDate ? (registeredPlayersForGen || []) : (todayPlayers || []).filter(p => p.status === 'present')).map(p => p.id)))}
-                    >
-                      모두 선택
-                    </button>
-                    <button
-                      className="px-2 py-1 border rounded hover:bg-gray-50"
-                      onClick={() => setSelectedPlayerIdsForGen(new Set())}
-                    >
-                      선택 해제
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
             <MatchGenerationControls
               todayPlayers={todayPlayers}
               perPlayerMinGames={perPlayerMinGames}
@@ -666,7 +536,7 @@ function PlayersPage() {
               onGenerateByLevel={handleAssignByLevel}
               onGenerateRandom={handleAssignRandom}
               onGenerateMixed={handleAssignMixed}
-              onManualAssign={() => {}} // 수동 배정은 별도 컴포넌트에서 처리
+              onManualAssign={handleManualAssign}
             />
             
             <GeneratedMatchesList
@@ -678,8 +548,26 @@ function PlayersPage() {
               onClearMatches={() => {
                 setMatches([]);
                 setPlayerGameCounts({});
+                setIsManualMode(false);
               }}
               onAssignMatches={handleDirectAssign}
+              isManualMode={isManualMode}
+              presentPlayers={(todayPlayers || []).filter((player) => player.status === 'present')}
+              onManualMatchChange={(updatedMatches) => {
+                setMatches(updatedMatches);
+                const counts: Record<string, number> = {};
+                updatedMatches.forEach((match) => {
+                  [
+                    match.team1?.player1,
+                    match.team1?.player2,
+                    match.team2?.player1,
+                    match.team2?.player2,
+                  ].forEach((player) => {
+                    if (player?.id) counts[player.id] = (counts[player.id] || 0) + 1;
+                  });
+                });
+                setPlayerGameCounts(counts);
+              }}
             />
             
             <MatchAssignmentManager

@@ -638,16 +638,32 @@ export async function DELETE(request: Request) {
     const body = await request.json().catch(() => null);
     const scheduleId = typeof body?.scheduleId === 'string' ? body.scheduleId : '';
     const targetUserId = typeof body?.targetUserId === 'string' ? body.targetUserId : user.id;
+    const targetUserIds = Array.isArray(body?.targetUserIds)
+      ? body.targetUserIds.filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
+      : [];
+    const resetAll = body?.resetAll === true;
 
-    if (!scheduleId || !targetUserId) {
+    if (!scheduleId) {
       return NextResponse.json({ error: 'Schedule id is required' }, { status: 400 });
     }
 
-    const { error } = await adminSupabase
+    let participantMutation = adminSupabase
       .from('match_participants')
       .update({ status: 'cancelled' })
       .eq('match_schedule_id', scheduleId)
-      .eq('user_id', targetUserId);
+      .in('status', ['registered', 'attended']);
+
+    if (resetAll) {
+      // no additional filter
+    } else if (targetUserIds.length > 0) {
+      participantMutation = participantMutation.in('user_id', targetUserIds);
+    } else if (targetUserId) {
+      participantMutation = participantMutation.eq('user_id', targetUserId);
+    } else {
+      return NextResponse.json({ error: 'Target user id is required' }, { status: 400 });
+    }
+
+    const { error } = await participantMutation;
 
     if (error) {
       console.error('Admin match participant cancel error:', error);

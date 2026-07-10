@@ -53,6 +53,7 @@ interface ScheduleWithParticipants extends MatchSchedule {
 interface ScheduleGroup {
   matchDate: string;
   schedules: ScheduleWithParticipants[];
+  participants: MatchParticipant[];
 }
 
 export default function MatchSchedulePage() {
@@ -156,6 +157,9 @@ export default function MatchSchedulePage() {
   // 일괄 추가 모달 상태
   const [participantModalTab, setParticipantModalTab] = useState<'manual' | 'bulk'>('manual');
   const [participantBulkInput, setParticipantBulkInput] = useState('');
+  const [attendanceModalDate, setAttendanceModalDate] = useState<string | null>(null);
+  const [selectedAttendanceUserIds, setSelectedAttendanceUserIds] = useState<string[]>([]);
+  const [attendanceSubmitting, setAttendanceSubmitting] = useState(false);
 
   // 새 경기 생성 폼 데이터
   const [newSchedule, setNewSchedule] = useState({
@@ -855,30 +859,27 @@ export default function MatchSchedulePage() {
 
     try {
       setParticipantActionLoading((prev) => ({ ...prev, [resetModalScheduleId]: true }));
-      
-      const { error: deleteErr } = await supabase
-        .from('match_participants')
-        .delete()
-        .eq('match_schedule_id', resetModalScheduleId)
-        .in('user_id', selectedResetUserIds);
 
-      if (deleteErr) {
-        console.error('선택 참가자 제거 오류:', deleteErr);
-        alert('참가자 제거 중 오류가 발생했습니다.');
+      const response = await fetch('/api/admin/match-schedules', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scheduleId: resetModalScheduleId,
+          targetUserIds: selectedResetUserIds,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        console.error('선택 참가자 제거 오류:', payload);
+        alert(payload?.error || '참가자 제거 중 오류가 발생했습니다.');
         return;
       }
 
-      const currentSchedule = schedules.find((s) => s.id === resetModalScheduleId);
-      const remainingCount = Math.max(0, (currentSchedule?.current_participants || 0) - selectedResetUserIds.length);
-
-      const { error: updateErr } = await supabase
-        .from('match_schedules')
-        .update({ current_participants: remainingCount })
-        .eq('id', resetModalScheduleId);
-
-      if (updateErr) {
-        console.error('스케줄 참가자 수 업데이트 오류:', updateErr);
-      }
+      const currentParticipants =
+        typeof payload?.currentParticipants === 'number' ? payload.currentParticipants : null;
 
       setSchedules((prev) =>
         prev.map((schedule) => {
@@ -889,7 +890,7 @@ export default function MatchSchedulePage() {
           return {
             ...schedule,
             participants: updatedParticipants,
-            current_participants: remainingCount,
+            current_participants: currentParticipants ?? updatedParticipants.length,
           };
         })
       );
@@ -914,26 +915,27 @@ export default function MatchSchedulePage() {
 
     try {
       setParticipantActionLoading((prev) => ({ ...prev, [scheduleId]: true }));
-      
-      const { error: deleteErr } = await supabase
-        .from('match_participants')
-        .delete()
-        .eq('match_schedule_id', scheduleId);
 
-      if (deleteErr) {
-        console.error('참가자 초기화 오류:', deleteErr);
-        alert('참가자 초기화 중 오류가 발생했습니다.');
+      const response = await fetch('/api/admin/match-schedules', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scheduleId,
+          resetAll: true,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        console.error('참가자 초기화 오류:', payload);
+        alert(payload?.error || '참가자 초기화 중 오류가 발생했습니다.');
         return;
       }
 
-      const { error: updateErr } = await supabase
-        .from('match_schedules')
-        .update({ current_participants: 0 })
-        .eq('id', scheduleId);
-
-      if (updateErr) {
-        console.error('스케줄 참가자 수 업데이트 오류:', updateErr);
-      }
+      const currentParticipants =
+        typeof payload?.currentParticipants === 'number' ? payload.currentParticipants : 0;
 
       setSchedules((prev) =>
         prev.map((schedule) => {
@@ -941,7 +943,7 @@ export default function MatchSchedulePage() {
           return {
             ...schedule,
             participants: [],
-            current_participants: 0,
+            current_participants: currentParticipants,
           };
         })
       );
@@ -1268,6 +1270,86 @@ export default function MatchSchedulePage() {
     }
   };
 
+  const openDateAttendanceModal = (group: ScheduleGroup) => {
+    setAttendanceModalDate(group.matchDate);
+    setSelectedAttendanceUserIds(
+      group.participants
+        .filter((participant) => participant.status !== 'attended')
+        .map((participant) => participant.user_id)
+    );
+  };
+
+  const closeDateAttendanceModal = () => {
+    if (attendanceSubmitting) return;
+    setAttendanceModalDate(null);
+    setSelectedAttendanceUserIds([]);
+  };
+
+  const toggleAttendanceParticipant = (userId: string) => {
+    setSelectedAttendanceUserIds((current) =>
+      current.includes(userId)
+        ? current.filter((id) => id !== userId)
+        : [...current, userId]
+    );
+  };
+
+  const convertDateParticipantsToAttendance = async () => {
+    if (!attendanceModalDate || selectedAttendanceUserIds.length === 0 || attendanceSubmitting) return;
+
+    const group = groupedSchedules.find((item) => item.matchDate === attendanceModalDate);
+    if (!group) {
+      alert('선택한 날짜의 경기 일정을 찾을 수 없습니다.');
+      return;
+    }
+
+    setAttendanceSubmitting(true);
+
+    try {
+      const response = await fetch('/api/admin/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userIds: selectedAttendanceUserIds,
+          scheduleIds: group.schedules.map((schedule) => schedule.id),
+          attendedAt: attendanceModalDate,
+          status: 'present',
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        console.error('일자별 참가자 출석 전환 오류:', payload);
+        alert(payload?.error || '참가자를 출석으로 변경하지 못했습니다.');
+        return;
+      }
+
+      const convertedUserIds = new Set(selectedAttendanceUserIds);
+      setSchedules((current) =>
+        current.map((schedule) => {
+          if (schedule.match_date !== attendanceModalDate) return schedule;
+          return {
+            ...schedule,
+            participants: schedule.participants.map((participant) =>
+              convertedUserIds.has(participant.user_id)
+                ? { ...participant, status: 'attended' as const }
+                : participant
+            ),
+          };
+        })
+      );
+
+      alert(`${selectedAttendanceUserIds.length}명의 참가자를 ${attendanceModalDate} 출석으로 변경했습니다.`);
+      setAttendanceModalDate(null);
+      setSelectedAttendanceUserIds([]);
+      void fetchSchedules();
+    } catch (error) {
+      console.error('일자별 참가자 출석 전환 처리 오류:', error);
+      alert('참가자를 출석으로 변경하는 중 오류가 발생했습니다.');
+    } finally {
+      setAttendanceSubmitting(false);
+    }
+  };
+
   const groupedSchedules = useMemo<ScheduleGroup[]>(() => {
     const groupMap = schedules.reduce<Record<string, ScheduleWithParticipants[]>>((acc, schedule) => {
       const dateKey = schedule.match_date;
@@ -1282,14 +1364,35 @@ export default function MatchSchedulePage() {
 
     return Object.entries(groupMap)
       .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
-      .map(([matchDate, dateSchedules]) => ({
-        matchDate,
-        schedules: [...dateSchedules].sort((left, right) => {
+      .map(([matchDate, dateSchedules]) => {
+        const sortedSchedules = [...dateSchedules].sort((left, right) => {
           const leftTime = `${left.start_time || ''}-${left.end_time || ''}`;
           const rightTime = `${right.start_time || ''}-${right.end_time || ''}`;
           return leftTime.localeCompare(rightTime);
-        }),
-      }));
+        });
+        const participantsByUserId = new Map<string, MatchParticipant>();
+
+        sortedSchedules.forEach((schedule) => {
+          schedule.participants
+            .filter((participant) => participant.status === 'registered' || participant.status === 'attended')
+            .forEach((participant) => {
+              const existing = participantsByUserId.get(participant.user_id);
+              if (!existing || participant.status === 'attended') {
+                participantsByUserId.set(participant.user_id, participant);
+              }
+            });
+        });
+
+        return {
+          matchDate,
+          schedules: sortedSchedules,
+          participants: Array.from(participantsByUserId.values()).sort((left, right) => {
+            const leftName = left.profiles?.full_name || left.profiles?.username || '';
+            const rightName = right.profiles?.full_name || right.profiles?.username || '';
+            return leftName.localeCompare(rightName, 'ko');
+          }),
+        };
+      });
   }, [schedules]);
 
   return (
@@ -1497,16 +1600,35 @@ export default function MatchSchedulePage() {
                 <div className="grid grid-cols-1 gap-4 sm:gap-6">
                   {groupedSchedules.map((group) => (
                     <section key={group.matchDate} className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 sm:p-4 md:p-6">
-                      <div className="mb-3 sm:mb-4">
-                        <h3 className="text-base font-bold text-gray-900 sm:text-lg">
-                          {new Date(group.matchDate).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            weekday: 'long',
-                          })}
-                        </h3>
-                        <p className="text-sm text-gray-600 mt-1">총 {group.schedules.length}경기</p>
+                      <div className="mb-3 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h3 className="text-base font-bold text-gray-900 sm:text-lg">
+                            {new Date(group.matchDate).toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              weekday: 'long',
+                            })}
+                          </h3>
+                          <p className="mt-1 text-sm text-gray-600">
+                            총 {group.schedules.length}경기 · 참가자 {group.participants.length}명 · 출석 처리{' '}
+                            {group.participants.filter((participant) => participant.status === 'attended').length}명
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openDateAttendanceModal(group)}
+                          disabled={
+                            attendanceSubmitting ||
+                            group.participants.length === 0 ||
+                            group.participants.every((participant) => participant.status === 'attended')
+                          }
+                          className="self-start rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-green-300 sm:self-auto"
+                        >
+                          {group.participants.length > 0 && group.participants.every((participant) => participant.status === 'attended')
+                            ? '전체 출석 처리 완료'
+                            : `참가자를 출석으로 변경 (${group.participants.filter((participant) => participant.status !== 'attended').length}명)`}
+                        </button>
                       </div>
 
                       <div className="space-y-3 sm:space-y-4">
@@ -1960,6 +2082,121 @@ export default function MatchSchedulePage() {
           </div>
         </div>
       )}
+
+      {/* 일자별 참가자 출석 전환 모달 */}
+      {attendanceModalDate && (() => {
+        const attendanceGroup = groupedSchedules.find((group) => group.matchDate === attendanceModalDate);
+        if (!attendanceGroup) return null;
+
+        const pendingParticipants = attendanceGroup.participants.filter(
+          (participant) => participant.status !== 'attended'
+        );
+        const allPendingSelected = pendingParticipants.length > 0 && pendingParticipants.every(
+          (participant) => selectedAttendanceUserIds.includes(participant.user_id)
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+              <div className="flex items-start justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">일자별 참가자 출석 처리</h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {new Date(attendanceModalDate).toLocaleDateString('ko-KR')} 참가자를 해당 날짜의 출석으로 변경합니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDateAttendanceModal}
+                  disabled={attendanceSubmitting}
+                  className="rounded-md px-3 py-1 text-sm text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  닫기
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-2 text-sm sm:px-6 sm:py-3">
+                <span className="text-gray-600">
+                  전체 {attendanceGroup.participants.length}명 · 선택 {selectedAttendanceUserIds.length}명
+                </span>
+                {pendingParticipants.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAttendanceUserIds(
+                      allPendingSelected ? [] : pendingParticipants.map((participant) => participant.user_id)
+                    )}
+                    disabled={attendanceSubmitting}
+                    className="rounded-md border border-green-300 bg-white px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+                  >
+                    {allPendingSelected ? '전체 선택 해제' : '미출석 전체 선택'}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 sm:gap-3">
+                  {attendanceGroup.participants.map((participant) => {
+                    const isAttended = participant.status === 'attended';
+                    const checked = selectedAttendanceUserIds.includes(participant.user_id);
+                    const displayName =
+                      participant.profiles?.full_name ||
+                      participant.profiles?.username ||
+                      `회원-${participant.user_id.slice(0, 8)}`;
+
+                    return (
+                      <label
+                        key={participant.user_id}
+                        className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
+                          isAttended
+                            ? 'cursor-default border-green-200 bg-green-50'
+                            : checked
+                              ? 'cursor-pointer border-green-500 bg-green-50 ring-1 ring-green-200'
+                              : 'cursor-pointer border-gray-200 bg-white hover:border-green-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isAttended || checked}
+                          disabled={isAttended || attendanceSubmitting}
+                          onChange={() => toggleAttendanceParticipant(participant.user_id)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-60"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-gray-900">{displayName}</div>
+                          <div className={`mt-0.5 text-xs font-medium ${isAttended ? 'text-green-700' : 'text-gray-500'}`}>
+                            {isAttended ? '출석 처리 완료' : '참가 신청'}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t px-4 py-3 sm:px-6 sm:py-4">
+                <button
+                  type="button"
+                  onClick={closeDateAttendanceModal}
+                  disabled={attendanceSubmitting}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={convertDateParticipantsToAttendance}
+                  disabled={attendanceSubmitting || selectedAttendanceUserIds.length === 0}
+                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-green-300"
+                >
+                  {attendanceSubmitting
+                    ? '출석 변경 중...'
+                    : `선택 참가자 출석 처리 (${selectedAttendanceUserIds.length}명)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 참가자 초기화 및 선택 삭제 모달 */}
       {showResetModal && resetModalScheduleId && (

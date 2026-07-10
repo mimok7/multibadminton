@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { User } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/lib/supabase';
 import { type AppProfile, getRoleFromUser, getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
 
@@ -12,8 +12,9 @@ let cachedProfile: Profile | null = null;
 let cachedUserId: string | null = null;
 let cachedUser: User | null = null;
 let hasResolvedAuth = false;
+let pendingProfileRequest: { userId: string; promise: Promise<Profile | null> } | null = null;
 
-const AUTH_TIMEOUT_MS = 5000;
+const AUTH_TIMEOUT_MS = 10000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -46,8 +47,21 @@ export function useUser() {
       return cachedProfile;
     }
 
+    const profilePromise = pendingProfileRequest?.userId === userId
+      ? pendingProfileRequest.promise
+      : getProfileByUserId(supabase, userId);
+
+    if (!pendingProfileRequest || pendingProfileRequest.userId !== userId) {
+      pendingProfileRequest = { userId, promise: profilePromise };
+    }
+
     try {
-      const profile = await getProfileByUserId(supabase, userId);
+      const profile = await profilePromise;
+
+      // 로그아웃 또는 사용자 전환 중 완료된 이전 요청은 캐시에 반영하지 않습니다.
+      if (cachedUser?.id !== userId) {
+        return null;
+      }
       
       if (profile) {
         cachedProfile = profile;
@@ -60,6 +74,10 @@ export function useUser() {
     } catch (error) {
       console.error('Profile fetch error:', error);
       setProfile(null);
+    } finally {
+      if (pendingProfileRequest?.promise === profilePromise) {
+        pendingProfileRequest = null;
+      }
     }
     
     return null;
@@ -67,6 +85,31 @@ export function useUser() {
 
   useEffect(() => {
     let isMounted = true;
+    const deferredAuthUpdates = new Set<number>();
+
+    const applySession = async (session: Session | null, errorLabel: string) => {
+      if (!isMounted) return;
+
+      const sessionUser = session?.user ?? null;
+      cachedUser = sessionUser;
+      hasResolvedAuth = true;
+      setUser(sessionUser);
+
+      if (sessionUser) {
+        try {
+          await withTimeout(fetchProfile(sessionUser.id));
+        } catch (error) {
+          console.error(errorLabel, error);
+        }
+      } else {
+        setProfile(null);
+        cachedProfile = null;
+        cachedUserId = null;
+        pendingProfileRequest = null;
+      }
+
+      if (isMounted) setLoading(false);
+    };
 
     const getUser = async () => {
       try {
@@ -81,18 +124,7 @@ export function useUser() {
           console.error('Session fetch error:', sessionError);
         }
 
-        const sessionUser = session?.user ?? null;
-        cachedUser = sessionUser;
-        hasResolvedAuth = true;
-        setUser(sessionUser);
-
-        if (sessionUser) {
-          await withTimeout(fetchProfile(sessionUser.id));
-        } else {
-          setProfile(null);
-          cachedProfile = null;
-          cachedUserId = null;
-        }
+        await applySession(session, 'Initial profile fetch error:');
       } catch (error) {
         console.error('User fetch error:', error);
         cachedUser = null;
@@ -107,32 +139,20 @@ export function useUser() {
     getUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!isMounted) return;
-        
-        const sessionUser = session?.user ?? null;
-        cachedUser = sessionUser;
-        hasResolvedAuth = true;
-        setUser(sessionUser);
-        
-        if (sessionUser) {
-          try {
-            await withTimeout(fetchProfile(sessionUser.id));
-          } catch (error) {
-            console.error('Auth state profile fetch error:', error);
-          }
-        } else {
-          setProfile(null);
-          cachedProfile = null;
-          cachedUserId = null;
-        }
-        
-        setLoading(false);
+      (_event, session) => {
+        // Supabase Auth 내부 잠금이 해제된 뒤 프로필 쿼리를 실행해야 교착 상태가 발생하지 않습니다.
+        const timeoutId = window.setTimeout(() => {
+          deferredAuthUpdates.delete(timeoutId);
+          void applySession(session, 'Auth state profile fetch error:');
+        }, 0);
+        deferredAuthUpdates.add(timeoutId);
       }
     );
 
     return () => {
       isMounted = false;
+      deferredAuthUpdates.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      deferredAuthUpdates.clear();
       subscription.unsubscribe();
     };
   }, [supabase, fetchProfile]);

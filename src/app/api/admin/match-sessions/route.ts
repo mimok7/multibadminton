@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole } from '@/lib/auth';
+import { getUserRole, isAdminRole } from '@/lib/auth';
+import { getClubRole } from '@/lib/club-auth';
+import { getActiveClubId } from '@/lib/club';
 import { getKoreaDate } from '@/lib/date';
 import { decorateDescriptionForScheduleSource } from '@/lib/match-schedule-source';
 
@@ -46,6 +48,11 @@ function buildGeneratedMatchLabel(sessionDate: string, batchNumber: number, matc
 }
 
 async function requireAdmin() {
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return { error: NextResponse.json({ error: 'Club not selected' }, { status: 400 }) };
+  }
+
   const supabase = await getSupabaseServerClient();
   const adminSupabase = await getFilteredAdminClient();
 
@@ -58,12 +65,17 @@ async function requireAdmin() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const userRole = await getUserRole(supabase, user);
-  if (!userRole || !['admin', 'manager'].includes(userRole)) {
+  const [userRole, clubRole] = await Promise.all([
+    getUserRole(supabase, user),
+    getClubRole(adminSupabase, user.id, clubId),
+  ]);
+  const canManageClub = isAdminRole(userRole) || ['owner', 'admin', 'manager'].includes(clubRole || '');
+
+  if (!canManageClub) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return { adminSupabase };
+  return { adminSupabase, clubId };
 }
 
 export async function GET(request: Request) {
@@ -174,6 +186,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Matches are required' }, { status: 400 });
     }
 
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+      return NextResponse.json({ error: 'Invalid session date' }, { status: 400 });
+    }
+
+    const matchPlayerIds: unknown[][] = matches.map((match: any) => [
+      match?.team1?.player1?.id,
+      match?.team1?.player2?.id,
+      match?.team2?.player1?.id,
+      match?.team2?.player2?.id,
+    ]);
+    const hasInvalidMatch = matchPlayerIds.some((ids: unknown[]) =>
+      ids.some((id: unknown) => typeof id !== 'string' || !id) || new Set(ids).size !== 4
+    );
+
+    if (hasInvalidMatch) {
+      return NextResponse.json(
+        { error: 'Each match must contain four different players' },
+        { status: 400 }
+      );
+    }
+
+    const uniquePlayerIds = Array.from(new Set(matchPlayerIds.flat())) as string[];
+    const { data: activeMembers, error: membersError } = await adminContext.adminSupabase
+      .from('club_members')
+      .select('user_id')
+      .eq('status', 'active')
+      .in('user_id', uniquePlayerIds);
+
+    if (membersError) {
+      console.error('Admin match session member validation error:', membersError);
+      return NextResponse.json({ error: 'Failed to validate match players' }, { status: 500 });
+    }
+
+    const activeMemberIds = new Set((activeMembers || []).map((member) => member.user_id));
+    if (uniquePlayerIds.some((playerId) => !activeMemberIds.has(playerId))) {
+      return NextResponse.json(
+        { error: 'One or more players are not active members of this club' },
+        { status: 400 }
+      );
+    }
+
     const { count, error: countError } = await adminContext.adminSupabase
       .from('match_sessions')
       .select('*', { count: 'exact', head: true })
@@ -213,20 +266,6 @@ export async function POST(request: Request) {
       status: 'scheduled',
       created_at: new Date().toISOString(),
     }));
-
-    const hasInvalidMatch = generatedMatchesPayload.some((match: {
-      team1_player1_id: string | undefined;
-      team1_player2_id: string | undefined;
-      team2_player1_id: string | undefined;
-      team2_player2_id: string | undefined;
-    }) =>
-      !match.team1_player1_id || !match.team1_player2_id || !match.team2_player1_id || !match.team2_player2_id
-    );
-
-    if (hasInvalidMatch) {
-      await adminContext.adminSupabase.from('match_sessions').delete().eq('id', sessionData.id);
-      return NextResponse.json({ error: 'One or more matches are incomplete' }, { status: 400 });
-    }
 
     const { error: generatedMatchesError } = await adminContext.adminSupabase
       .from('generated_matches')
