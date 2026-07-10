@@ -1,0 +1,8 @@
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (108kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+Admin attendance save error: {
+  code: '42P10',
+  details: null,
+  hint: null,
+  message: 'there is no unique or exclusion constraint matching the ON CONFLICT specification'
+}
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: EPERM: operation not permitted, rename 'C:\SHT-DATA\multibadminton\.next\cache\webpack\server-development\2.pack.gz_' -> 'C:\SHT-DATA\multibadminton\.next\cache\webpack\server-development\2.pack.gz'

@@ -66,10 +66,16 @@ export default function AddAttendeeModal({
 
   if (!isOpen) return null;
 
+  const getProfileKey = (profile: any) => profile?.id || profile?.user_id || '';
+
   const filteredProfiles = profiles
-    .filter(p => !existingUserIds.has(p.user_id))
     .filter(p => {
-      if (showOnlyRegistered && !registeredIds.has(p.user_id)) return false;
+      const profileKey = getProfileKey(p);
+      return profileKey ? !existingUserIds.has(profileKey) : false;
+    })
+    .filter(p => {
+      const profileKey = getProfileKey(p);
+      if (showOnlyRegistered && !registeredIds.has(profileKey)) return false;
       
       const q = searchQuery.trim().toLowerCase();
       if (!q) return true;
@@ -78,8 +84,8 @@ export default function AddAttendeeModal({
 
   // Sort: Registered first, then alphabetically
   const sortedProfiles = [...filteredProfiles].sort((a, b) => {
-    const aReg = registeredIds.has(a.user_id) ? -1 : 1;
-    const bReg = registeredIds.has(b.user_id) ? -1 : 1;
+    const aReg = registeredIds.has(getProfileKey(a)) ? -1 : 1;
+    const bReg = registeredIds.has(getProfileKey(b)) ? -1 : 1;
     if (aReg !== bReg) return aReg - bReg;
     
     const aName = a.full_name || a.username || '';
@@ -97,7 +103,7 @@ export default function AddAttendeeModal({
   };
   
   const handleSelectAll = () => {
-    const allFilteredIds = sortedProfiles.map(p => p.user_id);
+    const allFilteredIds = sortedProfiles.map((p) => getProfileKey(p)).filter(Boolean);
     // If all are currently selected, deselect all. Otherwise, select all.
     const allSelected = allFilteredIds.every(id => selectedIds.has(id));
     
@@ -130,7 +136,10 @@ export default function AddAttendeeModal({
                 showOnlyRegistered ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               } border`}
             >
-              오늘 참가신청 회원 ({profiles.filter(p => registeredIds.has(p.user_id) && !existingUserIds.has(p.user_id)).length})
+              오늘 참가신청 회원 ({profiles.filter(p => {
+                const profileKey = getProfileKey(p);
+                return profileKey && registeredIds.has(profileKey) && !existingUserIds.has(profileKey);
+              }).length})
             </button>
             <button
               onClick={() => setShowOnlyRegistered(false)}
@@ -174,13 +183,14 @@ export default function AddAttendeeModal({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {sortedProfiles.map(p => {
-                const isSelected = selectedIds.has(p.user_id);
-                const isReg = registeredIds.has(p.user_id);
+                const profileKey = getProfileKey(p);
+                const isSelected = selectedIds.has(profileKey);
+                const isReg = registeredIds.has(profileKey);
                 
                 return (
                   <div
-                    key={p.user_id}
-                    onClick={() => toggleSelect(p.user_id)}
+                    key={profileKey}
+                    onClick={() => toggleSelect(profileKey)}
                     className={`flex flex-col cursor-pointer justify-center gap-1 rounded-lg border p-3 transition-colors ${
                       isSelected 
                         ? 'border-blue-500 bg-blue-50' 

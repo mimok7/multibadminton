@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
+import { getProfileByUserId } from '@/lib/auth';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Search, Camera, User, X, ArrowLeft } from 'lucide-react';
@@ -175,11 +176,7 @@ export default function ProfilePage() {
     let resolvedMembers: any[] = [];
     
     try {
-      const { data: myProf } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUserId)
-        .single();
+      const myProf = await getProfileByUserId(supabase, currentUserId);
       if (myProf) {
         setMyLatestProfile(myProf);
       }
@@ -510,7 +507,8 @@ export default function ProfilePage() {
 
     setIsSubmitting(true);
 
-    const { error } = await supabase.from('profiles').update(values).eq('user_id', user.id);
+    const targetProfileId = profile?.id || myLatestProfile?.id || user.id;
+    const { error } = await supabase.from('profiles').update(values).eq('id', targetProfileId);
 
     setIsSubmitting(false);
     if (error) {

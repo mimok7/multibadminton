@@ -96,3 +96,33 @@ WHERE p.prosecdef
   AND acl.privilege_type = 'EXECUTE'
   AND (acl.grantee = 0 OR r.rolname = 'anon')
 ORDER BY 1, 2, 3, 4;
+
+-- 7. club_members.user_id가 profiles.id 기준으로 연결되지 않는 레거시 데이터 확인
+-- invalid_profile_fk 가 0이 아니면 프로필 ID 체계가 섞여 있을 가능성이 큽니다.
+-- matches_auth_user_id 는 profiles.user_id 와만 맞는 행 수입니다. 이 값이 크면 과거 auth.users.id 저장 흔적입니다.
+SELECT
+  COUNT(*) FILTER (WHERE p_by_id.id IS NULL) AS invalid_profile_fk,
+  COUNT(*) FILTER (WHERE p_by_id.id IS NULL AND p_by_auth.id IS NOT NULL) AS matches_auth_user_id
+FROM public.club_members cm
+LEFT JOIN public.profiles p_by_id ON p_by_id.id = cm.user_id
+LEFT JOIN public.profiles p_by_auth ON p_by_auth.user_id = cm.user_id;
+
+-- 8. attendances.user_id가 profiles.id 기준으로 연결되지 않는 레거시 데이터 확인
+SELECT
+  COUNT(*) FILTER (WHERE p_by_id.id IS NULL) AS invalid_profile_fk,
+  COUNT(*) FILTER (WHERE p_by_id.id IS NULL AND p_by_auth.id IS NOT NULL) AS matches_auth_user_id
+FROM public.attendances a
+LEFT JOIN public.profiles p_by_id ON p_by_id.id = a.user_id
+LEFT JOIN public.profiles p_by_auth ON p_by_auth.user_id = a.user_id;
+
+-- 9. 출석 중복 키가 클럽 단위인지 확인
+-- has_club_unique_index=true, has_legacy_global_unique=false가 정상입니다.
+SELECT
+  to_regclass('public.uq_attendances_club_user_date') IS NOT NULL AS has_club_unique_index,
+  EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    WHERE c.conrelid = 'public.attendances'::regclass
+      AND c.contype = 'u'
+      AND pg_get_constraintdef(c.oid) = 'UNIQUE (user_id, attended_at)'
+  ) AS has_legacy_global_unique;

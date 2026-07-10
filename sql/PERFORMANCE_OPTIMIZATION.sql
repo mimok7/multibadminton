@@ -44,6 +44,12 @@ WHERE type = 'match_preparation';
 CREATE INDEX IF NOT EXISTS idx_attendances_club_attended_user
 ON public.attendances (club_id, attended_at DESC, user_id);
 
+ALTER TABLE public.attendances
+DROP CONSTRAINT IF EXISTS attendances_user_id_attended_at_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_attendances_club_user_date
+ON public.attendances (club_id, user_id, attended_at);
+
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_club_tournament_status
 ON public.tournament_matches (club_id, tournament_id, status);
 

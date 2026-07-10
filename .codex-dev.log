@@ -10,10 +10,24 @@
      · optimizePackageImports
 
  ✓ Starting...
- ✓ Ready in 4.7s
- ○ Compiling /api/auth/profile-email ...
- ✓ Compiled /api/auth/profile-email in 2s (389 modules)
- POST /api/auth/profile-email 401 in 3381ms
- ○ Compiling /api/setup-storage ...
- ✓ Compiled /api/setup-storage in 1104ms (392 modules)
- GET /api/setup-storage 403 in 1303ms
+ ✓ Ready in 3s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 2.3s (187 modules)
+ ○ Compiling /login ...
+ ✓ Compiled /login in 9.6s (1013 modules)
+ GET /login?redirectTo=%2Fplayers 200 in 11240ms
+ ○ Compiling /players ...
+ ✓ Compiled /players in 2.5s (1062 modules)
+ GET /players 200 in 3324ms
+ ○ Compiling /api/user/active-club ...
+ ✓ Compiled /api/user/active-club in 2.6s (1151 modules)
+ GET /api/user/active-club 200 in 3347ms
+ ○ Compiling /api/admin/match-schedules ...
+ ✓ Compiled /api/admin/match-schedules in 771ms (1156 modules)
+ GET /api/admin/match-schedules?profiles_all=1&profiles_query= 200 in 1264ms
+ GET /api/admin/match-schedules?date=2026-07-10 200 in 312ms
+ ✓ Compiled /api/admin/attendance in 427ms (1162 modules)
+ POST /api/admin/attendance 500 in 924ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 913ms (887 modules)
+ GET /players 404 in 1662ms

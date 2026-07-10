@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole } from '@/lib/auth';
+import { getUserRole, isAdminRole } from '@/lib/auth';
+import { getClubRole } from '@/lib/club-auth';
+import { getActiveClubId } from '@/lib/club';
 import { readCoinSettings } from '@/lib/coin-settings';
 
 type AttendanceStatus = 'present' | 'lesson' | 'absent';
@@ -19,6 +21,11 @@ function getTodayLocal() {
 }
 
 async function requireAdmin() {
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return { error: NextResponse.json({ error: 'Club not selected' }, { status: 400 }) };
+  }
+
   const supabase = await getSupabaseServerClient();
   const adminSupabase = await getFilteredAdminClient();
 
@@ -31,12 +38,17 @@ async function requireAdmin() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const userRole = await getUserRole(supabase, user);
-  if (!userRole || !['admin', 'manager'].includes(userRole)) {
+  const [userRole, clubRole] = await Promise.all([
+    getUserRole(supabase, user),
+    getClubRole(adminSupabase, user.id, clubId),
+  ]);
+  const canManageClub = isAdminRole(userRole) || ['owner', 'admin', 'manager'].includes(clubRole || '');
+
+  if (!canManageClub) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return { adminSupabase };
+  return { adminSupabase, clubId };
 }
 
 async function syncAutoLinkedScheduleParticipants(params: {
@@ -176,11 +188,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User ids are required' }, { status: 400 });
     }
 
+    const uniqueUserIds = Array.from(new Set(userIds));
+    const { data: activeMembers, error: membersError } = await adminContext.adminSupabase
+      .from('club_members')
+      .select('user_id')
+      .eq('status', 'active')
+      .in('user_id', uniqueUserIds);
+
+    if (membersError) {
+      console.error('Admin attendance membership validation error:', membersError);
+      return NextResponse.json({ error: 'Failed to validate club members' }, { status: 500 });
+    }
+
+    const activeMemberIds = new Set((activeMembers || []).map((member) => member.user_id));
+    const invalidUserIds = uniqueUserIds.filter((userId) => !activeMemberIds.has(userId));
+    if (invalidUserIds.length > 0) {
+      return NextResponse.json(
+        { error: 'Selected user is not an active member of this club' },
+        { status: 403 }
+      );
+    }
+
     // 1. 기존 출석 상태 목록 조회
     const { data: prevAttendances, error: lookupError } = await adminContext.adminSupabase
       .from('attendances')
       .select('user_id, status')
-      .in('user_id', userIds)
+      .in('user_id', uniqueUserIds)
       .eq('attended_at', attendedAt);
 
     if (lookupError) {
@@ -195,20 +228,21 @@ export async function POST(request: Request) {
     const { autoLinkedScheduleId } = await syncAutoLinkedScheduleParticipants({
       adminSupabase: adminContext.adminSupabase,
       attendedAt,
-      userIds,
+      userIds: uniqueUserIds,
       status,
     });
 
-    const rows = userIds.map((userId: string) => ({
+    const rows = uniqueUserIds.map((userId: string) => ({
       user_id: userId,
       attended_at: attendedAt,
       status,
       match_schedule_id: status === 'present' || status === 'lesson' ? autoLinkedScheduleId : null,
+      club_id: adminContext.clubId,
     }));
 
     const { error } = await adminContext.adminSupabase
       .from('attendances')
-      .upsert(rows, { onConflict: 'user_id,attended_at' });
+      .upsert(rows, { onConflict: 'club_id,user_id,attended_at' });
 
     if (error) {
       console.error('Admin attendance save error:', error);
@@ -219,12 +253,12 @@ export async function POST(request: Request) {
     const coinSettings = await readCoinSettings();
     const reward = coinSettings.attendanceReward ?? 10;
 
-    if (reward > 0) {
+    if (coinSettings.isCoinEnabled && reward > 0) {
       const isNowPresent = status === 'present' || status === 'lesson';
       const rewardUserIds: string[] = [];
       const penaltyUserIds: string[] = [];
 
-      userIds.forEach((userId) => {
+      uniqueUserIds.forEach((userId) => {
         const prevStatus = prevStatusMap.get(userId) || null;
         const wasPresent = prevStatus === 'present' || prevStatus === 'lesson';
 
@@ -236,48 +270,60 @@ export async function POST(request: Request) {
       });
 
       if (rewardUserIds.length > 0) {
-        const { data: rewardProfiles } = await adminContext.adminSupabase
-          .from('profiles')
-          .select('id, coin_balance, is_guest')
-          .in('id', rewardUserIds);
+        const [{ data: rewardProfiles }, { data: rewardMembers }] = await Promise.all([
+          adminContext.adminSupabase
+            .from('profiles')
+            .select('id, is_guest')
+            .in('id', rewardUserIds),
+          adminContext.adminSupabase
+            .from('club_members')
+            .select('user_id, coin_balance')
+            .in('user_id', rewardUserIds),
+        ]);
 
         if (rewardProfiles) {
+          const balanceByUserId = new Map((rewardMembers || []).map((member) => [member.user_id, member.coin_balance]));
           await Promise.all(
             rewardProfiles.map((profile) => {
               const profileReward = profile.is_guest 
                 ? (coinSettings.guestAttendanceReward ?? 5) 
                 : reward;
               return adminContext.adminSupabase
-                .from('profiles')
+                .from('club_members')
                 .update({
-                  coin_balance: (profile.coin_balance ?? 0) + profileReward,
-                  coin_updated_at: new Date().toISOString(),
+                  coin_balance: (balanceByUserId.get(profile.id) ?? 0) + profileReward,
                 })
-                .eq('id', profile.id);
+                .eq('user_id', profile.id);
             })
           );
         }
       }
 
       if (penaltyUserIds.length > 0) {
-        const { data: penaltyProfiles } = await adminContext.adminSupabase
-          .from('profiles')
-          .select('id, coin_balance, is_guest')
-          .in('id', penaltyUserIds);
+        const [{ data: penaltyProfiles }, { data: penaltyMembers }] = await Promise.all([
+          adminContext.adminSupabase
+            .from('profiles')
+            .select('id, is_guest')
+            .in('id', penaltyUserIds),
+          adminContext.adminSupabase
+            .from('club_members')
+            .select('user_id, coin_balance')
+            .in('user_id', penaltyUserIds),
+        ]);
 
         if (penaltyProfiles) {
+          const balanceByUserId = new Map((penaltyMembers || []).map((member) => [member.user_id, member.coin_balance]));
           await Promise.all(
             penaltyProfiles.map((profile) => {
               const profilePenalty = profile.is_guest 
                 ? (coinSettings.guestAttendanceReward ?? 5) 
                 : reward;
               return adminContext.adminSupabase
-                .from('profiles')
+                .from('club_members')
                 .update({
-                  coin_balance: Math.max(0, (profile.coin_balance ?? 0) - profilePenalty),
-                  coin_updated_at: new Date().toISOString(),
+                  coin_balance: Math.max(0, (balanceByUserId.get(profile.id) ?? 0) - profilePenalty),
                 })
-                .eq('id', profile.id);
+                .eq('user_id', profile.id);
             })
           );
         }

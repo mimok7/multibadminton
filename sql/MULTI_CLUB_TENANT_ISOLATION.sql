@@ -136,6 +136,13 @@ WITH CHECK (false);
 CREATE INDEX IF NOT EXISTS idx_club_members_user_club_status
 ON public.club_members (user_id, club_id, status);
 
+-- 출석 중복 기준도 클럽을 포함해야 같은 사용자가 같은 날 여러 클럽에서 출석할 수 있습니다.
+ALTER TABLE public.attendances
+DROP CONSTRAINT IF EXISTS attendances_user_id_attended_at_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_attendances_club_user_date
+ON public.attendances (club_id, user_id, attended_at);
+
 -- profiles에는 club_id가 없으므로 요청 헤더의 활성 클럽과 club_members를 연결해 제한합니다.
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;

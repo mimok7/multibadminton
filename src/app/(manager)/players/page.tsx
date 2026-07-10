@@ -166,19 +166,16 @@ function PlayersPage() {
     try {
       const today = getKoreaDate();
       
-      const insertData = userIds.map(id => ({
-        user_id: id,
-        attended_at: today,
-        status: 'present'
-      }));
-      
-      const { error } = await supabase
-        .from('attendances')
-        .insert(insertData);
-        
-      if (error) {
-        console.error('출석자 추가 오류:', error);
-        alert('출석자 추가 중 오류가 발생했습니다.');
+      const response = await fetch('/api/admin/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds, attendedAt: today, status: 'present' }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        console.error('출석자 추가 오류:', result);
+        alert(result?.error || '출석자 추가 중 오류가 발생했습니다.');
         return;
       }
       
@@ -206,12 +203,17 @@ function PlayersPage() {
       setTodayPlayers(updatedPlayers);
       
       const today = getKoreaDate();
-      const { error } = await supabase
-        .from('attendances')
-        .update({ status })
-        .match({ user_id: playerId, attended_at: today });
-        
-      if (error) console.error('상태 업데이트 오류:', error.message);
+      const response = await fetch('/api/admin/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: [playerId], attendedAt: today, status }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        console.error('상태 업데이트 오류:', result?.error || response.statusText);
+        await fetchTodayPlayers().then(setTodayPlayers);
+      }
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -229,13 +231,17 @@ function PlayersPage() {
       setTodayPlayers(updatedPlayers);
       
       const today = getKoreaDate();
-      const { error } = await supabase
-        .from('attendances')
-        .update({ status })
-        .in('user_id', playerIds)
-        .eq('attended_at', today);
-        
-      if (error) console.error('상태 업데이트 오류:', error.message);
+      const response = await fetch('/api/admin/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: playerIds, attendedAt: today, status }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        console.error('일괄 상태 업데이트 오류:', result?.error || response.statusText);
+        await fetchTodayPlayers().then(setTodayPlayers);
+      }
     } finally {
       setIsUpdatingStatus(false);
     }

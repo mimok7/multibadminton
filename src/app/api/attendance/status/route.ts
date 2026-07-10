@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getProfileByUserId } from '@/lib/auth';
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { getActiveClubId } from '@/lib/club';
@@ -33,14 +34,9 @@ async function resolveProfileId() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const { data: profile, error: profileError } = await adminSupabase
-    .from('profiles')
-    .select('id, user_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const profile = await getProfileByUserId(adminSupabase, user.id);
 
-  if (profileError || !profile?.id) {
+  if (!profile?.id) {
     return { error: NextResponse.json({ error: 'Profile not found' }, { status: 404 }) };
   }
 
@@ -155,12 +151,12 @@ export async function POST(request: Request) {
 
         if (profile && clubId) {
           // club_members 에서 해당 클럽 코인 잔액 조회
-          const { data: memberInfo } = await resolved.adminSupabase
-            .from('club_members')
-            .select('coin_balance')
-            .eq('club_id', clubId)
-            .eq('user_id', resolved.authUserId)
-            .single();
+        const { data: memberInfo } = await resolved.adminSupabase
+          .from('club_members')
+          .select('coin_balance')
+          .eq('club_id', clubId)
+          .eq('user_id', resolved.profileId)
+          .single();
 
           const currentBalance = memberInfo?.coin_balance ?? 0;
           let nextBalance = currentBalance;
@@ -181,7 +177,7 @@ export async function POST(request: Request) {
               coin_balance: nextBalance,
             })
             .eq('club_id', clubId)
-            .eq('user_id', resolved.authUserId);
+            .eq('user_id', resolved.profileId);
         }
       }
     }

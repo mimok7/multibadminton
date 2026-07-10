@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
+import { getProfileByUserId } from '@/lib/auth';
 import { NotificationService } from '@/utils/notification-service';
 import { MatchSession, GeneratedMatch, AvailableDate } from '../types';
 import { getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
@@ -49,12 +50,7 @@ export default function MatchAssignmentManager({
       } = await supabase.auth.getSession();
       const user = session?.user ?? null;
       if (user) {
-        // 사용자 프로필 정보도 함께 가져오기
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
+        const profile = await getProfileByUserId(supabase, user.id);
         
         setCurrentUser({ ...user, profile });
       }

@@ -1,5 +1,6 @@
 'use server';
 
+import { getProfileByUserId } from '@/lib/auth';
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 export async function fetchAdminMatchSessions() {
@@ -9,7 +10,7 @@ export async function fetchAdminMatchSessions() {
   const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
   if (authError || !user) throw new Error('Unauthorized');
 
-  const { data: profile } = await adminSupabase.from('profiles').select('role').eq('user_id', user.id).single();
+  const profile = await getProfileByUserId(adminSupabase, user.id);
   if (profile?.role !== 'admin' && profile?.role !== 'manager') {
     throw new Error('Forbidden');
   }
@@ -30,7 +31,7 @@ export async function fetchAdminMatchResults(filters: { dateFilter: string; stat
   const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
   if (authError || !user) throw new Error('Unauthorized');
 
-  const { data: profile } = await adminSupabase.from('profiles').select('role').eq('user_id', user.id).single();
+  const profile = await getProfileByUserId(adminSupabase, user.id);
   if (profile?.role !== 'admin' && profile?.role !== 'manager') {
     throw new Error('Forbidden');
   }
