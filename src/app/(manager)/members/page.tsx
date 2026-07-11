@@ -4,6 +4,9 @@ import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-
 import UserManagementClient from './UserManagementClient'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
 import { cookies } from 'next/headers'
+import { requireSuperadmin } from '@/lib/superadmin'
+import { getClubRole } from '@/lib/club-auth'
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +34,23 @@ export default async function ManagerMembersPage({
   const cookieStore = await cookies();
   const activeClubId = cookieStore.get('active_club_id')?.value;
   if (!activeClubId) redirect('/manager/match-assignment') // or somewhere
+
+  // 회원 운영은 매니저가 아닌 owner/admin/superadmin 전용입니다.
+  let isSuperadmin = false;
+  try {
+    await requireSuperadmin();
+    isSuperadmin = true;
+  } catch {
+    // Continue with the club-level role check.
+  }
+
+  if (!isSuperadmin) {
+    const roleLookupClient = getUnfilteredGlobalAdminClient();
+    const clubRole = await getClubRole(roleLookupClient, user.id, activeClubId);
+    if (!['owner', 'admin'].includes(clubRole || '')) {
+      redirect('/unauthorized');
+    }
+  }
 
   // 3) 사용자 목록 및 부가 데이터 병렬 조회
   // Note: Use filtered admin client to bypass RLS issues for manager

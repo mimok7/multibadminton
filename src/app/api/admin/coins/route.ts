@@ -29,7 +29,7 @@ async function requireAdmin() {
     getUserRole(roleLookupClient, user),
     getClubRole(roleLookupClient, user.id, clubId),
   ]);
-  const canManageClub = isAdminRole(globalRole) || ['owner', 'admin', 'manager'].includes(clubRole || '');
+  const canManageClub = isAdminRole(globalRole) || ['owner', 'admin'].includes(clubRole || '');
 
   if (!currentProfile || !canManageClub) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };

@@ -7,6 +7,7 @@ import {
   DEFAULT_ADMIN_REDIRECT,
   DEFAULT_USER_REDIRECT,
   matchesRoutePrefix,
+  CLUB_ADMIN_ONLY_ROUTE_PREFIXES,
 } from '@/lib/route-access';
 import { getUserRole, getRoleFromUser } from '@/lib/auth';
 import { normalizeClubId } from '@/lib/club-scope';
@@ -144,6 +145,7 @@ export async function middleware(req: NextRequest) {
 
   const isAdminRoute = matchesRoutePrefix(pathname, ADMIN_ROUTE_PREFIXES);
   const isManagerRoute = matchesRoutePrefix(pathname, MANAGER_ROUTE_PREFIXES);
+  const isClubAdminOnlyRoute = matchesRoutePrefix(pathname, CLUB_ADMIN_ONLY_ROUTE_PREFIXES);
   const isProtectedPath = isAdminRoute || isManagerRoute;
   const isAuthRoute = matchesRoutePrefix(pathname, AUTH_ROUTE_PREFIXES);
 
@@ -306,6 +308,11 @@ export async function middleware(req: NextRequest) {
       // 클럽 쿠키가 있으면 해당 클럽에서의 역할을 확인
       if (activeClubId) {
         const clubRole = await getClubRoleForMiddleware(user.id, activeClubId);
+        if (isClubAdminOnlyRoute && !['owner', 'admin'].includes(clubRole || '')) {
+          const url = req.nextUrl.clone();
+          url.pathname = '/unauthorized';
+          return NextResponse.redirect(url);
+        }
         if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
           console.log('[Middleware] Redirecting to /unauthorized', { activeClubId, clubRole, userId: user.id });
           const url = req.nextUrl.clone();

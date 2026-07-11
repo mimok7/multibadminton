@@ -39,6 +39,12 @@ const DAYS_OPTIONS = [
   { value: 6, label: '토요일' },
 ];
 
+function parseNumberOrNull(value: string): number | null {
+  if (value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export default function RecurringMatchPage() {
   const { user } = useUser();
   const { clubId, loading: clubLoading } = useClub();
@@ -69,8 +75,8 @@ export default function RecurringMatchPage() {
     start_time: '14:00',
     end_time: '17:00',
     location: '',
-    max_participants: 20,
-    advance_days: 7
+    max_participants: 20 as number | null,
+    advance_days: 7 as number | null
   });
 
   // 템플릿 목록 조회
@@ -457,8 +463,8 @@ export default function RecurringMatchPage() {
                   <label className="block text-sm font-medium mb-2">최대 참가자</label>
                   <input
                     type="number"
-                    value={newTemplate.max_participants}
-                    onChange={(e) => setNewTemplate({...newTemplate, max_participants: parseInt(e.target.value)})}
+                    value={newTemplate.max_participants ?? ''}
+                    onChange={(e) => setNewTemplate({...newTemplate, max_participants: parseNumberOrNull(e.target.value)})}
                     className="w-full p-2 border border-gray-300 rounded"
                     min="4"
                     max="50"
@@ -470,8 +476,8 @@ export default function RecurringMatchPage() {
                   <label className="block text-sm font-medium mb-2">미리 생성할 일수</label>
                   <input
                     type="number"
-                    value={newTemplate.advance_days}
-                    onChange={(e) => setNewTemplate({...newTemplate, advance_days: parseInt(e.target.value)})}
+                    value={newTemplate.advance_days ?? ''}
+                    onChange={(e) => setNewTemplate({...newTemplate, advance_days: parseNumberOrNull(e.target.value)})}
                     className="w-full p-2 border border-gray-300 rounded"
                     min="1"
                     max="30"
@@ -655,7 +661,7 @@ export default function RecurringMatchPage() {
                   <label className="block text-sm font-medium mb-2">요일</label>
                   <select
                     value={editingTemplate.day_of_week ?? 0}
-                    onChange={(e) => setEditingTemplate({...editingTemplate, day_of_week: parseInt(e.target.value)})}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, day_of_week: parseNumberOrNull(e.target.value)})}
                     className="w-full p-2 border border-gray-300 rounded"
                   >
                     {DAYS_OPTIONS.map(day => (
@@ -699,8 +705,8 @@ export default function RecurringMatchPage() {
                   <label className="block text-sm font-medium mb-2">최대 참가자</label>
                   <input
                     type="number"
-                    value={editingTemplate.max_participants ?? 0}
-                    onChange={(e) => setEditingTemplate({...editingTemplate, max_participants: parseInt(e.target.value)})}
+                      value={editingTemplate.max_participants ?? ''}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, max_participants: parseNumberOrNull(e.target.value)})}
                     className="w-full p-2 border border-gray-300 rounded"
                     min="4"
                     max="50"
@@ -711,8 +717,8 @@ export default function RecurringMatchPage() {
                   <label className="block text-sm font-medium mb-2">미리 생성할 일수</label>
                   <input
                     type="number"
-                    value={editingTemplate.advance_days ?? 0}
-                    onChange={(e) => setEditingTemplate({...editingTemplate, advance_days: parseInt(e.target.value)})}
+                      value={editingTemplate.advance_days ?? ''}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, advance_days: parseNumberOrNull(e.target.value)})}
                     className="w-full p-2 border border-gray-300 rounded"
                     min="1"
                     max="30"

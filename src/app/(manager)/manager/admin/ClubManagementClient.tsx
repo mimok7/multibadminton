@@ -7,6 +7,7 @@ import { setActiveClubAction } from '@/app/actions/club';
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels';
 import { useRouter } from 'next/navigation';
 import { formatKSTDate } from '@/lib/date';
+import { formatKoreanPhone } from '@/lib/phone';
 
 interface Club {
     id: string;
@@ -252,8 +253,8 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">연락처 (선택)</label>
                                     <input
                                         type="text"
-                                        value={newClub.phone}
-                                        onChange={(e) => setNewClub({ ...newClub, phone: e.target.value })}
+                                        value={formatKoreanPhone(newClub.phone)}
+                                        onChange={(e) => setNewClub({ ...newClub, phone: formatKoreanPhone(e.target.value) })}
                                         className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                         placeholder="010-0000-0000"
                                     />

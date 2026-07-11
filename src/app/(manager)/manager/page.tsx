@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
+import { isAdminRole } from '@/lib/auth';
 
 export default function ManagerDashboardPage() {
   const { profile, loading } = useUser();
-  const { clubName } = useClub();
+  const { clubName, clubRole } = useClub();
   const router = useRouter();
+  const canUseClubTools = isAdminRole(profile?.role) || ['owner', 'admin'].includes(clubRole || '');
 
   const [isMobile, setIsMobile] = useState(true);
 
@@ -114,13 +116,15 @@ export default function ManagerDashboardPage() {
             <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">클럽의 공지사항을 등록하고 관리하세요</p>
           </Link>
 
-          <Link
-            href="/members"
-            className="rounded-lg border border-blue-200 bg-white px-3 py-3 transition-colors hover:border-purple-400 hover:bg-purple-50 sm:p-4 shadow-sm"
-          >
-            <h3 className="text-sm font-medium text-gray-900 sm:text-base">👥 클럽 회원관리</h3>
-            <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">클럽 회원 정보와 권한을 관리하세요</p>
-          </Link>
+          {canUseClubTools && (
+            <Link
+              href="/members"
+              className="rounded-lg border border-blue-200 bg-white px-3 py-3 transition-colors hover:border-purple-400 hover:bg-purple-50 sm:p-4 shadow-sm"
+            >
+              <h3 className="text-sm font-medium text-gray-900 sm:text-base">👥 클럽 회원관리</h3>
+              <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">클럽 회원 정보와 권한을 관리하세요</p>
+            </Link>
+          )}
 
           <Link
             href="/manager/admin"

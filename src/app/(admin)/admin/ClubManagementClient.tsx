@@ -6,6 +6,7 @@ import { createClub, updateClub, deleteClub, getClubManagers, searchUsers, addCl
 import { setActiveClubAction } from '@/app/actions/club';
 import { useRouter } from 'next/navigation';
 import { formatKSTDate } from '@/lib/date';
+import { formatKoreanPhone } from '@/lib/phone';
 
 interface Club {
     id: string;
@@ -159,17 +160,18 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">클럽 관리</h1>
-                    <p className="text-sm text-slate-500">배드민턴 매치 메이커 서비스에 등록된 모든 클럽을 관리합니다.</p>
+            <div className="flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-800 px-5 py-4 text-white shadow-lg sm:px-6 sm:py-5">
+                <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-200">Club Management</div>
+                    <h1 className="mt-1 text-xl font-black sm:text-2xl">클럽 관리</h1>
+                    <p className="mt-1 text-xs leading-5 text-indigo-100">등록된 클럽과 운영 정보를 관리합니다.</p>
                 </div>
                 <button
                     onClick={() => {
                         setNewClub({ name: '', code: Math.random().toString(36).substring(2, 8).toUpperCase(), description: '', phone: '', address: '', manager_name: '' });
                         setIsCreateModalOpen(true);
                     }}
-                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/25 sm:px-4 sm:text-sm"
                 >
                     <Plus className="size-4" />
                     새 클럽 추가
@@ -331,8 +333,8 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">연락처 (선택)</label>
                                     <input
                                         type="text"
-                                        value={newClub.phone}
-                                        onChange={(e) => setNewClub({ ...newClub, phone: e.target.value })}
+                                        value={formatKoreanPhone(newClub.phone)}
+                                        onChange={(e) => setNewClub({ ...newClub, phone: formatKoreanPhone(e.target.value) })}
                                         className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                         placeholder="010-0000-0000"
                                     />
@@ -540,8 +542,8 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">연락처 (선택)</label>
                                     <input
                                         type="text"
-                                        value={editingClub.phone}
-                                        onChange={(e) => setEditingClub({ ...editingClub, phone: e.target.value })}
+                                        value={formatKoreanPhone(editingClub.phone)}
+                                        onChange={(e) => setEditingClub({ ...editingClub, phone: formatKoreanPhone(e.target.value) })}
                                         className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                         placeholder="010-0000-0000"
                                     />

@@ -117,6 +117,16 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const visibleSections = useMemo(() => {
     let sectionsCopy = JSON.parse(JSON.stringify(SECTIONS)) as typeof SECTIONS;
 
+    // 관리 도구는 클럽 owner/admin 또는 전역 superadmin만 표시합니다.
+    // manager는 경기·대회 운영 메뉴만 사용할 수 있습니다.
+    if (!isGlobalAdmin && !hasClubAdminAccess) {
+      sectionsCopy = sectionsCopy.map((section) =>
+        section.title === '🛠️ 관리 도구'
+          ? { ...section, items: [] }
+          : section
+      );
+    }
+
     if (!isGlobalAdmin && !hasClubAdminAccess) {
       return sectionsCopy.map(section => {
         return section.title === '🏸 경기 관리' || section.title === '🏆 대회 관리'

@@ -5,9 +5,8 @@ import { usePathname } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 
 const SYSTEM_MENU = [
-  { label: '슈퍼관리자 홈', href: '/superadmin', icon: '🛡️' },
   { label: '클럽 관리', href: '/superadmin/clubs', icon: '🏢' },
-  { label: '전체 사용자 관리', href: '/admin/members', icon: '👥' },
+  { label: '클럽 회원', href: '/superadmin/members', icon: '👥' },
 ];
 
 export default function SuperadminShell({ children }: { children: React.ReactNode }) {
@@ -61,7 +60,7 @@ export default function SuperadminShell({ children }: { children: React.ReactNod
             <div className="mt-1 text-sm font-semibold text-slate-700">시스템 전체 관리</div>
           </div>
           <div className="flex gap-2 md:hidden">
-            <Link href="/superadmin" className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">홈</Link>
+            <Link href="/superadmin/clubs" className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">클럽 관리</Link>
             <button onClick={handleLogout} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600">로그아웃</button>
           </div>
         </header>

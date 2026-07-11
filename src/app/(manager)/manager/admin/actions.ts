@@ -3,6 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/superadmin';
 
+function isMissingClubColumnError(error: any) {
+    const message = String(error?.message || '').toLowerCase();
+    return error?.code === '42703'
+        || error?.code === 'PGRST204'
+        || message.includes('schema cache')
+        || message.includes('column') && message.includes('does not exist');
+}
 
 
 export async function getClubsWithMemberCount() {
@@ -95,7 +102,7 @@ export async function createClub(payload: { name: string; code: string; descript
                 return { error: '이미 사용 중인 클럽 코드입니다.' };
             }
             // Ignore error for missing columns if SQL is not run yet
-            if (error.code === '42703') {
+            if (isMissingClubColumnError(error)) {
                  const fallback = await (supabaseAdmin as any)
                     .from('clubs')
                     .insert({ name, code, description })

@@ -34,3 +34,14 @@ export async function getClubManagerContext() {
   };
 }
 
+/** Club administration tools: owner/admin only (plus global superadmin). */
+export async function getClubAdminContext() {
+  const context = await getClubManagerContext();
+  if ('error' in context) return context;
+
+  if (!['owner', 'admin'].includes(context.clubRole || '')) {
+    return { error: 'forbidden' as const };
+  }
+
+  return context;
+}

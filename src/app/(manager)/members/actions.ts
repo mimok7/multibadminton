@@ -8,6 +8,7 @@ import {
 } from '@/lib/supabase-server';
 import { getClubRole } from '@/lib/club-auth';
 import { getUserRole, isAdminRole } from '@/lib/auth';
+import { requireSuperadmin } from '@/lib/superadmin';
 import { cookies } from 'next/headers';
 
 
@@ -21,7 +22,19 @@ async function getManagerContext() {
     const activeClubId = cookieStore.get('active_club_id')?.value;
     if (!activeClubId) return null;
 
-    const isSysAdmin = isAdminRole(await getUserRole(supabase, user));
+    // `profiles.role = superadmin` is a global role and must not depend on
+    // the currently selected club. The legacy check only looked at the
+    // normalized user role, so a superadmin could be rejected here when the
+    // profile was named "슈퍼관리자" or when no club membership existed.
+    let isSuperadmin = false;
+    try {
+        await requireSuperadmin();
+        isSuperadmin = true;
+    } catch {
+        // Fall through to the normal club-role check below.
+    }
+
+    const isSysAdmin = isSuperadmin || isAdminRole(await getUserRole(supabase, user));
     const roleLookupClient = getUnfilteredGlobalAdminClient();
     let role: string | null = null;
 
@@ -30,7 +43,7 @@ async function getManagerContext() {
         role = actualRole || 'admin';
     } else {
         const actualRole = await getClubRole(roleLookupClient, user.id, activeClubId);
-        if (!actualRole || !['owner', 'admin', 'manager'].includes(actualRole)) {
+        if (!actualRole || !['owner', 'admin'].includes(actualRole)) {
             return null;
         }
         role = actualRole;
