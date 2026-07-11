@@ -1,13 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
+import { requireSuperadmin } from '@/lib/superadmin';
 
 
 
 export async function getClubsWithMemberCount() {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         let { data: clubs, error: clubsError } = await (supabaseAdmin as any)
             .from('clubs')
             .select(`
@@ -64,8 +64,8 @@ export async function getClubsWithMemberCount() {
 }
 
 export async function createClub(payload: { name: string; code: string; description?: string; phone?: string; address?: string; manager_name?: string }) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const name = payload.name.trim();
         const code = payload.code.trim().toUpperCase();
         const description = payload.description?.trim() || null;
@@ -115,8 +115,8 @@ export async function createClub(payload: { name: string; code: string; descript
 }
 
 export async function updateClub(clubId: string, payload: { name: string; code: string; description?: string; phone?: string; address?: string; manager_name?: string }) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const name = payload.name.trim();
         const code = payload.code.trim().toUpperCase();
         const description = payload.description?.trim() || null;
@@ -167,8 +167,8 @@ export async function updateClub(clubId: string, payload: { name: string; code: 
 }
 
 export async function deleteClub(clubId: string) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         // 1. 해당 클럽에만 속해있는 유저들의 ID 목록 추출
         const { data: members } = await (supabaseAdmin as any)
             .from('club_members')
@@ -240,8 +240,8 @@ export async function deleteClub(clubId: string) {
 }
 
 export async function getClubLevelAliases(clubId: string) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const { data, error } = await (supabaseAdmin as any)
             .from('club_level_aliases')
             .select('level_code, alias')
@@ -255,8 +255,8 @@ export async function getClubLevelAliases(clubId: string) {
 }
 
 export async function updateClubLevelAliases(clubId: string, aliases: Record<string, string>) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const rows = Object.entries(aliases).map(([code, alias]) => ({
             club_id: clubId,
             level_code: code,
@@ -275,8 +275,8 @@ export async function updateClubLevelAliases(clubId: string, aliases: Record<str
 }
 
 export async function getClubManagers(clubId: string) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const { data, error } = await (supabaseAdmin as any)
             .from('club_members')
             .select(`
@@ -309,8 +309,8 @@ export async function getClubManagers(clubId: string) {
 }
 
 export async function searchUsers(clubId: string, query: string) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const trimmed = query.trim();
         if (!trimmed) return { users: [] };
 
@@ -339,8 +339,8 @@ export async function searchUsers(clubId: string, query: string) {
 }
 
 export async function addClubManager(clubId: string, userId: string) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const { error } = await (supabaseAdmin as any)
             .from('club_members')
             .upsert({
@@ -359,8 +359,8 @@ export async function addClubManager(clubId: string, userId: string) {
 }
 
 export async function removeClubManager(clubId: string, userId: string) {
-    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const { error } = await (supabaseAdmin as any)
             .from('club_members')
             .delete()

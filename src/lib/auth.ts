@@ -25,7 +25,8 @@ export type AppProfile = Pick<
 
 type ProfileLookupClient = Pick<SupabaseClient<Database, any, any>, 'from'>;
 
-const ADMIN_ROLE_ALIASES = new Set(['admin', 'administrator', '관리자']);
+// `admin` is retained as a legacy alias; the canonical global role is superadmin.
+const ADMIN_ROLE_ALIASES = new Set(['admin', 'administrator', 'superadmin', '시스템 관리자', '관리자']);
 const MANAGER_ROLE_ALIASES = new Set(['manager', '매니저', '운영자']);
 const USER_ROLE_ALIASES = new Set(['user', 'member', '일반 사용자', '일반회원']);
 
@@ -49,10 +50,18 @@ export function normalizeRole(role: unknown): string | null {
   }
 
   if (USER_ROLE_ALIASES.has(normalized)) {
-    return 'user';
+    return 'member';
   }
 
   return normalized;
+}
+
+export function isSuperadminProfile(
+  profile: Pick<AppProfile, 'role' | 'username'> | null | undefined
+): boolean {
+  const rawRole = typeof profile?.role === 'string' ? profile.role.trim().toLowerCase() : '';
+  const username = typeof profile?.username === 'string' ? profile.username.trim() : '';
+  return rawRole === 'superadmin' || username === '슈퍼관리자' || username === '관리자';
 }
 
 export function isAdminRole(role: unknown): boolean {

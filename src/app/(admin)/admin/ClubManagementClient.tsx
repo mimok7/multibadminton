@@ -222,8 +222,19 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                     <div className="flex items-center justify-end gap-2">
                                         <button
                                             onClick={async () => {
-                                                await setActiveClubAction(club.id);
-                                                window.location.href = '/manager';
+                                                const managerTab = window.open('about:blank', '_blank');
+                                                const result = await setActiveClubAction(club.id);
+                                                if (!result.success) {
+                                                    managerTab?.close();
+                                                    alert(result.error || '매니저 화면을 열 수 없습니다.');
+                                                    return;
+                                                }
+                                                if (managerTab) {
+                                                    managerTab.opener = null;
+                                                    managerTab.location.href = '/manager';
+                                                } else {
+                                                    alert('새 탭이 차단되었습니다. 브라우저의 팝업 허용 후 다시 시도해 주세요.');
+                                                }
                                             }}
                                             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
                                         >

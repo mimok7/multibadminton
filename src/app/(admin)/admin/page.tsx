@@ -1,21 +1,17 @@
 import { redirect } from 'next/navigation';
-import { getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole } from '@/lib/auth';
+import { requireSuperadmin } from '@/lib/superadmin';
 import { getClubsWithMemberCount } from './actions';
 import ClubManagementClient from './ClubManagementClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminPage() {
-    const supabase = await getSupabaseServerClient();
-    
-    // 1. Session verification
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) redirect('/login');
-
-    // 2. Double check global admin role
-    const role = await getUserRole(supabase, user);
-    if (role !== 'admin') {
+    try {
+        await requireSuperadmin();
+    } catch (error) {
+        if (error instanceof Error && error.message === '로그인이 필요합니다.') {
+            redirect('/login');
+        }
         redirect('/unauthorized');
     }
 

@@ -81,7 +81,7 @@ export default async function AdminMembersPage({
       email: (p.email ?? '') as string,
       username: p.username ?? undefined,
       full_name: p.full_name ?? undefined,
-      role: p.role ?? 'user',
+      role: p.role ?? 'member',
       skill_level: p.skill_level ?? 'E2',
       skill_label: undefined,
       gender: p.gender ?? undefined,

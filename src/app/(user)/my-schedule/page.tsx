@@ -10,7 +10,7 @@ import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { NotificationService } from '@/utils/notification-service';
-import { getProfileByUserId } from '@/lib/auth';
+import { getProfileByUserId, isAdminRole, isManagerRole } from '@/lib/auth';
 import { formatCurrentUserNameWithCoins, formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import type { CoinSettlementMode } from '@/lib/coins';
@@ -706,7 +706,7 @@ export default function MySchedulePage() {
     selectedMatch.generated_match.team2_player2?.user_id,
   ].filter(Boolean).includes(profile?.id || user?.id) : false;
 
-  const canManageSelected = profile?.role === 'admin' || profile?.role === 'manager';
+  const canManageSelected = isAdminRole(profile?.role) || isManagerRole(profile?.role);
   
   // 각 경기의 결과 입력 상태를 추적하는 state
   const [, setMatchResultStates] = useState<Record<string, boolean | null>>({});

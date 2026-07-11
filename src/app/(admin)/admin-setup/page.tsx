@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import { isAdminRole } from '@/lib/auth';
 
 export default function AdminSetupPage() {
   const [loading, setLoading] = useState(false);
@@ -40,7 +41,7 @@ export default function AdminSetupPage() {
           .from('profiles')
           .insert({
             id: user.id,
-            role: 'user',
+            role: 'member',
             skill_level: 'E2'
           })
           .select()
@@ -68,7 +69,7 @@ export default function AdminSetupPage() {
 - 이름: ${profile?.full_name || profile?.username || '없음'}
 - Role: ${profile?.role || '설정되지 않음'}
 - Skill Level: ${profile?.skill_level || 'E2'}
-- Admin 권한: ${profile?.role === 'admin' ? '예' : '아니오'}`);
+- Admin 권한: ${isAdminRole(profile?.role) ? '예' : '아니오'}`);
 
     } catch (error) {
       setResult(`오류: ${error}`);
@@ -107,7 +108,7 @@ export default function AdminSetupPage() {
           .from('profiles')
           .insert({
             id: user.id,
-            role: 'admin',
+            role: 'superadmin',
             skill_level: 'N'
           });
 
@@ -124,7 +125,7 @@ export default function AdminSetupPage() {
       // 프로필이 존재하면 업데이트
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ role: 'admin' })
+        .update({ role: 'superadmin' })
         .eq('id', user.id);
 
       if (updateError) {

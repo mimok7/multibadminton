@@ -3,14 +3,6 @@ export type MenuSection = { title: string; items: MenuItem[]; color: string };
 
 export const SECTIONS: MenuSection[] = [
   {
-    title: '⚙️ 시스템 관리',
-    items: [
-      { label: '클럽 관리', href: '/admin', icon: '🏢' },
-      { label: '전체 사용자 관리', href: '/admin/members', icon: '👥' },
-    ],
-    color: 'blue',
-  },
-  {
     title: '🏸 경기 관리',
     items: [
       { label: '경기 일정', href: '/match-schedule', icon: '📅' },

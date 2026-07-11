@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { isUserAdmin } from '@/lib/auth';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
+import { requireSuperadmin } from '@/lib/superadmin';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { DEFAULT_COIN_SETTINGS } from '@/lib/coins';
 
@@ -11,17 +11,16 @@ import { DEFAULT_COIN_SETTINGS } from '@/lib/coins';
 
 
 async function isAdmin() {
-    const supabase = await getSupabaseServerClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    return isUserAdmin(supabase, user);
+    try {
+        await requireSuperadmin();
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export async function deleteUser(userId: string) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
         if (!(await isAdmin())) {
             return { error: '삭제 권한이 없습니다.' };
@@ -86,16 +85,22 @@ export async function deleteUser(userId: string) {
     }
 }
 
+function normalizeGlobalProfileRole(role?: string | null): 'superadmin' | 'member' {
+    return ['admin', 'superadmin', 'administrator'].includes(String(role || '').trim().toLowerCase())
+        ? 'superadmin'
+        : 'member';
+}
+
 export type UpdateUserPayload = {
     username?: string | null;
     full_name?: string | null;
-    role?: 'admin' | 'manager' | 'user' | null;
+    role?: 'superadmin' | 'member' | 'admin' | 'manager' | 'user' | null;
     skill_level?: string | null;
     gender?: 'M' | 'F' | 'O' | string | null;
 }
 
 export async function updateUser(userId: string, updates: UpdateUserPayload) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     if (!(await isAdmin())) {
         return { error: '수정 권한이 없습니다.' };
     }
@@ -104,7 +109,7 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
     const payload: Record<string, any> = {}
     if (updates.username !== undefined) payload.username = updates.username || null
     if (updates.full_name !== undefined) payload.full_name = updates.full_name || null
-    if (updates.role !== undefined) payload.role = updates.role || 'user'
+        if (updates.role !== undefined) payload.role = normalizeGlobalProfileRole(updates.role)
     if (updates.skill_level !== undefined) payload.skill_level = updates.skill_level || null
     if (updates.gender !== undefined) payload.gender = updates.gender || null
 
@@ -143,7 +148,7 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
 export async function updateUsersBulk(
     items: Array<{ userId: string; updates: UpdateUserPayload }>
 ) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     if (!(await isAdmin())) {
         return { error: '수정 권한이 없습니다.' };
     }
@@ -163,7 +168,7 @@ export async function updateUsersBulk(
         const payload: Record<string, any> = {};
         if (updates.username !== undefined) payload.username = updates.username || null;
         if (updates.full_name !== undefined) payload.full_name = updates.full_name || null;
-        if (updates.role !== undefined) payload.role = updates.role || 'user';
+        if (updates.role !== undefined) payload.role = normalizeGlobalProfileRole(updates.role);
         if (updates.skill_level !== undefined) payload.skill_level = updates.skill_level || null;
         if (updates.gender !== undefined) payload.gender = updates.gender || null;
 
@@ -199,7 +204,7 @@ export async function updateUsersBulk(
 }
 
 export async function resetAttendanceAll() {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     if (!(await isAdmin())) {
         return { error: '권한이 없습니다.' };
     }
@@ -218,7 +223,7 @@ export async function resetAttendanceAll() {
 }
 
 export async function resetWinRateAll() {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     if (!(await isAdmin())) {
         return { error: '권한이 없습니다.' };
     }
@@ -317,11 +322,11 @@ export type CreateMemberPayload = {
     password?: string | null;
     skill_level?: string | null;
     gender?: 'M' | 'F' | 'O' | string | null;
-    role?: 'admin' | 'manager' | 'user' | null;
+    role?: 'superadmin' | 'member' | 'admin' | 'manager' | 'user' | null;
 };
 
 export async function createMember(payload: CreateMemberPayload) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     if (!(await isAdmin())) {
         return { error: '추가 권한이 없습니다.' };
     }
@@ -357,7 +362,7 @@ export async function createMember(payload: CreateMemberPayload) {
     const updatePayload = {
         username: fullName,
         full_name: fullName,
-        role: payload.role || 'user',
+        role: normalizeGlobalProfileRole(payload.role),
         skill_level: payload.skill_level || 'E2',
         gender: payload.gender || null,
     };
@@ -379,7 +384,7 @@ export async function createMember(payload: CreateMemberPayload) {
 }
 
 export async function updateRatingSettings(startDate: string | null, endDate: string | null) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     if (!(await isAdmin())) {
         return { error: '설정 권한이 없습니다.' };
     }
@@ -403,7 +408,7 @@ export async function updateRatingSettings(startDate: string | null, endDate: st
 }
 
 export async function resetUserPassword(userId: string, newPassword: string) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
         if (!(await isAdmin())) {
             return { error: '비밀번호 초기화 권한이 없습니다.' };
@@ -446,7 +451,7 @@ export async function resetUserPassword(userId: string, newPassword: string) {
 }
 
 export async function resetMemberData(userId: string) {
-    const supabaseAdmin = await getFilteredAdminClient();
+    const supabaseAdmin = getUnfilteredGlobalAdminClient();
     try {
         if (!(await isAdmin())) {
             return { error: '초기화 권한이 없습니다.' };
@@ -502,4 +507,5 @@ export async function resetMemberData(userId: string) {
         return { error: message };
     }
 }
+
 

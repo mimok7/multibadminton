@@ -766,7 +766,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
           setCurrentUser({
             id: user.id,
             full_name: profile?.full_name || '',
-            role: profile?.role || 'user',
+            role: profile?.role || 'member',
           });
         }
       } catch (err) {

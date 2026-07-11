@@ -1,15 +1,18 @@
 'use server';
 
 import { getProfileByUserId } from '@/lib/auth';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 
 export async function fetchProfileServer(userId: string) {
-  const adminSupabase = await getFilteredAdminClient();
   const serverSupabase = await getSupabaseServerClient();
 
   // Verify the requester is logged in
   const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
   if (authError || !user) throw new Error('Unauthorized');
+
+  // Profiles are global identity records, not club-scoped data. Fetching the
+  // current user's profile must also work before an active club is selected.
+  const adminSupabase = getUnfilteredGlobalAdminClient();
 
   // Verify the requester is requesting their own profile, OR they are admin/manager
   if (user.id !== userId) {

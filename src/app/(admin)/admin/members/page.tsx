@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import type { AdminUser } from '@/types'
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server'
-import { isUserAdmin } from '@/lib/auth'
+import { getUnfilteredGlobalAdminClient, getSupabaseServerClient } from '@/lib/supabase-server'
+import { requireSuperadmin } from '@/lib/superadmin'
 import UserManagementClient from './UserManagementClient'
 import type { Database } from '@/types/supabase'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
@@ -25,17 +25,21 @@ export default async function AdminMembersPage({
 }: {
   searchParams?: Promise<{ tab?: string }>
 }) {
+  try {
+    await requireSuperadmin()
+  } catch (error) {
+    if (error instanceof Error && error.message === '로그인이 필요합니다.') redirect('/login')
+    redirect('/unauthorized')
+  }
+
   const supabase = await getSupabaseServerClient()
 
   // 1) 세션 확인
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // 2) 관리자 권한 확인
-  if (!(await isUserAdmin(supabase, user))) redirect('/unauthorized')
-
   // 3) 사용자 목록 및 부가 데이터 병렬 조회
-  const supabaseAdmin = await getFilteredAdminClient()
+  const supabaseAdmin = getUnfilteredGlobalAdminClient()
   const activeClubId = await getActiveClubId()
   if (!activeClubId) redirect('/select-club')
   const today = new Date()
@@ -82,7 +86,7 @@ export default async function AdminMembersPage({
       email: (p.email ?? '') as string,
       username: p.username ?? undefined,
       full_name: p.full_name ?? undefined,
-      role: p.role ?? 'user',
+      role: p.role ?? 'member',
       skill_level: p.skill_level ?? 'E2',
       skill_label: undefined,
       gender: p.gender ?? undefined,

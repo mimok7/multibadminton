@@ -72,6 +72,12 @@ export type UpdateUserPayload = {
     gender?: 'M' | 'F' | 'O' | string | null;
 }
 
+function toClubMemberRole(role: UpdateUserPayload['role']): 'manager' | 'member' | null {
+    if (role === 'manager') return 'manager';
+    if (role === 'member' || role === 'user') return 'member';
+    return null;
+}
+
 export async function deleteUser(userId: string) {
     const supabaseAdmin = await getFilteredAdminClient();
     // In a multi-club system, a manager deleting a user should probably only remove them from the club,
@@ -102,9 +108,10 @@ export async function deleteUser(userId: string) {
 }
 
 export async function updateUser(userId: string, updates: UpdateUserPayload) {
-    const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '수정 권한이 없습니다.' };
+
+    const supabaseAdmin = await getFilteredAdminClient();
 
     const targetProfile = await getTargetClubMember(supabaseAdmin, ctx.clubId, userId);
     if (!targetProfile) return { error: '소속 클럽의 회원만 수정할 수 있습니다.' };
@@ -124,9 +131,13 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
         if (error) return { error: error.message };
     }
 
-    // Update club member role
-    if (updates.role !== undefined && ['manager', 'member'].includes(updates.role as string)) {
-        const clubRole = updates.role === 'manager' ? 'manager' : 'member';
+    // Roles shown in the member UI are user/manager, while club_members stores member/manager.
+    if (updates.role !== undefined) {
+        const clubRole = toClubMemberRole(updates.role);
+        if (!clubRole) {
+            return { error: '관리자 또는 소유자 역할은 이 페이지에서 변경할 수 없습니다.' };
+        }
+
         const { error } = await (supabaseAdmin as any)
             .from('club_members')
             .update({ role: clubRole })

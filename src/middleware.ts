@@ -48,6 +48,32 @@ async function getClubRoleForMiddleware(userId: string, clubId: string) {
   return members[0]?.role ?? null;
 }
 
+async function isSuperadminForMiddleware(userId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!baseUrl || !serviceRoleKey) return false;
+
+  const profileUrl = new URL('/rest/v1/profiles', baseUrl);
+  profileUrl.searchParams.set('select', 'role,username');
+  profileUrl.searchParams.set('or', `(user_id.eq.${userId},id.eq.${userId})`);
+  profileUrl.searchParams.set('limit', '1');
+
+  const response = await fetch(profileUrl, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok) return false;
+
+  const profiles = (await response.json()) as Array<{ role?: string | null; username?: string | null }>;
+  const profile = profiles[0];
+  return profile?.role?.trim().toLowerCase() === 'superadmin'
+    || profile?.username?.trim() === '슈퍼관리자'
+    || profile?.username?.trim() === '관리자';
+}
+
 function shouldRequirePasswordChange(value: unknown) {
   return value === true || value === 'true';
 }
@@ -59,6 +85,7 @@ const REDIRECT_SAFE_PATHS = new Set([
   '/change-password',
   '/login',
   '/signup',
+  '/superadmin/login',
   '/maintenance',
 ]);
 
@@ -140,10 +167,17 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
+  // 전용 인증 화면은 세션이 없어도 렌더링할 수 있어야 한다.
+  if (!hasSessionCookie && isAuthRoute) {
+    return res;
+  }
+
   // 만약 세션 쿠키가 없고 보호된 경로라면, 바로 로그인으로 리다이렉트합니다.
   if (!hasSessionCookie && isProtectedPath) {
     const url = req.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = pathname === '/superadmin' || pathname.startsWith('/superadmin/')
+      ? '/superadmin/login'
+      : '/login';
     url.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(url);
   }
@@ -209,7 +243,7 @@ export async function middleware(req: NextRequest) {
     }
 
     const role = await getUserRole(supabase, user);
-    const isGlobalAdmin = role === 'admin';
+    const isGlobalAdmin = role === 'admin' || await isSuperadminForMiddleware(user.id);
     const isSystemManager = role === 'manager';
     // ──────────────────────────────────────────────
     // 1. 관리자 전용 라우트 (/admin, /admin-setup)
@@ -231,10 +265,17 @@ export async function middleware(req: NextRequest) {
       // 시스템 관리자 → 모든 매니저 페이지 접근 가능 (프리패스)
       if (isGlobalAdmin) return res;
 
-      // 시스템 매니저 → 클럽 선택 없이도 /manager, /manager/admin 등에 접근 가능
+      // 전체 클럽 관리는 슈퍼관리자 전용이다. 매니저의 /manager/admin 접근도 차단한다.
+      if (pathname === '/manager/admin' || pathname.startsWith('/manager/admin/')) {
+        const url = req.nextUrl.clone();
+        url.pathname = '/unauthorized';
+        return NextResponse.redirect(url);
+      }
+
+      // 시스템 매니저 → 클럽 선택 없이도 일반 매니저 홈에 접근 가능
       const activeClubId = normalizeClubId(req.cookies.get('active_club_id')?.value);
       const hasClubCookie = Boolean(activeClubId);
-      const isGlobalAdminPath = pathname.startsWith('/manager/admin') || pathname === '/manager';
+      const isGlobalAdminPath = pathname === '/manager';
 
       if (isSystemManager) {
         if (hasClubCookie || isGlobalAdminPath) {

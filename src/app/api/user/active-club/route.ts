@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
+import { isAdminRole } from '@/lib/auth';
 
 export async function GET() {
   try {
@@ -53,7 +54,7 @@ export async function GET() {
         if (member && member.status === 'active') {
           isClubValid = true;
           memberData = member;
-        } else if (profile.role === 'admin') {
+        } else if (isAdminRole(profile.role)) {
           // 시스템 최고 관리자는 클럽 멤버가 아니어도 접근 가능
           isClubValid = true;
           memberData = {

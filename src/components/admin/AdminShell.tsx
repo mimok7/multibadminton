@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { getSupabaseClient } from '@/lib/supabase';
+import { isAdminRole, isManagerRole } from '@/lib/auth';
 import { SECTIONS } from './menuConfig';
 
 function getGroupColors(color: string) {
@@ -41,9 +42,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const { profile } = useUser();
   const [activeClubRole, setActiveClubRole] = useState<string | null>(null);
-  const isGlobalAdmin = profile?.role === 'admin';
+  const isGlobalAdmin = isAdminRole(profile?.role);
+  const hasClubAdminAccess = ['owner', 'admin'].includes(activeClubRole || '');
   const isManagerMode = !isGlobalAdmin && ['owner', 'admin', 'manager'].includes(activeClubRole || '');
-  const homeHref = isGlobalAdmin ? '/admin' : isManagerMode || profile?.role === 'manager' ? '/manager' : '/admin';
+  const isSystemManager = isManagerRole(profile?.role);
+  const homeHref = isGlobalAdmin ? '/superadmin' : isManagerMode || isSystemManager ? '/manager' : '/admin';
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -114,28 +117,16 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const visibleSections = useMemo(() => {
     let sectionsCopy = JSON.parse(JSON.stringify(SECTIONS)) as typeof SECTIONS;
 
-    // 관리자가 아닌 경우 시스템 관리 메뉴 제외
-    if (profile?.role !== 'admin') {
-      sectionsCopy = sectionsCopy.filter(section => section.title !== '⚙️ 시스템 관리');
-    }
-    
-    if (profile?.role === 'manager' || isManagerMode) {
+    if (!isGlobalAdmin && !hasClubAdminAccess) {
       return sectionsCopy.map(section => {
-        section.items = section.items.map(item => {
-          if (item.href === '/admin') {
-            return { ...item, href: '/manager/admin' };
-          }
-          if (item.href === '/admin/members') {
-            return { ...item, href: '/manager/admin/members' };
-          }
-          return item;
-        });
-        return section;
+        return section.title === '🏸 경기 관리' || section.title === '🏆 대회 관리'
+          ? section
+          : { ...section, items: [] };
       });
     }
     
     return sectionsCopy;
-  }, [profile?.role, isManagerMode]);
+  }, [hasClubAdminAccess, isGlobalAdmin, isManagerMode, isSystemManager]);
 
   const sidebarNav = (
     <nav className="p-3 space-y-2">
@@ -236,7 +227,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   href={homeHref}
                   className="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 sm:px-3"
                 >
-                  {!isGlobalAdmin && (isManagerMode || profile?.role === 'manager') ? '⚙️ 매니저 홈' : '⚙️ 관리자 홈'}
+                  {!isGlobalAdmin && (isManagerMode || isSystemManager) ? '⚙️ 매니저 홈' : '⚙️ 관리자 홈'}
                 </Link>
                 <Link
                   href="/"

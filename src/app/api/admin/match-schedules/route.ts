@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import {
   getFilteredAdminClient,
   getSupabaseServerClient,
+  getUnfilteredSupabaseServerClient,
   getUnfilteredGlobalAdminClient,
 } from '@/lib/supabase-server';
-import { isUserAdmin } from '@/lib/auth';
+import { isSuperadminProfile, isUserAdmin } from '@/lib/auth';
 import { getClubRole } from '@/lib/club-auth';
 import { getActiveClubId } from '@/lib/club';
 import { getKoreaDate } from '@/lib/date';
@@ -24,8 +25,7 @@ type ParticipantProfile = {
 };
 
 async function requireScheduleManager() {
-  const supabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient();
+  const supabase = await getUnfilteredSupabaseServerClient();
 
   const {
     data: { user },
@@ -36,12 +36,24 @@ async function requireScheduleManager() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
+  const globalAdmin = getUnfilteredGlobalAdminClient();
+  const { data: profile } = await globalAdmin
+    .from('profiles')
+    .select('role, username')
+    .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+    .limit(1)
+    .maybeSingle();
+  const isSuperadmin = isSuperadminProfile(profile as any);
+  const adminSupabase = isSuperadmin
+    ? globalAdmin
+    : await getFilteredAdminClient();
+
   const isGlobalManager = await isUserAdmin(supabase, user);
   const activeClubId = await getActiveClubId();
   const clubRole = activeClubId
     ? await getClubRole(getUnfilteredGlobalAdminClient(), user.id, activeClubId)
     : null;
-  const canManageSchedules = isGlobalManager || ['owner', 'admin', 'manager'].includes(clubRole || '');
+  const canManageSchedules = isSuperadmin || isGlobalManager || ['owner', 'admin', 'manager'].includes(clubRole || '');
 
   if (!canManageSchedules) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };

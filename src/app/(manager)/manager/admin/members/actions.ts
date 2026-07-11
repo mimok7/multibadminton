@@ -87,10 +87,16 @@ export async function deleteUser(userId: string) {
     }
 }
 
+function normalizeGlobalProfileRole(role?: string | null): 'superadmin' | 'member' {
+    return ['admin', 'superadmin', 'administrator'].includes(String(role || '').trim().toLowerCase())
+        ? 'superadmin'
+        : 'member';
+}
+
 export type UpdateUserPayload = {
     username?: string | null;
     full_name?: string | null;
-    role?: 'admin' | 'manager' | 'user' | null;
+    role?: 'superadmin' | 'member' | 'admin' | 'manager' | 'user' | null;
     skill_level?: string | null;
     gender?: 'M' | 'F' | 'O' | string | null;
 }
@@ -105,7 +111,7 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
     const payload: Record<string, any> = {}
     if (updates.username !== undefined) payload.username = updates.username || null
     if (updates.full_name !== undefined) payload.full_name = updates.full_name || null
-    if (updates.role !== undefined) payload.role = updates.role || 'user'
+        if (updates.role !== undefined) payload.role = normalizeGlobalProfileRole(updates.role)
     if (updates.skill_level !== undefined) payload.skill_level = updates.skill_level || null
     if (updates.gender !== undefined) payload.gender = updates.gender || null
 
@@ -165,7 +171,7 @@ export async function updateUsersBulk(
         const payload: Record<string, any> = {};
         if (updates.username !== undefined) payload.username = updates.username || null;
         if (updates.full_name !== undefined) payload.full_name = updates.full_name || null;
-        if (updates.role !== undefined) payload.role = updates.role || 'user';
+        if (updates.role !== undefined) payload.role = normalizeGlobalProfileRole(updates.role);
         if (updates.skill_level !== undefined) payload.skill_level = updates.skill_level || null;
         if (updates.gender !== undefined) payload.gender = updates.gender || null;
 
@@ -322,7 +328,7 @@ export type CreateMemberPayload = {
     password?: string | null;
     skill_level?: string | null;
     gender?: 'M' | 'F' | 'O' | string | null;
-    role?: 'admin' | 'manager' | 'user' | null;
+    role?: 'superadmin' | 'member' | 'admin' | 'manager' | 'user' | null;
 };
 
 export async function createMember(payload: CreateMemberPayload) {
@@ -362,7 +368,7 @@ export async function createMember(payload: CreateMemberPayload) {
     const updatePayload = {
         username: fullName,
         full_name: fullName,
-        role: payload.role || 'user',
+        role: normalizeGlobalProfileRole(payload.role),
         skill_level: payload.skill_level || 'E2',
         gender: payload.gender || null,
     };

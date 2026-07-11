@@ -1,13 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getFilteredAdminClient } from '@/lib/supabase-server';
+import { requireSuperadmin } from '@/lib/superadmin';
 
 
 
 export async function getClubsWithMemberCount() {
-    const supabaseAdmin = await getFilteredAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         let { data: clubs, error: clubsError } = await (supabaseAdmin as any)
             .from('clubs')
             .select(`
@@ -64,8 +64,8 @@ export async function getClubsWithMemberCount() {
 }
 
 export async function createClub(payload: { name: string; code: string; description?: string; phone?: string; address?: string; manager_name?: string }) {
-    const supabaseAdmin = await getFilteredAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const name = payload.name.trim();
         const code = payload.code.trim().toUpperCase();
         const description = payload.description?.trim() || null;
@@ -117,8 +117,8 @@ export async function createClub(payload: { name: string; code: string; descript
 }
 
 export async function deleteClub(clubId: string) {
-    const supabaseAdmin = await getFilteredAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const { error } = await (supabaseAdmin as any)
             .from('clubs')
             .delete()
@@ -134,8 +134,8 @@ export async function deleteClub(clubId: string) {
 }
 
 export async function getClubLevelAliases(clubId: string) {
-    const supabaseAdmin = await getFilteredAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const { data, error } = await (supabaseAdmin as any)
             .from('club_level_aliases')
             .select('level_code, alias')
@@ -149,8 +149,8 @@ export async function getClubLevelAliases(clubId: string) {
 }
 
 export async function updateClubLevelAliases(clubId: string, aliases: Record<string, string>) {
-    const supabaseAdmin = await getFilteredAdminClient();
     try {
+        const { supabaseAdmin } = await requireSuperadmin();
         const rows = Object.entries(aliases).map(([code, alias]) => ({
             club_id: clubId,
             level_code: code,

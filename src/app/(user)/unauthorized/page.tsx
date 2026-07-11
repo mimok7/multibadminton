@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { getLevelNameFromCode } from '@/lib/level-info';
+import { isSuperadminProfile } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 
@@ -12,6 +13,7 @@ export default function UnauthorizedPage() {
   const { user, profile, isAdmin } = useUser();
   const levelInfoMap = useLevelInfoMap();
   const [clubRole, setClubRole] = useState<string | null>(null);
+  const isSuperadmin = isSuperadminProfile(profile);
 
   useEffect(() => {
     if (user) {
@@ -47,7 +49,9 @@ export default function UnauthorizedPage() {
               <p><span className="font-medium text-slate-400">사용자:</span> {profile.full_name || profile.username || '이름 없음'}</p>
               <p>
                 <span className="font-medium text-slate-400">권한:</span>{' '}
-                {isAdmin
+                {isSuperadmin
+                  ? '슈퍼관리자'
+                  : isAdmin
                   ? '관리자'
                   : clubRole === 'owner'
                   ? '클럽 소유자'

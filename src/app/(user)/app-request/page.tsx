@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, CheckCircle, Clock, RefreshCw, Send, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/hooks/useUser';
+import { isAdminRole, isManagerRole } from '@/lib/auth';
 
 type AppRequestItem = {
   id: string;
@@ -152,7 +153,7 @@ export default function AppRequestPage() {
     }
   };
 
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
+  const isAdmin = isAdminRole(profile?.role) || isManagerRole(profile?.role);
 
   const filteredRequests = requests.filter(item => 
     activeTab === 'active' ? item.status !== 'completed' : item.status === 'completed'
