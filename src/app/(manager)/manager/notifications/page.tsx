@@ -413,7 +413,7 @@ export default function AdminNotificationsPage() {
             <h1 className="text-xl font-bold tracking-tight">공지사항/알림 관리</h1>
             <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">사용자에게 보낼 알림을 생성하고, 읽음/삭제를 관리합니다.</p>
           </div>
-          <Link href="/admin">
+          <Link href="/manager">
             <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
               <ArrowLeft className="h-3.5 w-3.5" />
               홈

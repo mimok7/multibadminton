@@ -1,24 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { isUserAdmin } from '@/lib/auth';
+import { getClubManagerContext } from '@/lib/manager-access';
 import { readMatchSettings, writeMatchSettings } from '@/lib/match-settings';
 
 async function requireAdmin() {
-  const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status }) };
   }
-
-  if (!(await isUserAdmin(supabase, user))) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { supabase, user };
+  return context;
 }
 
 export async function GET() {

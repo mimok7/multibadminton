@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
   score_team1 INTEGER, -- 팀1 점수
   score_team2 INTEGER, -- 팀2 점수
   winner TEXT, -- 'team1', 'team2', 'draw'
+  next_match_id UUID REFERENCES tournament_matches(id) ON DELETE SET NULL,
+  next_match_slot SMALLINT CHECK (next_match_slot IN (1, 2)),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
 CREATE INDEX IF NOT EXISTS idx_tournaments_assignment ON tournaments(team_assignment_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_tournament ON tournament_matches(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_status ON tournament_matches(status);
+CREATE INDEX IF NOT EXISTS idx_tournament_matches_next_match ON tournament_matches(next_match_id) WHERE next_match_id IS NOT NULL;
 
 -- 코멘트 추가
 COMMENT ON TABLE tournaments IS '대회(토너먼트) 정보';
@@ -59,3 +62,5 @@ COMMENT ON COLUMN tournament_matches.status IS '경기 상태 (pending/in_progre
 COMMENT ON COLUMN tournament_matches.score_team1 IS '팀1 점수';
 COMMENT ON COLUMN tournament_matches.score_team2 IS '팀2 점수';
 COMMENT ON COLUMN tournament_matches.winner IS '승자 (team1/team2/draw)';
+COMMENT ON COLUMN tournament_matches.next_match_id IS '다음 토너먼트 라운드 경기';
+COMMENT ON COLUMN tournament_matches.next_match_slot IS '다음 경기의 팀 슬롯 (1 또는 2)';

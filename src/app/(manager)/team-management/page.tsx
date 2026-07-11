@@ -2284,7 +2284,7 @@ export default function TeamManagementPage() {
             <h1 className="text-xl font-bold tracking-tight">경기 팀 관리</h1>
             <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">경기 일정에 맞춰 2팀, 3팀, 4팀 또는 페어별 팀 구성을 시뮬레이션하고 저장합니다.</p>
           </div>
-          <Link href="/admin">
+          <Link href="/manager">
             <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
               <ArrowLeft className="h-3.5 w-3.5" />
               홈

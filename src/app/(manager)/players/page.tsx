@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RequireAdmin } from '@/components/AuthGuard';
 import { Match } from '@/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -611,8 +610,6 @@ function PlayersPage() {
 // 인증 필요 래핑
 export default function ProtectedPlayersPage() {
   return (
-    <RequireAdmin>
       <PlayersPage />
-    </RequireAdmin>
   );
 }

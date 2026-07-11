@@ -1,10 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, MessageSquareCode, CheckCircle, Clock, RefreshCw, Send, Trash2, HelpCircle, Copy, Check } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, RefreshCw, Send, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/hooks/useUser';
-import { getKoreaDate } from '@/lib/date';
 
 type AppRequestItem = {
   id: string;

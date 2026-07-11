@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Edit2, AlertCircle, Coins, Gift, RefreshCw, Copy, Check, Info, ToggleLeft, ToggleRight, LayoutGrid, List } from 'lucide-react';
+import { Plus, Trash2, Edit2, AlertCircle, Coins, Gift, RefreshCw, Copy, Check, ToggleLeft, ToggleRight, LayoutGrid, List } from 'lucide-react';
 
 type Product = {
   id: string;

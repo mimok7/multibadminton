@@ -38,21 +38,25 @@ export interface GeneratedMatch {
   match_number: number;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   team1_player1: {
+    id?: string | null;
     name: string;
     skill_level: string;
     score?: number;
   };
   team1_player2: {
+    id?: string | null;
     name: string;
     skill_level: string;
     score?: number;
   };
   team2_player1: {
+    id?: string | null;
     name: string;
     skill_level: string;
     score?: number;
   };
   team2_player2: {
+    id?: string | null;
     name: string;
     skill_level: string;
     score?: number;

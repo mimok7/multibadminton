@@ -21,7 +21,7 @@ interface Club {
 
 export default function ClubManagementClient({ initialClubs }: { initialClubs: Club[] }) {
     const router = useRouter();
-    const [clubs, setClubs] = useState<Club[]>(initialClubs);
+    const [clubs] = useState<Club[]>(initialClubs);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isAliasModalOpen, setIsAliasModalOpen] = useState(false);
     const [selectedClub, setSelectedClub] = useState<Club | null>(null);

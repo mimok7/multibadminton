@@ -142,6 +142,9 @@ interface Match {
   score_team1?: number;
   score_team2?: number;
   winner?: 'team1' | 'team2' | 'draw';
+  next_match_number?: number;
+  next_match_slot?: 1 | 2;
+  is_bracket_slot?: boolean;
 }
 
 interface Tournament {
@@ -1323,29 +1326,84 @@ export default function TournamentMatchesPage() {
     return matches;
   };
 
-  const createKnockoutOpeningMatchesForPairs = (
+  const createKnockoutBracketMatchesForPairs = (
     pairs: PairEntry[],
     roundOffset: number,
     matchNumberOffset: number,
-    courtCount: number
+    courtCount: number,
+    groupName: string,
+    emptyInitialRound = false
   ) => {
     const seededPairs = [...pairs].sort((left, right) => right.totalScore - left.totalScore);
-    const matches: Match[] = [];
+    const mainBracketSize = 2 ** Math.floor(Math.log2(Math.max(2, seededPairs.length)));
+    const playInCount = seededPairs.length - mainBracketSize;
+    const directEntryCount = mainBracketSize - playInCount;
+    const rounds: Match[][] = [];
     let nextMatchNumber = matchNumberOffset;
 
-    for (let leftIndex = 0, rightIndex = seededPairs.length - 1; leftIndex < rightIndex; leftIndex += 1, rightIndex -= 1) {
-      matches.push(
-        createPairMatch(
-          seededPairs[leftIndex],
-          seededPairs[rightIndex],
-          nextMatchNumber++,
-          roundOffset,
-          ((nextMatchNumber - 2) % courtCount) + 1
-        )
+    const playInMatches: Match[] = [];
+    const mainEntries: Array<{ pair?: PairEntry; playInMatch?: Match }> = seededPairs
+      .slice(0, directEntryCount)
+      .map((pair) => ({ pair }));
+
+    for (let index = 0; index < playInCount; index += 1) {
+      const playInMatch = createPairMatch(
+        seededPairs[directEntryCount + index],
+        seededPairs[seededPairs.length - 1 - index],
+        nextMatchNumber++,
+        roundOffset,
+        (index % courtCount) + 1
       );
+      playInMatch.court = `[${groupName}] ${playInMatch.court}`;
+      playInMatches.push(playInMatch);
+      mainEntries.push({ playInMatch });
     }
 
-    return matches;
+    const mainRoundCount = Math.log2(mainBracketSize);
+    for (let roundIndex = 0; roundIndex < mainRoundCount; roundIndex += 1) {
+      const matchCount = mainBracketSize / 2 ** (roundIndex + 1);
+      const roundMatches: Match[] = [];
+
+      for (let matchIndex = 0; matchIndex < matchCount; matchIndex += 1) {
+        const team1Entry = !emptyInitialRound && roundIndex === 0 ? mainEntries[matchIndex * 2] : null;
+        const team2Entry = !emptyInitialRound && roundIndex === 0 ? mainEntries[matchIndex * 2 + 1] : null;
+        const courtNumber = (matchIndex % courtCount) + 1;
+
+        roundMatches.push({
+          tournament_id: '',
+          round: roundOffset + (playInCount > 0 ? roundIndex + 1 : roundIndex),
+          match_number: nextMatchNumber++,
+          team1: team1Entry?.pair?.players || [],
+          team2: team2Entry?.pair?.players || [],
+          team1_levels: team1Entry?.pair ? [team1Entry.pair.totalScore] : [],
+          team2_levels: team2Entry?.pair ? [team2Entry.pair.totalScore] : [],
+          court: `[${groupName}] ${courtNumber}코트`,
+          status: 'pending',
+          is_bracket_slot: true,
+        });
+      }
+
+      rounds.push(roundMatches);
+    }
+
+    if (playInMatches.length > 0) {
+      const openingRound = rounds[0];
+      mainEntries.forEach((entry, index) => {
+        if (!entry.playInMatch) return;
+        entry.playInMatch.next_match_number = openingRound[Math.floor(index / 2)].match_number;
+        entry.playInMatch.next_match_slot = index % 2 === 0 ? 1 : 2;
+      });
+    }
+
+    rounds.slice(0, -1).forEach((roundMatches, roundIndex) => {
+      roundMatches.forEach((match, matchIndex) => {
+        const nextMatch = rounds[roundIndex + 1][Math.floor(matchIndex / 2)];
+        match.next_match_number = nextMatch.match_number;
+        match.next_match_slot = matchIndex % 2 === 0 ? 1 : 2;
+      });
+    });
+
+    return [...playInMatches, ...rounds.flat()];
   };
 
   const buildPairTournamentMatches = (assignment: TeamAssignment) => {
@@ -1392,14 +1450,16 @@ export default function TournamentMatchesPage() {
       }
 
       if (groupConfig.format === 'knockout') {
-        const knockoutMatches = createKnockoutOpeningMatchesForPairs(
+        const knockoutMatches = createKnockoutBracketMatchesForPairs(
           configuredPairs,
           roundCursor,
           matchNumberCursor,
-          courtCount
+          courtCount,
+          groupConfig.groupName
         );
         matches.push(...knockoutMatches);
-        roundCursor += knockoutMatches.length > 0 ? 1 : 0;
+        const mainBracketSize = 2 ** Math.floor(Math.log2(Math.max(2, configuredPairs.length)));
+        roundCursor += Math.log2(mainBracketSize) + (configuredPairs.length > mainBracketSize ? 1 : 0);
         matchNumberCursor += knockoutMatches.length;
         return;
       }
@@ -1419,14 +1479,17 @@ export default function TournamentMatchesPage() {
         .sort((left, right) => right.totalScore - left.totalScore)
         .slice(0, Math.max(2, Math.min(groupConfig.knockoutQualifiers, configuredPairs.length)));
 
-      const knockoutMatches = createKnockoutOpeningMatchesForPairs(
+      const knockoutMatches = createKnockoutBracketMatchesForPairs(
         qualifiers,
         roundCursor,
         matchNumberCursor,
-        courtCount
+        courtCount,
+        groupConfig.groupName,
+        true
       );
       matches.push(...knockoutMatches);
-      roundCursor += knockoutMatches.length > 0 ? 1 : 0;
+      const mainBracketSize = 2 ** Math.floor(Math.log2(Math.max(2, qualifiers.length)));
+      roundCursor += Math.log2(mainBracketSize) + (qualifiers.length > mainBracketSize ? 1 : 0);
       matchNumberCursor += knockoutMatches.length;
     });
 
@@ -1520,7 +1583,12 @@ export default function TournamentMatchesPage() {
             title: tournamentTitle,
             tournament_date: tournamentDate,
             round_number: roundNumber,
-            match_type: selectedAssignment.team_type === 'pairs' ? 'pairs_custom' : matchType,
+            match_type:
+              selectedAssignment.team_type === 'pairs' && pairGroupSettings.every((group) => group.format === 'knockout')
+                ? 'pairs_knockout'
+                : selectedAssignment.team_type === 'pairs'
+                  ? 'pairs_custom'
+                  : matchType,
             team_assignment_id: selectedAssignment.id,
             team_type: selectedAssignment.team_type,
             total_teams: teams.length,
@@ -2348,7 +2416,7 @@ export default function TournamentMatchesPage() {
             <h1 className="text-xl font-bold tracking-tight">게임 경기 관리</h1>
             <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">팀 구성을 선택하여 게임 경기 일정을 생성하고 관리합니다.</p>
           </div>
-          <Link href="/admin">
+          <Link href="/manager">
             <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
               <ArrowLeft className="h-3.5 w-3.5" />
               홈
@@ -2565,7 +2633,7 @@ export default function TournamentMatchesPage() {
                   </label>
                   <div className="space-y-3">
                     <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                      토너먼트와 리그후 토너먼트는 현재 생성 시점 기준으로 오프닝 라운드를 배정합니다.
+                      모든 그룹을 토너먼트로 선택하면 모든 라운드를 생성하고 경기 결과에 따라 승자를 다음 라운드에 자동 배정합니다. 리그+토너 방식은 리그 결과 확정 후 토너먼트를 생성하세요.
                     </div>
                     {pairGroupSettings.map((group) => (
                       <div key={group.groupName} className="rounded border border-slate-200 bg-white p-3 text-xs">

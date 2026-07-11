@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 import { getActiveClubId } from '@/lib/club';

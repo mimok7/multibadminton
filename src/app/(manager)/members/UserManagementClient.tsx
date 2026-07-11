@@ -4,14 +4,16 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import type { AdminUser } from '@/types';
-import { createMembersBulk, deleteUser, updateUser, updateUsersBulk, updateRatingSettings, resetUserPassword, resetAttendanceAll, resetWinRateAll, resetMemberData } from './actions';
+import { createMember, createMembersBulk, deleteUser, updateUser, updateUsersBulk, updateRatingSettings, resetUserPassword, resetAttendanceAll, resetWinRateAll, resetMemberData } from './actions';
 import type { UpdateUserPayload } from './actions';
+import { updateLevelAliases } from '../settings/actions';
 import { useRouter } from 'next/navigation';
 import { Activity, Calendar, Filter, Key, LayoutGrid, List, Save, Search, Shield, Trash2, UserPlus, Users, Trophy, ArrowLeft, RotateCcw } from 'lucide-react';
 
 type LevelOption = {
     code: string;
     description: string | null;
+    standardDescription?: string | null;
     score: number | null;
 };
 
@@ -51,6 +53,7 @@ function normalizeEditableRole(value?: string | null): 'user' | 'manager' {
 
 export default function UserManagementClient({
     users,
+    clubId,
     myUserId,
     myUserEmail,
     levelOptions: levelOptionsFromDb,
@@ -59,6 +62,7 @@ export default function UserManagementClient({
     ratingSettings,
 }: {
     users: AdminUser[];
+    clubId: string;
     myUserId: string;
     myUserEmail: string;
     levelOptions: LevelOption[];
@@ -96,22 +100,22 @@ export default function UserManagementClient({
         full_name: '',
         email: '',
         password: '',
-        skill_level: levelOptionsFromDb[0]?.code || '',
+        skill_level: '',
         gender: '',
         role: 'user',
     });
     const [bulkNames, setBulkNames] = useState('');
+    const [levelAliases, setLevelAliases] = useState<Record<string, string>>(
+        () => levelOptionsFromDb.reduce<Record<string, string>>((result, option) => {
+            result[option.code] = option.description || option.code;
+            return result;
+        }, {})
+    );
 
     const isSuperAdmin = useMemo(() => {
         const me = users.find(u => u.id === myUserId);
         if (!me) return myUserEmail === 'kjh@hyojacho.es.kr';
         return me.email === 'kjh@hyojacho.es.kr' || me.username === 'kjh' || me.full_name === '김진호';
-    }, [users, myUserId, myUserEmail]);
-
-    const isCurrentUserAdmin = useMemo(() => {
-        const me = users.find(u => u.id === myUserId);
-        if (!me) return myUserEmail === 'kjh@hyojacho.es.kr';
-        return me.role === 'admin' || me.email === 'kjh@hyojacho.es.kr' || me.username === 'kjh' || me.full_name === '김진호';
     }, [users, myUserId, myUserEmail]);
 
     const levelOptions = useMemo(
@@ -121,7 +125,6 @@ export default function UserManagementClient({
             : [],
         [levelOptionsFromDb]
     );
-    const hasSearchQuery = searchQuery.trim().length > 0;
     const etcLevelOption = useMemo(
         () => findEtcLevelOption(levelOptionsFromDb),
         [levelOptionsFromDb]
@@ -130,6 +133,13 @@ export default function UserManagementClient({
     useEffect(() => {
         setMemberList(users);
     }, [users]);
+
+    useEffect(() => {
+        setLevelAliases(levelOptionsFromDb.reduce<Record<string, string>>((result, option) => {
+            result[option.code] = option.description || option.code;
+            return result;
+        }, {}));
+    }, [levelOptionsFromDb]);
 
     useEffect(() => {
         const checkMobile = window.matchMedia('(max-width: 768px)').matches;
@@ -160,14 +170,6 @@ export default function UserManagementClient({
 
         setDraftsByUserId(nextDrafts);
     }, [users, levelOptionsFromDb]);
-
-    useEffect(() => {
-        setNewMember((prev) => (
-            prev.skill_level || levelOptionsFromDb.length === 0
-                ? prev
-                : { ...prev, skill_level: levelOptionsFromDb[0].code }
-        ));
-    }, [levelOptionsFromDb]);
 
     const normalizeSkillLevel = (value?: string | null) => String(value || '').trim().toUpperCase();
 
@@ -216,6 +218,42 @@ export default function UserManagementClient({
                 alert('평가 기간이 성공적으로 저장되었습니다.');
                 router.refresh();
             }
+        });
+    };
+
+    const handleSaveLevelAliases = () => {
+        startTransition(async () => {
+            const result = await updateLevelAliases(clubId, levelAliases);
+            if (result.error) {
+                alert(`레벨 별칭 저장 실패: ${result.error}`);
+                return;
+            }
+
+            alert('클럽별 레벨 별칭이 저장되었습니다.');
+            router.refresh();
+        });
+    };
+
+    const handleApplyStandardDescriptions = () => {
+        if (!window.confirm('현재 클럽의 모든 별칭을 level_info.description 값으로 덮어쓰시겠습니까?')) {
+            return;
+        }
+
+        const standardAliases = levelOptionsFromDb.reduce<Record<string, string>>((result, option) => {
+            result[option.code] = option.standardDescription?.trim() || option.description?.trim() || option.code;
+            return result;
+        }, {});
+
+        setLevelAliases(standardAliases);
+        startTransition(async () => {
+            const result = await updateLevelAliases(clubId, standardAliases);
+            if (result.error) {
+                alert(`기본 별칭 일괄 적용 실패: ${result.error}`);
+                return;
+            }
+
+            alert('level_info.description 별칭이 클럽에 일괄 적용되었습니다.');
+            router.refresh();
         });
     };
 
@@ -335,11 +373,20 @@ export default function UserManagementClient({
             alert('회원 이름을 입력해 주세요.');
             return;
         }
+        if (!newMember.skill_level) {
+            alert('급수를 선택해 주세요.');
+            return;
+        }
+        if (!newMember.gender) {
+            alert('성별을 선택해 주세요.');
+            return;
+        }
 
         startTransition(async () => {
-            const result = await createMembersBulk({
-                full_names: newMember.full_name,
+            const result = await createMember({
+                full_name: newMember.full_name,
                 skill_level: normalizeSkillLevel(newMember.skill_level),
+                gender: newMember.gender,
                 role: newMember.role as 'manager' | 'member',
             });
 
@@ -348,20 +395,13 @@ export default function UserManagementClient({
                 return;
             }
 
-            const failCount = result.failCount ?? 0;
-            const successCount = result.successCount ?? 0;
-
-            if (failCount > 0) {
-                alert(`일부 회원 추가 실패 (${failCount}명). 성공: ${successCount}명.`);
-            } else {
-                alert(`성공적으로 추가되었습니다 (${successCount}명).`);
-            }
+            alert('회원이 성공적으로 추가되었습니다.');
 
             setNewMember({
                 full_name: '',
                 email: '',
                 password: '',
-                skill_level: levelOptionsFromDb[0]?.code || '',
+                skill_level: '',
                 gender: '',
                 role: 'user',
             });
@@ -574,7 +614,7 @@ export default function UserManagementClient({
 
         startTransition(async () => {
             const res = await updateUsersBulk(items);
-            if (res?.error) {
+            if ('error' in res && res.error) {
                 alert(`전체 저장 실패: ${res.error}`);
                 return;
             }
@@ -596,6 +636,8 @@ export default function UserManagementClient({
                     role: draft.role === 'admin' ? 'admin' : normalizeEditableRole(draft.role),
                 };
             }));
+            const updatedCount = 'updatedCount' in res ? res.updatedCount : items.length;
+            alert(`전체 저장이 완료되었습니다. (${updatedCount}명)`);
             router.refresh();
         });
     };
@@ -645,6 +687,9 @@ export default function UserManagementClient({
         const adminCount = memberList.filter((user) => user.role === 'admin').length;
         const managerCount = memberList.filter((user) => user.role === 'manager').length;
         const linkedCount = memberList.filter((user) => Boolean(user.email)).length;
+        const maleCount = memberList.filter((user) => user.gender === 'M').length;
+        const femaleCount = memberList.filter((user) => user.gender === 'F').length;
+        const unspecifiedGenderCount = memberList.filter((user) => !['M', 'F', 'O'].includes(String(user.gender || '').toUpperCase())).length;
         const topAttendance = [...memberList]
             .map((user) => ({
                 ...user,
@@ -679,6 +724,9 @@ export default function UserManagementClient({
             adminCount,
             managerCount,
             linkedCount,
+            maleCount,
+            femaleCount,
+            unspecifiedGenderCount,
             topAttendance,
             topWinRate,
         };
@@ -697,6 +745,7 @@ export default function UserManagementClient({
                 <table className="min-w-full text-sm">
                     <thead className="bg-slate-100 text-slate-600">
                         <tr>
+                            <th className="px-4 py-3 text-center font-semibold">순번</th>
                             <th className="px-4 py-3 text-left font-semibold">
                                 <button type="button" onClick={() => toggleSort('member')} className="inline-flex items-center gap-1 hover:text-slate-900">
                                     회원
@@ -737,7 +786,7 @@ export default function UserManagementClient({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {sortedUsers.map((user) => {
+                        {sortedUsers.map((user, index) => {
                             const draft = getDraft(user);
                             const isDirty = hasPendingChanges(user);
                             const normalizedRole = user.role === 'admin' ? 'admin' : normalizeEditableRole(user.role);
@@ -746,6 +795,7 @@ export default function UserManagementClient({
 
                             return (
                                 <tr key={user.id} className={isDirty ? 'bg-amber-50/60' : 'bg-white'}>
+                                    <td className="px-4 py-3 text-center align-top font-semibold text-slate-500">{index + 1}</td>
                                     <td className="px-4 py-3 align-top">
                                         <div className="space-y-2">
                                             <input
@@ -805,7 +855,9 @@ export default function UserManagementClient({
                                         <select
                                             value={draft.gender ?? ''}
                                             onChange={(e) => updateDraft(user.id, { gender: e.target.value })}
-                                            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                                                draft.gender ? 'border-slate-300 bg-white' : 'border-amber-300 bg-amber-50 text-amber-800'
+                                            }`}
                                         >
                                             <option value="">미지정</option>
                                             <option value="M">남성</option>
@@ -864,7 +916,7 @@ export default function UserManagementClient({
 
     const renderMemberCards = () => (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5">
-            {sortedUsers.map((user) => {
+            {sortedUsers.map((user, index) => {
                 const draft = getDraft(user);
                 const isDirty = hasPendingChanges(user);
                 const normalizedRole = user.role === 'admin' ? 'admin' : normalizeEditableRole(user.role);
@@ -884,6 +936,7 @@ export default function UserManagementClient({
                             {/* Card Header */}
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex-1 min-w-0">
+                                    <div className="mb-1 text-xs font-semibold text-slate-400">{index + 1}번</div>
                                     <input
                                         value={draft.full_name ?? ''}
                                         onChange={(e) => updateDraft(user.id, { full_name: e.target.value })}
@@ -939,7 +992,9 @@ export default function UserManagementClient({
                                     <select
                                         value={draft.gender ?? ''}
                                         onChange={(e) => updateDraft(user.id, { gender: e.target.value })}
-                                        className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm bg-white"
+                                        className={`mt-1 w-full rounded-md border px-2 py-1 text-sm ${
+                                            draft.gender ? 'border-slate-300 bg-white' : 'border-amber-300 bg-amber-50 text-amber-800'
+                                        }`}
                                     >
                                         <option value="">미지정</option>
                                         <option value="M">남성</option>
@@ -1041,7 +1096,7 @@ export default function UserManagementClient({
                         <h1 className="text-xl font-bold tracking-tight">회원 운영 센터</h1>
                         <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">회원 정보, 권한, 급수, 출석 흐름을 한 화면에서 관리합니다.</p>
                     </div>
-                    <Link href="/admin">
+                    <Link href="/manager">
                         <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
                             <ArrowLeft className="h-3.5 w-3.5" />
                             홈
@@ -1164,18 +1219,76 @@ export default function UserManagementClient({
                         <div className="mt-3 grid gap-2 sm:mt-4 sm:gap-3 grid-cols-2 xl:grid-cols-3">
                             {levelSummary.map((item) => (
                                 <div key={item.level} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                                    <div className="text-sm font-semibold text-slate-900">{formatLevelGroupLabel(item.level)}</div>
+                                    <div className="text-sm font-semibold text-slate-900">{item.level}</div>
                                     <div className="mt-2 text-2xl font-semibold text-slate-900">{item.count.total}</div>
-                                    <div className="mt-1 text-xs text-slate-500">
-                                        남 {item.count.male} / 여 {item.count.female}
-                                    </div>
                                 </div>
                             ))}
                         </div>
                     </section>
 
+                    {/* 2. 클럽별 레벨 별칭 */}
+                    <section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 sm:p-5 lg:col-span-4 lg:row-start-2">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-900">클럽별 레벨·별칭</h2>
+                                <p className="mt-1 text-sm text-slate-600">
+                                    기본 레벨은 <code>level_info.description</code>이며, 이 클럽에서 표시할 별칭을 수정할 수 있습니다.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleApplyStandardDescriptions}
+                                    disabled={isPending}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-40"
+                                >
+                                    기본 설명 일괄 적용
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveLevelAliases}
+                                    disabled={isPending}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                                >
+                                    <Save className="size-4" />
+                                    {isPending ? '저장 중...' : '별칭 저장'}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                            <table className="min-w-full text-sm">
+                                <thead className="bg-slate-100 text-left text-xs text-slate-600">
+                                    <tr>
+                                        <th className="px-3 py-2 font-semibold">레벨</th>
+                                        <th className="px-3 py-2 font-semibold">level_info.description</th>
+                                        <th className="px-3 py-2 font-semibold">점수</th>
+                                        <th className="px-3 py-2 font-semibold">클럽 별칭</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {levelOptionsFromDb.map((option) => (
+                                        <tr key={option.code}>
+                                            <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-900">{option.code}</td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-slate-600">{option.standardDescription || option.description || option.code}</td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-slate-600">{option.score ?? '-'}</td>
+                                            <td className="px-3 py-2">
+                                                <input
+                                                    type="text"
+                                                    value={levelAliases[option.code] ?? ''}
+                                                    onChange={(event) => setLevelAliases((current) => ({ ...current, [option.code]: event.target.value }))}
+                                                    className="w-full min-w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                    aria-label={`${option.code} 클럽 별칭`}
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
                     {/* 2. 승률 상위 */}
-                    <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 lg:col-span-1">
+                    <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 lg:col-span-1 lg:col-start-3 lg:row-start-1">
                         <h2 className="text-lg font-semibold text-slate-900">승률 상위 5</h2>
                         <div className="mt-3 space-y-2.5 sm:mt-4 sm:space-y-3">
                             {overview.topWinRate.length === 0 ? (
@@ -1207,7 +1320,7 @@ export default function UserManagementClient({
                     </section>
 
                     {/* 3. 출석 상위 */}
-                    <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 lg:col-span-1">
+                    <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 lg:col-span-1 lg:col-start-4 lg:row-start-1">
                         <h2 className="text-lg font-semibold text-slate-900">출석 상위</h2>
                         <div className="mt-3 space-y-2.5 sm:mt-4 sm:space-y-3">
                             {overview.topAttendance.map((user, index) => (
@@ -1238,6 +1351,11 @@ export default function UserManagementClient({
                             <div className="text-sm font-semibold text-sky-900">변경 대기</div>
                             <div className="text-sm text-sky-700">
                                 {dirtyCount > 0 ? `${dirtyCount}명의 수정 내용이 아직 저장되지 않았습니다.` : '현재 저장 대기 중인 수정 내용이 없습니다.'}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                                <span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">남성 {overview.maleCount}명</span>
+                                <span className="rounded-full bg-pink-100 px-2.5 py-1 text-pink-800">여성 {overview.femaleCount}명</span>
+                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">성별 미지정 {overview.unspecifiedGenderCount}명</span>
                             </div>
                         </div>
                         <button
@@ -1343,6 +1461,7 @@ export default function UserManagementClient({
                                 <table className="min-w-full text-sm">
                                     <thead className="bg-slate-100 text-slate-600">
                                         <tr>
+                                            <th className="px-4 py-3 text-center font-semibold w-16">순번</th>
                                             <th className="px-4 py-3 text-left font-semibold">회원</th>
                                             <th className="px-4 py-3 text-right font-semibold">누적 출석</th>
                                             <th className="px-4 py-3 text-right font-semibold">최근 30일</th>
@@ -1351,8 +1470,9 @@ export default function UserManagementClient({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200">
-                                        {attendanceRows.map((user) => (
+                                        {attendanceRows.map((user, index) => (
                                             <tr key={user.id}>
+                                                <td className="px-4 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
                                                 <td className="px-4 py-3">
                                                     <div className="font-medium text-slate-900">{user.full_name || user.username || user.email}</div>
                                                     <div className="text-xs text-slate-500">{formatLevelGroupLabel(normalizeLevelKey(user.skill_level))}</div>
@@ -1379,9 +1499,10 @@ export default function UserManagementClient({
                         </section>
                     ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
-                            {attendanceRows.map((user) => (
+                            {attendanceRows.map((user, index) => (
                                 <div key={user.id} className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-sm hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between">
                                     <div>
+                                        <div className="text-xs font-semibold text-slate-400">{index + 1}번</div>
                                         <div className="font-bold text-base text-slate-800 truncate" title={user.full_name || user.username || user.email}>
                                             {user.full_name || user.username || user.email}
                                         </div>
@@ -1606,14 +1727,16 @@ export default function UserManagementClient({
                                 value={newMember.full_name}
                                 onChange={(e) => setNewMember((prev) => ({ ...prev, full_name: e.target.value }))}
                                 placeholder="이름 (예: 홍길동)"
+                                required
                                 className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
                             />
                             <select
                                 value={newMember.skill_level}
-                                disabled={!isCurrentUserAdmin}
                                 onChange={(e) => setNewMember((prev) => ({ ...prev, skill_level: e.target.value }))}
-                                className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                                required
+                                className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
                             >
+                                <option value="" disabled>급수를 선택하세요</option>
                                 {levelOptions.map((levelCode) => {
                                     const option = getLevelOptionMeta(levelCode);
                                     return (
@@ -1626,9 +1749,10 @@ export default function UserManagementClient({
                             <select
                                 value={newMember.gender}
                                 onChange={(e) => setNewMember((prev) => ({ ...prev, gender: e.target.value }))}
+                                required
                                 className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
                             >
-                                <option value="">성별 미지정</option>
+                                <option value="" disabled>성별을 선택하세요</option>
                                 <option value="M">남성</option>
                                 <option value="F">여성</option>
                                 <option value="O">기타</option>

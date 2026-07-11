@@ -7,7 +7,7 @@ import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 
 export default function ManagerDashboardPage() {
-  const { profile, loading, isAdmin } = useUser();
+  const { profile, loading } = useUser();
   const { clubName } = useClub();
   const router = useRouter();
 

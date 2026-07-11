@@ -1,27 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole } from '@/lib/auth';
+import { getClubManagerContext } from '@/lib/manager-access';
 import { getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
 
 async function requireAdmin() {
-  const supabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status }) };
   }
-
-  const userRole = await getUserRole(supabase, user);
-  if (!userRole || !['admin', 'manager'].includes(userRole)) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { adminSupabase };
+  return context;
 }
 
 export async function GET(
@@ -49,8 +36,37 @@ export async function GET(
     }
 
     const rows = matches || [];
+    const { data: clubMembers, error: membersError } = await adminContext.adminSupabase
+      .from('club_members')
+      .select('user_id')
+      .eq('status', 'active');
+
+    if (membersError) {
+      console.error('Admin session players lookup error:', membersError);
+      return NextResponse.json({ error: 'Failed to load club players' }, { status: 500 });
+    }
+
+    const clubPlayerIds = (clubMembers || []).map((member) => member.user_id).filter(Boolean);
+    const { data: clubProfiles, error: clubProfilesError } = clubPlayerIds.length > 0
+      ? await adminContext.adminSupabase
+        .from('profiles')
+        .select('id, username, full_name, skill_level')
+        .in('id', clubPlayerIds)
+      : { data: [], error: null };
+
+    if (clubProfilesError) {
+      console.error('Admin session club profiles lookup error:', clubProfilesError);
+      return NextResponse.json({ error: 'Failed to load club players' }, { status: 500 });
+    }
+
+    const availablePlayers = (clubProfiles || []).map((profile) => ({
+      id: profile.id,
+      name: profile.full_name || profile.username || '선수',
+      skill_level: profile.skill_level || 'E2',
+    }));
+
     if (rows.length === 0) {
-      return NextResponse.json({ matches: [] });
+      return NextResponse.json({ matches: [], players: availablePlayers });
     }
 
     const profileIds = Array.from(
@@ -122,21 +138,25 @@ export async function GET(
       match_number: match.match_number,
       status: match.status || 'scheduled',
       team1_player1: {
+        id: match.team1_player1_id,
         name: getProfileName(profileMap.get(match.team1_player1_id || '') || null, '선수1'),
         skill_level: profileMap.get(match.team1_player1_id || '')?.skill_level || 'E2',
         score: getLevelScoreFromCode(levelInfoMap, profileMap.get(match.team1_player1_id || '')?.skill_level, 0),
       },
       team1_player2: {
+        id: match.team1_player2_id,
         name: getProfileName(profileMap.get(match.team1_player2_id || '') || null, '선수2'),
         skill_level: profileMap.get(match.team1_player2_id || '')?.skill_level || 'E2',
         score: getLevelScoreFromCode(levelInfoMap, profileMap.get(match.team1_player2_id || '')?.skill_level, 0),
       },
       team2_player1: {
+        id: match.team2_player1_id,
         name: getProfileName(profileMap.get(match.team2_player1_id || '') || null, '선수3'),
         skill_level: profileMap.get(match.team2_player1_id || '')?.skill_level || 'E2',
         score: getLevelScoreFromCode(levelInfoMap, profileMap.get(match.team2_player1_id || '')?.skill_level, 0),
       },
       team2_player2: {
+        id: match.team2_player2_id,
         name: getProfileName(profileMap.get(match.team2_player2_id || '') || null, '선수4'),
         skill_level: profileMap.get(match.team2_player2_id || '')?.skill_level || 'E2',
         score: getLevelScoreFromCode(levelInfoMap, profileMap.get(match.team2_player2_id || '')?.skill_level, 0),
@@ -144,9 +164,70 @@ export async function GET(
       is_scheduled: scheduledIds.has(match.id),
     }));
 
-    return NextResponse.json({ matches: normalizedMatches });
+    return NextResponse.json({ matches: normalizedMatches, players: availablePlayers });
   } catch (error) {
     console.error('Admin generated matches GET unexpected error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  try {
+    const adminContext = await requireAdmin();
+    if ('error' in adminContext) return adminContext.error;
+
+    const { sessionId } = await params;
+    const body = await request.json().catch(() => null);
+    const matchId = Number(body?.matchId);
+    const playerIds = [
+      body?.team1_player1_id,
+      body?.team1_player2_id,
+      body?.team2_player1_id,
+      body?.team2_player2_id,
+    ].map((id) => typeof id === 'string' && id.trim() ? id.trim() : null);
+
+    if (!Number.isInteger(matchId) || playerIds.some((id) => !id)) {
+      return NextResponse.json({ error: '경기와 선수 4명을 모두 선택해 주세요.' }, { status: 400 });
+    }
+
+    const uniquePlayerIds = Array.from(new Set(playerIds)) as string[];
+    if (uniquePlayerIds.length !== 4) {
+      return NextResponse.json({ error: '한 경기에서 같은 선수를 중복 배정할 수 없습니다.' }, { status: 400 });
+    }
+
+    const { data: activeMembers, error: membersError } = await adminContext.adminSupabase
+      .from('club_members')
+      .select('user_id')
+      .eq('status', 'active')
+      .in('user_id', uniquePlayerIds);
+
+    if (membersError || (activeMembers || []).length !== uniquePlayerIds.length) {
+      return NextResponse.json({ error: '현재 클럽에 소속된 선수만 배정할 수 있습니다.' }, { status: 400 });
+    }
+
+    const { data, error } = await adminContext.adminSupabase
+      .from('generated_matches')
+      .update({
+        team1_player1_id: playerIds[0],
+        team1_player2_id: playerIds[1],
+        team2_player1_id: playerIds[2],
+        team2_player2_id: playerIds[3],
+      })
+      .eq('id', matchId)
+      .eq('session_id', sessionId)
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ error: error?.message || '경기 배정 저장에 실패했습니다.' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, matchId });
+  } catch (error) {
+    console.error('Admin generated match PUT unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

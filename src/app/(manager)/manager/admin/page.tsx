@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole } from '@/lib/auth';
 import { getClubsWithMemberCount } from './actions';
 import ClubManagementClient from './ClubManagementClient';
 

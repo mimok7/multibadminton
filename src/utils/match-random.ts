@@ -1,5 +1,5 @@
 import { Player, Match, Team } from '@/types';
-import { shuffle, getLevelGroup, getTeamScore, getTeamMatchScore, reorderMatchesToAvoidConsecutive, MAX_TEAM_SCORE_DIFF } from './match-helpers';
+import { getTeamScore, reorderMatchesToAvoidConsecutive } from './match-helpers';
 
 export function createRandomBalancedDoublesMatches(playersInput: Player[], minGamesPerPlayer = 1): Match[] {
   if (!Array.isArray(playersInput) || playersInput.length < 4) return [];

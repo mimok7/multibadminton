@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getUserClubs } from '@/lib/club';
 import ClubSelectorClient from './ClubSelectorClient';
-import { setActiveClubAction as setServerActiveClub } from '@/app/actions/club';
 import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getUserRole } from '@/lib/auth';
 
@@ -40,11 +39,6 @@ export default async function SelectClubPage({
   } else {
     clubs = (await getUserClubs()) as any[];
   }
-
-  const resolvedSearchParams = await searchParams;
-  const redirectTo = resolvedSearchParams?.redirectTo || '/';
-
-
 
   return (
     <div className="min-h-screen bg-[#0b0f19] flex flex-col items-center justify-center p-6 relative">

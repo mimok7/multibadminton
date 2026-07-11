@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo, Fragment } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
-import { RequireAdmin } from '@/components/AuthGuard';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
 import { getFriendlyErrorMessage } from '@/lib/utils';
@@ -701,7 +700,7 @@ function MatchResultsPage() {
               <h1 className="text-xl font-bold tracking-tight">오늘 참가자 승률 TOP 5</h1>
               <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">오늘 참가한 선수들의 승률 순위와 경기 결과를 확인합니다.</p>
             </div>
-            <Link href="/admin">
+            <Link href="/manager">
               <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
                 <ArrowLeft className="h-3.5 w-3.5" />
                 홈
@@ -935,8 +934,6 @@ function MatchResultsPage() {
 
 export default function ProtectedMatchResultsPage() {
   return (
-    <RequireAdmin>
       <MatchResultsPage />
-    </RequireAdmin>
   );
 }

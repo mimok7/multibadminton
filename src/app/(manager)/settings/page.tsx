@@ -1,7 +1,5 @@
 import { redirect } from 'next/navigation'
 import { getSupabaseServerClient } from '@/lib/supabase-server'
-import { getClubRole } from '@/lib/club-auth'
-import { isUserAdmin } from '@/lib/auth'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
 import ClubSettingsClient from './ClubSettingsClient'
 import { cookies } from 'next/headers'

@@ -10,7 +10,6 @@ import {
   Check,
   CheckCheck,
   RefreshCw,
-  Home,
   Filter,
   BellOff,
   ArrowLeft,

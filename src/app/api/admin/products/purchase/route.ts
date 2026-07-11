@@ -1,32 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getProfileByUserId, isAdminRole } from '@/lib/auth';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getClubManagerContext } from '@/lib/manager-access';
 
 async function requireAdmin() {
-  const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient() as any;
-  const {
-    data: { user },
-    error: authError,
-  } = await serverSupabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status }) };
   }
-
-  const currentProfile = await getProfileByUserId(serverSupabase, user.id);
-  if (!currentProfile || !isAdminRole(currentProfile.role)) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { adminSupabase, currentProfile };
+  return context;
 }
 
 export async function POST(request: Request) {
   const context = await requireAdmin();
   if ('error' in context) return context.error;
 
-  const { adminSupabase } = context;
+  const { adminSupabase, clubId } = context;
   const body = await request.json().catch(() => null);
 
   const profileId = String(body?.profile_id || '');
@@ -40,7 +28,13 @@ export async function POST(request: Request) {
     // 1. 상품 및 사용자 잔액 조회
     const [productRes, profileRes] = await Promise.all([
       adminSupabase.from('products').select('*').eq('id', productId).single(),
-      adminSupabase.from('profiles').select('coin_balance').eq('id', profileId).single(),
+      adminSupabase
+        .from('club_members')
+        .select('coin_balance')
+        .eq('club_id', clubId)
+        .eq('user_id', profileId)
+        .eq('status', 'active')
+        .single(),
     ]);
 
     if (productRes.error || !productRes.data) {
@@ -52,26 +46,27 @@ export async function POST(request: Request) {
     }
 
     const product = productRes.data;
-    const profile = profileRes.data;
+    const member = profileRes.data;
 
     if (!product.is_active) {
       return NextResponse.json({ error: '비활성화된 상품입니다.' }, { status: 400 });
     }
 
-    if ((profile.coin_balance ?? 0) < product.coin_price) {
+    if ((member.coin_balance ?? 0) < product.coin_price) {
       return NextResponse.json({ error: '사용자의 코인이 부족하여 교환할 수 없습니다.' }, { status: 400 });
     }
 
-    const nextBalance = (profile.coin_balance ?? 0) - product.coin_price;
+    const nextBalance = (member.coin_balance ?? 0) - product.coin_price;
 
     // 2. 코인 차감 업데이트
     const { error: updateError } = await adminSupabase
-      .from('profiles')
+      .from('club_members')
       .update({
         coin_balance: nextBalance,
-        coin_updated_at: new Date().toISOString(),
       })
-      .eq('id', profileId);
+      .eq('club_id', clubId)
+      .eq('user_id', profileId)
+      .eq('status', 'active');
 
     if (updateError) {
       throw new Error(updateError.message);
@@ -108,12 +103,11 @@ export async function POST(request: Request) {
     if (purchaseError) {
       // 롤백 (단순 수동 롤백)
       await adminSupabase
-        .from('profiles')
-        .update({
-          coin_balance: profile.coin_balance ?? 0,
-          coin_updated_at: new Date().toISOString(),
-        })
-        .eq('id', profileId);
+        .from('club_members')
+        .update({ coin_balance: member.coin_balance ?? 0 })
+        .eq('club_id', clubId)
+        .eq('user_id', profileId)
+        .eq('status', 'active');
       throw new Error(purchaseError.message);
     }
 

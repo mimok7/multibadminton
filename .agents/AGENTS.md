@@ -8,4 +8,7 @@
 - **English for Code/System**: 채팅 답변 외의 소스 코드 주석, 커밋 메시지, 터미널 로그 설명, 설정 등은 한글화하지 않고 영어(영문) 상태를 유지합니다.
 - **No Scientific Plugins**: Do not load, use, or reference any scientific plugins or skills (such as science, alphafold, pubmed, clinical-trials, etc.) in this workspace.
 - **Deployment & Push Workflow**: When a deployment or git push is requested by the user, always perform type check (`npm run type-check`), stage and commit changes with a descriptive English commit message, and push to the origin remote (`git push origin main`) as a batch.
-
+- **Code Cleanup During Changes**: When modifying code, remove dead, duplicated, or otherwise unnecessary code if its removal does not change required functionality or behavior.
+- **Authorization Checks**: Keep route authorization in one server-side gate whenever possible; do not repeat the same permission check in layouts, shells, and child pages unless the second check protects a separate data mutation or API boundary.
+- **Change Quality Review**: Before editing, inspect the affected flow for dead code, duplication, error paths, performance bottlenecks, and security risks. Remove only code that is confirmed unnecessary and behavior-safe to remove.
+- **Required Post-Change Verification**: After every code change, run the narrowest relevant checks at minimum (type-check, lint, tests, or a read-only data/API verification), inspect the diff, and report any remaining warnings or unverified behavior. Run a production build when explicitly requested or when the change affects build/runtime boundaries.

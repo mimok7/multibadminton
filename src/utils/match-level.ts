@@ -1,5 +1,5 @@
 import { Player, Match, Team } from '@/types';
-import { getTeamScore, getTeamFairnessScore, getTeamMatchScore, jitter, getMinimumMatchCount, countUniquePlayersInMatches, reorderMatchesToAvoidConsecutive, MAX_TEAM_SCORE_DIFF } from './match-helpers';
+import { getTeamScore, getTeamFairnessScore, reorderMatchesToAvoidConsecutive } from './match-helpers';
 
 export function createBalancedDoublesMatches(playersInput: Player[], minGamesPerPlayer = 1): Match[] {
   if (!Array.isArray(playersInput) || playersInput.length < 4) return [];
@@ -364,7 +364,6 @@ export function createBalancedDoublesMatches(playersInput: Player[], minGamesPer
   // 최종 검증 및 상세 로깅
   const finalMissing = normalized.filter(p => counts[p.id] < minGamesPerPlayer);
   const zeroGames = normalized.filter(p => counts[p.id] === 0);
-  const allParticipated = normalized.every(p => counts[p.id] > 0);
   
   console.log('✅ 레벨별 경기 생성 완료:');
   console.log(`  - 생성된 경기: ${result.length}개`);

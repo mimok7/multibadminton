@@ -8,7 +8,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
 import Link from 'next/link';
-import { ArrowLeft, CalendarDays } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { NotificationService } from '@/utils/notification-service';
 import { getProfileByUserId } from '@/lib/auth';
 import { formatCurrentUserNameWithCoins, formatNameWithCoins } from '@/lib/player-display';
@@ -231,22 +231,8 @@ function getMatchStatusMeta(status?: string | null) {
   };
 }
 
-function getCourtLabel(match: ScheduledMatchView) {
-  return match.court_name || `코트 ${match.court_number || '미정'}`;
-}
-
-type MatchResultSummary = {
-  winner?: 'team1' | 'team2';
-  score?: string;
-  team1_score?: number;
-  team2_score?: number;
-  total_losing_pool?: number;
-};
-
-
 function AssignedMatchCard({
   match,
-  matchOrder,
   globalMatchNumber,
   currentActiveGlobalMatchNumber,
   showBetCardForMatch,
@@ -676,7 +662,7 @@ function AssignedMatchCard({
 }
 
 export default function MySchedulePage() {
-  const { user, profile, loading: userLoading, isAdmin } = useUser();
+  const { user, profile, loading: userLoading } = useUser();
   const { clubId } = useClub();
   const router = useRouter();
   const supabase = getSupabaseClient();
@@ -723,9 +709,8 @@ export default function MySchedulePage() {
   const canManageSelected = profile?.role === 'admin' || profile?.role === 'manager';
   
   // 각 경기의 결과 입력 상태를 추적하는 state
-  const [matchResultStates, setMatchResultStates] = useState<Record<string, boolean | null>>({});
+  const [, setMatchResultStates] = useState<Record<string, boolean | null>>({});
   const [selectedMatchBetState, setSelectedMatchBetState] = useState<MatchBetState>({ myProfileId: null, bets: {} });
-  const [savingBet, setSavingBet] = useState(false);
 
   // 내 게임 (대시보드) 영역용 상태
   const [todayAssignedMatches, setTodayAssignedMatches] = useState<ScheduledMatchView[]>([]);
@@ -820,41 +805,6 @@ export default function MySchedulePage() {
     } catch (error) {
       console.error('배팅 정보 조회 실패:', error);
       setSelectedMatchBetState({ myProfileId: profile?.id || null, bets: {} });
-    }
-  };
-
-  const saveMyMatchBet = async (wagerAmount: number) => {
-    if (!selectedMatch?.generated_match) return;
-
-    try {
-      setSavingBet(true);
-      const response = await fetch('/api/match-bets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          match_id: Number(selectedMatch.generated_match.id),
-          wager_amount: wagerAmount,
-        }),
-      });
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(payload?.error || '배팅 저장 실패');
-      }
-
-      setSelectedMatchBetState((prev) => ({
-        myProfileId: prev.myProfileId || profile?.id || null,
-        bets: {
-          ...prev.bets,
-          [payload.profile_id]: payload.wager_amount,
-        },
-      }));
-    } catch (error) {
-      console.error('배팅 저장 실패:', error);
-      alert(error instanceof Error ? error.message : '배팅 저장 중 오류가 발생했습니다.');
-    } finally {
-      setSavingBet(false);
     }
   };
 
@@ -2044,7 +1994,6 @@ export default function MySchedulePage() {
                     <AssignedMatchCard
                       key={match.id}
                       match={match}
-                      matchOrder={index + 1}
                       globalMatchNumber={globalMatchNumber}
                       currentActiveGlobalMatchNumber={currentActiveGlobalMatchNumber}
                       showBetCardForMatch={showBetCardForMatch}

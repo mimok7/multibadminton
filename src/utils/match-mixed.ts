@@ -1,5 +1,5 @@
 import { Player, Match, Team } from '@/types';
-import { getTeamFairnessScore, getTeamMatchScore, getTeamScore, jitter, reorderMatchesToAvoidConsecutive, MAX_TEAM_SCORE_DIFF } from './match-helpers';
+import { getTeamScore, reorderMatchesToAvoidConsecutive } from './match-helpers';
 
 const normalizeGender = (gender?: string) => String(gender || '').trim().toLowerCase();
 const isMale = (p: Player) => ['m', 'male', 'man', '남', '남성'].includes(normalizeGender(p.gender));
@@ -19,7 +19,6 @@ export function createMixedAndSameSexDoublesMatches(playersInput: Player[], minG
   console.log(`👫 혼합복식 경기 생성 시작: ${totalPlayers}명, 최소 ${targetMatches}경기`);
 
   const maxGamesPerPlayer = Math.max(minGamesPerPlayer, 2);
-  const needsMore = () => players.some((player) => counts[player.id] < minGamesPerPlayer);
   const isMixedTeam = (team: Team) =>
     (isMale(team.player1) && isFemale(team.player2)) || (isFemale(team.player1) && isMale(team.player2));
 

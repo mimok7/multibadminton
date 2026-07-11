@@ -52,6 +52,12 @@ interface MatchSessionStatusProps {
   deletingMatchIds?: Record<string, boolean>;
 }
 
+interface EditablePlayer {
+  id: string;
+  name: string;
+  skill_level: string;
+}
+
 export default function MatchSessionStatus({
   matchSessions,
   registeredSchedules = [],
@@ -107,7 +113,9 @@ export default function MatchSessionStatus({
   const hasMatchSessions = matchSessions.length > 0;
   const [selectedSession, setSelectedSession] = useState<MatchSession | null>(null);
   const [sessionMatches, setSessionMatches] = useState<GeneratedMatch[]>([]);
+  const [availablePlayers, setAvailablePlayers] = useState<EditablePlayer[]>([]);
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+  const [savingMatchId, setSavingMatchId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState<string>('');
   const [isAssignedMatchesModalOpen, setIsAssignedMatchesModalOpen] = useState(false);
   const detailsRef = useRef<HTMLDivElement | null>(null);
@@ -115,8 +123,21 @@ export default function MatchSessionStatus({
   const closeDetails = () => {
     setSelectedSession(null);
     setSessionMatches([]);
+    setAvailablePlayers([]);
     setDetailError('');
     setLoadingSessionId(null);
+  };
+
+  const loadSessionMatches = async (sessionId: string) => {
+    const response = await fetch(`/api/admin/match-sessions/${sessionId}/matches`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || '배정내역 조회 실패');
+    }
+    return payload as { matches?: GeneratedMatch[]; players?: EditablePlayer[] };
   };
 
   const openSessionMatches = async (session: MatchSession) => {
@@ -129,19 +150,11 @@ export default function MatchSessionStatus({
       setLoadingSessionId(session.id);
       setDetailError('');
 
-      const response = await fetch(`/api/admin/match-sessions/${session.id}/matches`, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.error || '배정내역 조회 실패');
-      }
+      const payload = await loadSessionMatches(session.id);
 
       setSelectedSession(session);
       setSessionMatches(payload?.matches || []);
+      setAvailablePlayers(payload?.players || []);
     } catch (error) {
       console.error('세션 경기 조회 오류:', error);
       setDetailError(error instanceof Error ? error.message : '배정내역을 불러오지 못했습니다.');
@@ -150,6 +163,45 @@ export default function MatchSessionStatus({
     } finally {
       setLoadingSessionId(null);
     }
+  };
+
+  const saveSessionMatch = async (match: GeneratedMatch) => {
+    if (!selectedSession) return;
+
+    try {
+      setSavingMatchId(match.id);
+      const response = await fetch(`/api/admin/match-sessions/${selectedSession.id}/matches`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId: match.id,
+          team1_player1_id: match.team1_player1.id,
+          team1_player2_id: match.team1_player2.id,
+          team2_player1_id: match.team2_player1.id,
+          team2_player2_id: match.team2_player2.id,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || '경기 배정 저장 실패');
+
+      const refreshed = await loadSessionMatches(selectedSession.id);
+      setSessionMatches(refreshed.matches || []);
+      setAvailablePlayers(refreshed.players || []);
+      alert('경기 선수 배정이 저장되었습니다.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '경기 배정 저장에 실패했습니다.');
+    } finally {
+      setSavingMatchId(null);
+    }
+  };
+
+  const updateMatchPlayer = (matchId: number, key: keyof Pick<GeneratedMatch, 'team1_player1' | 'team1_player2' | 'team2_player1' | 'team2_player2'>, playerId: string) => {
+    const player = availablePlayers.find((item) => item.id === playerId);
+    if (!player) return;
+
+    setSessionMatches((current) => current.map((match) => match.id === matchId
+      ? { ...match, [key]: { id: player.id, name: player.name, skill_level: player.skill_level } }
+      : match));
   };
 
   useEffect(() => {
@@ -192,6 +244,15 @@ export default function MatchSessionStatus({
   const maxScoreDiff = detailRows.length > 0
     ? Math.max(...detailRows.map((row) => row.diff))
     : 0;
+
+  const scoreDiffCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    detailRows.forEach((row) => {
+      const diff = Math.round(row.diff);
+      counts.set(diff, (counts.get(diff) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort(([left], [right]) => left - right);
+  }, [detailRows]);
 
   const playerGameCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -249,17 +310,33 @@ export default function MatchSessionStatus({
     ).size;
   }, [generatedSchedules]);
 
-  const renderPlayerLine = (name: string, skillLevel: string, score: number) => (
-    <div className="text-sm text-gray-800">
-      {name} <span className="font-medium">({(skillLevel || 'E2').toUpperCase()})</span>
-    </div>
-  );
-
   const renderAssignedPlayer = (name: string | null | undefined, skillLevel: string, score: number, align?: 'left' | 'right') => (
     <div className={`truncate text-xs text-gray-800 ${align === 'right' ? 'text-right' : 'text-left'}`}>
       {name || '선수 미정'} <span className="text-gray-500">({skillLevel})</span>
     </div>
   );
+
+  const renderPlayerSelect = (
+    match: GeneratedMatch,
+    key: 'team1_player1' | 'team1_player2' | 'team2_player1' | 'team2_player2'
+  ) => {
+    const player = match[key];
+    return (
+      <select
+        value={player.id || ''}
+        onChange={(event) => updateMatchPlayer(match.id, key, event.target.value)}
+        className="w-full min-w-36 rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800"
+        aria-label={`${match.match_number}회차 ${key} 선수`}
+      >
+        <option value="" disabled>선수 선택</option>
+        {availablePlayers.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.name} ({option.skill_level})
+          </option>
+        ))}
+      </select>
+    );
+  };
 
   return (
     <>
@@ -435,6 +512,14 @@ export default function MatchSessionStatus({
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
                         최대 차이: <span className="font-bold">{maxScoreDiff.toFixed(0)}점</span>
                       </div>
+                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+                        <span className="font-medium">점수 차이별 경기 수:</span>
+                        {scoreDiffCounts.map(([diff, count]) => (
+                          <span key={diff} className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-sm">
+                            {diff}점 {count}경기
+                          </span>
+                        ))}
+                      </div>
                     </div>
                 </div>
 
@@ -443,9 +528,14 @@ export default function MatchSessionStatus({
                     <thead>
                       <tr className="bg-gray-100">
                         <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold">회차</th>
-                        <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">팀 1</th>
-                        <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">팀 2</th>
+                        <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">팀 1 선수 1</th>
+                        <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">팀 1 선수 2</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold">팀 1 점수</th>
+                        <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">팀 2 선수 1</th>
+                        <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">팀 2 선수 2</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold">팀 2 점수</th>
                         <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold">점수 차이</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold">저장</th>
                         {onDeleteSessionMatch && (
                           <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold">삭제</th>
                         )}
@@ -463,29 +553,27 @@ export default function MatchSessionStatus({
                             <td className="border border-gray-300 px-2 py-3 text-center text-sm font-medium">
                               {row.match.match_number}
                             </td>
-                            <td className="border border-gray-300 px-3 py-3">
-                              <div className="space-y-1">
-                                {renderPlayerLine(row.match.team1_player1.name, row.match.team1_player1.skill_level, row.team1Player1Score)}
-                                {renderPlayerLine(row.match.team1_player2.name, row.match.team1_player2.skill_level, row.team1Player2Score)}
-                                <div className="pt-1 text-sm font-semibold text-blue-700">
-                                  ({row.team1Score.toFixed(0)})
-                                </div>
-                              </div>
-                            </td>
-                            <td className="border border-gray-300 px-3 py-3">
-                              <div className="space-y-1">
-                                {renderPlayerLine(row.match.team2_player1.name, row.match.team2_player1.skill_level, row.team2Player1Score)}
-                                {renderPlayerLine(row.match.team2_player2.name, row.match.team2_player2.skill_level, row.team2Player2Score)}
-                                <div className="pt-1 text-sm font-semibold text-rose-700">
-                                  ({row.team2Score.toFixed(0)})
-                                </div>
-                              </div>
-                            </td>
+                            <td className="border border-gray-300 px-2 py-3">{renderPlayerSelect(row.match, 'team1_player1')}</td>
+                            <td className="border border-gray-300 px-2 py-3">{renderPlayerSelect(row.match, 'team1_player2')}</td>
+                            <td className="border border-gray-300 px-2 py-3 text-center text-sm font-semibold text-blue-700">{row.team1Score.toFixed(0)}</td>
+                            <td className="border border-gray-300 px-2 py-3">{renderPlayerSelect(row.match, 'team2_player1')}</td>
+                            <td className="border border-gray-300 px-2 py-3">{renderPlayerSelect(row.match, 'team2_player2')}</td>
+                            <td className="border border-gray-300 px-2 py-3 text-center text-sm font-semibold text-rose-700">{row.team2Score.toFixed(0)}</td>
                             <td className={`border border-gray-300 px-2 py-3 text-center text-sm font-semibold ${isWorstMatch ? 'text-rose-700' : 'text-gray-700'}`}>
                               <div>{row.diff.toFixed(0)}점</div>
                               {isWorstMatch && (
                                 <div className="mt-1 text-xs font-medium text-rose-600">최대 편차</div>
                               )}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-3 text-center text-sm">
+                              <button
+                                type="button"
+                                onClick={() => saveSessionMatch(row.match)}
+                                disabled={savingMatchId === row.match.id}
+                                className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {savingMatchId === row.match.id ? '저장 중...' : '저장'}
+                              </button>
                             </td>
                             {onDeleteSessionMatch && (
                               <td className="border border-gray-300 px-2 py-3 text-center text-sm">

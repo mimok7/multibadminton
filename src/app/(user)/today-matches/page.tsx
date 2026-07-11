@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
-import { isAdminOrManagerRole } from '@/lib/auth';
 import { getKoreaDate } from '@/lib/date';
 import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
@@ -64,22 +63,6 @@ function getDisplayMatchLabel(match: ScheduledMatchView, fallbackOrder: number) 
   return `게임 #${fallbackOrder}`;
 }
 
-function getDisplayMatchSequence(match: ScheduledMatchView, fallbackOrder: number) {
-  const description = match.description?.trim();
-  if (description) {
-    const normalized = description.replace(/^\[일반 경기\]\s*/u, '');
-    const sequenceMatch = normalized.match(/(\d+-\d+)$/u);
-    if (sequenceMatch?.[1]) {
-      return sequenceMatch[1];
-    }
-  }
-
-  if (typeof match.match_number === 'number' && match.match_number > 0) {
-    return String(match.match_number);
-  }
-
-  return String(fallbackOrder);
-}
 
 
 
@@ -261,16 +244,6 @@ export default function TodayMatches() {
       match.team2_player1,
       match.team2_player2,
     ].some((participantId) => participantId ? myParticipantIds.has(participantId) : false);
-  };
-
-  const getPlayerTeam = (match: ScheduledMatchView) => {
-    if ([match.team1_player1, match.team1_player2].some((participantId) => participantId ? myParticipantIds.has(participantId) : false)) {
-      return 'team1';
-    }
-    if ([match.team2_player1, match.team2_player2].some((participantId) => participantId ? myParticipantIds.has(participantId) : false)) {
-      return 'team2';
-    }
-    return null;
   };
 
   const primaryMatch = matches.find((match) => match.status === 'in_progress')

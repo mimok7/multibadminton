@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ExtendedPlayer } from '../types';
-import { Match, Team } from '@/types';
+import { Match } from '@/types';
 
 interface ManualMatchAssignmentProps {
   presentPlayers: ExtendedPlayer[];

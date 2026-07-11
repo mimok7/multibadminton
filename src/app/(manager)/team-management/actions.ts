@@ -1,23 +1,27 @@
 'use server';
 
-import { getProfileByUserId } from '@/lib/auth';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getClubManagerContext } from '@/lib/manager-access';
 
 export async function fetchAdminMembers() {
-  const adminSupabase = await getFilteredAdminClient();
-  const serverSupabase = await getSupabaseServerClient();
-
-  const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
-  if (authError || !user) throw new Error('Unauthorized');
-
-  const profile = await getProfileByUserId(adminSupabase, user.id);
-  if (profile?.role !== 'admin' && profile?.role !== 'manager') {
-    throw new Error('Forbidden');
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    throw new Error(context.error === 'unauthorized' ? 'Unauthorized' : 'Forbidden');
   }
 
-  const { data: profiles, error } = await adminSupabase
+  const { data: members, error: membersError } = await context.adminSupabase
+    .from('club_members')
+    .select('user_id')
+    .eq('status', 'active');
+
+  if (membersError) throw membersError;
+
+  const profileIds = (members || []).map((member) => member.user_id).filter(Boolean);
+  if (profileIds.length === 0) return [];
+
+  const { data: profiles, error } = await context.adminSupabase
     .from('profiles')
     .select('id, username, full_name, skill_level, gender')
+    .in('id', profileIds)
     .order('username', { ascending: true });
 
   if (error) throw error;

@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole, isAdminRole } from '@/lib/auth';
-import { getClubRole } from '@/lib/club-auth';
-import { getActiveClubId } from '@/lib/club';
+import { getClubManagerContext } from '@/lib/manager-access';
 import { getKoreaDate } from '@/lib/date';
 import { decorateDescriptionForScheduleSource } from '@/lib/match-schedule-source';
 
@@ -48,34 +45,12 @@ function buildGeneratedMatchLabel(sessionDate: string, batchNumber: number, matc
 }
 
 async function requireAdmin() {
-  const clubId = await getActiveClubId();
-  if (!clubId) {
-    return { error: NextResponse.json({ error: 'Club not selected' }, { status: 400 }) };
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status }) };
   }
-
-  const supabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-
-  const [userRole, clubRole] = await Promise.all([
-    getUserRole(supabase, user),
-    getClubRole(adminSupabase, user.id, clubId),
-  ]);
-  const canManageClub = isAdminRole(userRole) || ['owner', 'admin', 'manager'].includes(clubRole || '');
-
-  if (!canManageClub) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { adminSupabase, clubId };
+  return context;
 }
 
 export async function GET(request: Request) {

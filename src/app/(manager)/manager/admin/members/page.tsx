@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import type { AdminUser } from '@/types'
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server'
-import { isUserAdmin } from '@/lib/auth'
 import UserManagementClient from './UserManagementClient'
 import type { Database } from '@/types/supabase'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'

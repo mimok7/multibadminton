@@ -242,6 +242,8 @@ CREATE TABLE public.tournament_matches (
     score_team1 INTEGER,
     score_team2 INTEGER,
     winner TEXT CHECK (winner IN ('team1', 'team2', 'draw')),
+    next_match_id UUID REFERENCES public.tournament_matches(id) ON DELETE SET NULL,
+    next_match_slot SMALLINT CHECK (next_match_slot IN (1, 2)),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -284,6 +286,7 @@ CREATE INDEX idx_notifications_is_read ON public.notifications(is_read);
 CREATE INDEX idx_team_assignments_date_round ON public.team_assignments(assignment_date, round_number);
 CREATE INDEX idx_tournaments_assignment ON public.tournaments(team_assignment_id);
 CREATE INDEX idx_tournament_matches_tournament ON public.tournament_matches(tournament_id);
+CREATE INDEX idx_tournament_matches_next_match ON public.tournament_matches(next_match_id) WHERE next_match_id IS NOT NULL;
 CREATE INDEX idx_match_player_status_match_id ON public.match_player_status(match_id);
 CREATE INDEX idx_match_player_status_user_id ON public.match_player_status(user_id);
 

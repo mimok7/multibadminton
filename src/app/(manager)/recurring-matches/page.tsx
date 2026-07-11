@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RequireAdmin } from '@/components/AuthGuard';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
@@ -337,7 +336,6 @@ export default function RecurringMatchPage() {
   }
 
   return (
-    <RequireAdmin>
       <div className="w-full p-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-4">🔄 정기모임 자동 생성 관리</h1>
@@ -749,6 +747,5 @@ export default function RecurringMatchPage() {
           </div>
         )}
       </div>
-    </RequireAdmin>
   );
 }

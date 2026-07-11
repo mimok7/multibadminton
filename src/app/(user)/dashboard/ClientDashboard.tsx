@@ -6,14 +6,9 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, CalendarDays, Gift, LogOut, Shield, Swords, Target, Trophy, UserCircle2, Zap, Bell, BookOpen, MessageSquarePlus } from 'lucide-react';
 
 import MatchNotifications from '@/components/MatchNotifications';
-import { Button } from '@/components/ui/button';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
-import type { CoinSettlementMode } from '@/lib/coins';
-import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER } from '@/lib/coins';
 import { getLevelNameFromCode } from '@/lib/level-info';
-import { formatCurrentUserNameWithCoins, formatNameWithCoins } from '@/lib/player-display';
-import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getKoreaDate } from '@/lib/date';
 
@@ -115,58 +110,10 @@ function normalizeAttendanceStatus(value: string | null | undefined): Attendance
 
 
 
-function getMatchStatusPriority(status: string) {
-  if (status === 'in_progress') return 0;
-  if (status === 'scheduled') return 1;
-  if (status === 'completed') return 2;
-  if (status === 'cancelled') return 3;
-  return 4;
-}
-
-function getMatchStatusMeta(status?: string | null) {
-  if (status === 'completed') {
-    return {
-      label: '완료',
-      chipClass: 'bg-emerald-100 text-emerald-700',
-    };
-  }
-
-  if (status === 'in_progress') {
-    return {
-      label: '진행중',
-      chipClass: 'bg-amber-100 text-amber-700',
-    };
-  }
-
-  if (status === 'cancelled') {
-    return {
-      label: '취소',
-      chipClass: 'bg-rose-100 text-rose-700',
-    };
-  }
-
-  return {
-    label: '대기',
-    chipClass: 'bg-slate-100 text-slate-700',
-  };
-}
-
-function getCourtLabel(match: ScheduledMatchView) {
-  return match.court_name || `코트 ${match.court_number || '미정'}`;
-}
-
-type MatchResultSummary = {
-  winner?: 'team1' | 'team2';
-  score?: string;
-  team1_score?: number;
-  team2_score?: number;
-  total_losing_pool?: number;
-};
-
 export default function ClientDashboard({ userId, email }: { userId: string; email: string }) {
   const router = useRouter();
   const supabase = getSupabaseClient();
-  const { user, profile, isAdmin: userIsAdmin } = useUser();
+  const { profile, isAdmin: userIsAdmin } = useUser();
   const levelInfoMap = useLevelInfoMap();
 
   const [loadingAttendance, setLoadingAttendance] = useState(true);

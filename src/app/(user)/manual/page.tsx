@@ -5,14 +5,12 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { 
   ArrowLeft, 
-  BookOpen, 
   Calendar, 
   Coins, 
   Tv, 
   ClipboardList, 
   User, 
   Info, 
-  Sparkles,
   ChevronRight,
   Menu,
   X,

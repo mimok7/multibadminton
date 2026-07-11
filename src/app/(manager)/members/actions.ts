@@ -1,9 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+    getFilteredAdminClient,
+    getSupabaseServerClient,
+    getUnfilteredGlobalAdminClient,
+} from '@/lib/supabase-server';
 import { getClubRole } from '@/lib/club-auth';
-import { isUserAdmin } from '@/lib/auth';
+import { getUserRole, isAdminRole } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
 
@@ -17,14 +21,15 @@ async function getManagerContext() {
     const activeClubId = cookieStore.get('active_club_id')?.value;
     if (!activeClubId) return null;
 
-    const isSysAdmin = await isUserAdmin(supabase, user);
+    const isSysAdmin = isAdminRole(await getUserRole(supabase, user));
+    const roleLookupClient = getUnfilteredGlobalAdminClient();
     let role: string | null = null;
 
     if (isSysAdmin) {
-        const actualRole = await getClubRole(supabase, user.id, activeClubId);
+        const actualRole = await getClubRole(roleLookupClient, user.id, activeClubId);
         role = actualRole || 'admin';
     } else {
-        const actualRole = await getClubRole(supabase, user.id, activeClubId);
+        const actualRole = await getClubRole(roleLookupClient, user.id, activeClubId);
         if (!actualRole || !['owner', 'admin', 'manager'].includes(actualRole)) {
             return null;
         }
@@ -32,6 +37,31 @@ async function getManagerContext() {
     }
 
     return { user, clubId: activeClubId, role };
+}
+
+async function getTargetClubMember(
+    supabaseAdmin: Awaited<ReturnType<typeof getFilteredAdminClient>>,
+    clubId: string,
+    userId: string,
+) {
+    const { data: profile, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, user_id')
+        .or(`user_id.eq.${userId},id.eq.${userId}`)
+        .maybeSingle();
+
+    if (profileError || !profile) return null;
+
+    const { data: membership, error: membershipError } = await supabaseAdmin
+        .from('club_members')
+        .select('user_id')
+        .eq('club_id', clubId)
+        .eq('user_id', profile.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+    if (membershipError || !membership) return null;
+    return profile;
 }
 
 export type UpdateUserPayload = {
@@ -51,11 +81,14 @@ export async function deleteUser(userId: string) {
         const ctx = await getManagerContext();
         if (!ctx) return { error: '삭제 권한이 없습니다.' };
 
+        const targetProfile = await getTargetClubMember(supabaseAdmin, ctx.clubId, userId);
+        if (!targetProfile) return { error: '소속 클럽의 회원만 삭제할 수 있습니다.' };
+
         const { error } = await (supabaseAdmin as any)
             .from('club_members')
             .delete()
             .eq('club_id', ctx.clubId)
-            .eq('user_id', userId);
+            .eq('user_id', targetProfile.id);
 
         if (error) {
             return { error: error.message };
@@ -73,6 +106,9 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
     const ctx = await getManagerContext();
     if (!ctx) return { error: '수정 권한이 없습니다.' };
 
+    const targetProfile = await getTargetClubMember(supabaseAdmin, ctx.clubId, userId);
+    if (!targetProfile) return { error: '소속 클럽의 회원만 수정할 수 있습니다.' };
+
     const profilePayload: Record<string, any> = {};
     if (updates.username !== undefined) profilePayload.username = updates.username || null;
     if (updates.full_name !== undefined) profilePayload.full_name = updates.full_name || null;
@@ -84,7 +120,7 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
         const { error } = await supabaseAdmin
             .from('profiles')
             .update(profilePayload)
-            .or(`user_id.eq.${userId},id.eq.${userId}`);
+            .eq('id', targetProfile.id);
         if (error) return { error: error.message };
     }
 
@@ -95,7 +131,7 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
             .from('club_members')
             .update({ role: clubRole })
             .eq('club_id', ctx.clubId)
-            .eq('user_id', userId);
+            .eq('user_id', targetProfile.id);
         if (error) return { error: error.message };
     }
 
@@ -108,7 +144,8 @@ export async function updateUsersBulk(items: Array<{ userId: string; updates: Up
     if (!ctx) return { error: '수정 권한이 없습니다.' };
 
     for (const item of items) {
-        await updateUser(item.userId, item.updates);
+        const result = await updateUser(item.userId, item.updates);
+        if (result?.error) return result;
     }
 
     revalidatePath('/manager/members');
@@ -227,22 +264,17 @@ export async function resetUserPassword(userId: string, newPassword: string) {
     const ctx = await getManagerContext();
     if (!ctx) return { error: '비밀번호 초기화 권한이 없습니다.' };
 
+    const targetProfile = await getTargetClubMember(supabaseAdmin, ctx.clubId, userId);
+    if (!targetProfile || !targetProfile.user_id) {
+        return { error: '소속 클럽의 회원만 비밀번호를 초기화할 수 있습니다.' };
+    }
+
     if (!newPassword || newPassword.trim().length < 6) {
         return { error: '비밀번호는 최소 6자리 이상이어야 합니다.' };
     }
 
-    const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('id, user_id')
-        .or(`user_id.eq.${userId},id.eq.${userId}`)
-        .maybeSingle();
-
-    if (!profile || !profile.user_id) {
-        return { error: '계정을 찾을 수 없습니다.' };
-    }
-
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-        profile.user_id,
+        targetProfile.user_id,
         { password: newPassword.trim() }
     );
 
@@ -256,19 +288,14 @@ export async function resetMemberData(userId: string) {
     const ctx = await getManagerContext();
     if (!ctx) return { error: '초기화 권한이 없습니다.' };
 
-    const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('id, user_id')
-        .or(`user_id.eq.${userId},id.eq.${userId}`)
-        .maybeSingle();
-
-    if (!profile || !profile.user_id) return { error: '계정을 찾을 수 없습니다.' };
+    const targetProfile = await getTargetClubMember(supabaseAdmin, ctx.clubId, userId);
+    if (!targetProfile) return { error: '소속 클럽의 회원만 초기화할 수 있습니다.' };
 
     await (supabaseAdmin as any).from('club_members').update({
         coin_wins: 0,
         coin_losses: 0,
         coin_balance: 30
-    }).eq('club_id', ctx.clubId).eq('user_id', profile.user_id);
+    }).eq('club_id', ctx.clubId).eq('user_id', targetProfile.id);
 
     revalidatePath('/manager/members');
     return { success: true };

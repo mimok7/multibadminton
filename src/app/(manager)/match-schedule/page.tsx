@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { RequireAdmin } from '@/components/AuthGuard';
 import {
   decorateDescriptionForScheduleSource,
   inferScheduleSource,
@@ -1397,7 +1396,7 @@ export default function MatchSchedulePage() {
   }, [schedules]);
 
   return (
-    <RequireAdmin>
+    <>
       <div className="w-full px-2 py-2 sm:p-6">
         {/* 헤더 */}
         <div className="mb-4 rounded-lg bg-white shadow sm:mb-6">
@@ -2300,6 +2299,6 @@ export default function MatchSchedulePage() {
           </div>
         </div>
       )}
-    </RequireAdmin>
+    </>
   );
 }

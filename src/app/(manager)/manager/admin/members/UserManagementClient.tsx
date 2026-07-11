@@ -1014,7 +1014,7 @@ export default function UserManagementClient({
                         <h1 className="text-xl font-bold tracking-tight">회원 운영 센터</h1>
                         <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">회원 정보, 권한, 급수, 출석 흐름을 한 화면에서 관리합니다.</p>
                     </div>
-                    <Link href="/admin">
+                    <Link href="/manager">
                         <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
                             <ArrowLeft className="h-3.5 w-3.5" />
                             홈

@@ -11,6 +11,8 @@ export const MANAGER_ROUTE_PREFIXES = [
   '/match-results',
   '/match-schedule',
   '/players',
+  '/members',
+  '/settings',
   '/recurring-matches',
   '/team-management',
 ] as const;

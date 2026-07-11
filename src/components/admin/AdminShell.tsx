@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import { RequireAdmin } from '@/components/AuthGuard';
 import { useUser } from '@/hooks/useUser';
 import { getSupabaseClient } from '@/lib/supabase';
 import { SECTIONS } from './menuConfig';
@@ -41,7 +40,10 @@ function getGroupColors(color: string) {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { profile } = useUser();
-  const homeHref = profile?.role === 'manager' ? '/manager/admin' : '/admin';
+  const [activeClubRole, setActiveClubRole] = useState<string | null>(null);
+  const isGlobalAdmin = profile?.role === 'admin';
+  const isManagerMode = !isGlobalAdmin && ['owner', 'admin', 'manager'].includes(activeClubRole || '');
+  const homeHref = isGlobalAdmin ? '/admin' : isManagerMode || profile?.role === 'manager' ? '/manager' : '/admin';
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -62,6 +64,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           setActiveClubName(data.club.name);
           document.title = `${data.club.name} - 매니저 대시보드`;
         }
+        setActiveClubRole(data.clubRole || null);
       } catch (err) {
         console.error('Failed to fetch active club name:', err);
       }
@@ -116,7 +119,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       sectionsCopy = sectionsCopy.filter(section => section.title !== '⚙️ 시스템 관리');
     }
     
-    if (profile?.role === 'manager') {
+    if (profile?.role === 'manager' || isManagerMode) {
       return sectionsCopy.map(section => {
         section.items = section.items.map(item => {
           if (item.href === '/admin') {
@@ -132,7 +135,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     }
     
     return sectionsCopy;
-  }, [profile?.role]);
+  }, [profile?.role, isManagerMode]);
 
   const sidebarNav = (
     <nav className="p-3 space-y-2">
@@ -169,7 +172,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   );
 
   return (
-    <RequireAdmin>
       <div className={`admin-mobile-optimized min-h-screen bg-gray-50 ${!isMobileView && isDesktopSidebarVisible ? 'grid grid-cols-[13rem_minmax(0,1fr)]' : 'grid grid-cols-1'}`}>
         {!isMobileView && isDesktopSidebarVisible && (
           <aside className="sticky top-0 z-30 h-screen w-52 shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
@@ -234,7 +236,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   href={homeHref}
                   className="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 sm:px-3"
                 >
-                  ⚙️ 관리자 홈
+                  {!isGlobalAdmin && (isManagerMode || profile?.role === 'manager') ? '⚙️ 매니저 홈' : '⚙️ 관리자 홈'}
                 </Link>
                 <Link
                   href="/"
@@ -273,6 +275,5 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </main>
         </div>
       </div>
-    </RequireAdmin>
   );
 }

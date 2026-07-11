@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getUnfilteredGlobalAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import type { Database } from '@/types/supabase';
-import { isUserAdmin } from '@/lib/auth';
+import { getClubManagerContext } from '@/lib/manager-access';
 import { readMatchSettings } from '@/lib/match-settings';
 import { ensureFiveMatches } from '@/lib/match-generator';
 
@@ -115,7 +115,8 @@ async function createScheduleFromTemplate(
 
 async function generateRecurringMatchesFallback(
   executedBy?: string | null,
-  selectedTemplateIds?: string[]
+  selectedTemplateIds?: string[],
+  clubId?: string
 ): Promise<GenerationResult> {
   const today = new Date();
   const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -128,6 +129,10 @@ async function generateRecurringMatchesFallback(
     .from('recurring_match_templates')
     .select('id, club_id, name, description, day_of_week, start_time, end_time, location, max_participants, advance_days, is_active')
     .eq('is_active', true);
+
+  if (clubId) {
+    query = query.eq('club_id', clubId);
+  }
 
   if (templateIds.length > 0) {
     query = query.in('id', templateIds);
@@ -189,9 +194,9 @@ async function generateRecurringMatchesFallback(
   };
 }
 
-async function runRecurringMatchGeneration(executedBy?: string | null, selectedTemplateIds?: string[]) {
+async function runRecurringMatchGeneration(executedBy?: string | null, selectedTemplateIds?: string[], clubId?: string) {
   const templateIds = selectedTemplateIds?.filter(Boolean) ?? [];
-  return generateRecurringMatchesFallback(executedBy, templateIds);
+  return generateRecurringMatchesFallback(executedBy, templateIds, clubId);
 }
 
 export async function GET(request: Request) {
@@ -244,38 +249,22 @@ export async function GET(request: Request) {
 // POST 메서드도 지원 (수동 실행용)
 export async function POST(request: Request) {
   try {
-    const supabase = await getSupabaseServerClient();
+    const context = await getClubManagerContext();
+    if ('error' in context) {
+      const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+      return NextResponse.json({ error: status === 401 ? 'Authentication required' : status === 400 ? 'Club not selected' : 'Manager access required' }, { status });
+    }
     const body = (await request.json().catch(() => ({}))) as GenerateRecurringMatchesPayload;
     const selectedTemplateIds = Array.isArray(body.template_ids) ? body.template_ids : [];
 
-    // 사용자 인증 확인
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    if (!(await isUserAdmin(supabase, user))) {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
-
     // 정기모임 자동 생성 실행
-    const data = await runRecurringMatchGeneration(user.id, selectedTemplateIds);
+    const data = await runRecurringMatchGeneration(context.user.id, selectedTemplateIds, context.clubId);
 
     return NextResponse.json({
       success: true,
       result: data,
       timestamp: new Date().toISOString(),
-      executed_by: user.id
+      executed_by: context.user.id
     });
 
   } catch (error) {

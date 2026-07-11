@@ -1,41 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { 
   ArrowLeft, 
-  BookOpen, 
-  Calendar, 
-  Coins, 
   Tv, 
   ClipboardList, 
   User, 
-  Info, 
-  Sparkles,
   ChevronRight,
   Menu,
   X,
   Bell,
-  Zap,
   Swords,
   CalendarDays,
   Trophy,
-  MessageSquarePlus
 } from 'lucide-react';
-
-import { useUser } from '@/hooks/useUser';
 
 type TabType = 'admin-players-today' | 'admin-match-results' | 'admin-team-management' | 'admin-tournament-matches' | 'admin-pair-tournament-settings' | 'admin-tournament-bracket' | 'admin-members' | 'admin-notifications';
 
 export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<TabType>('admin-players-today');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { profile, loading } = useUser();
-  const router = useRouter();
-
-
 
   const menuItems = [
     { id: 'admin-players-today', label: '⚡ 오늘 경기 관리', icon: Swords, color: 'text-sky-500 bg-sky-50 hover:bg-sky-100/70' },
@@ -59,7 +45,7 @@ export default function ManualPage() {
               <h1 className="text-xl font-bold tracking-tight">관리자 사용 설명서</h1>
               <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">관리자 시스템 기능 및 운영 가이드를 확인합니다.</p>
             </div>
-            <Link href="/admin">
+            <Link href="/manager">
               <Button variant="outline" className="rounded-full bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15 border-0 flex items-center gap-1.5">
                 <ArrowLeft className="h-3.5 w-3.5" />
                 홈

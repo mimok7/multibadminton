@@ -73,6 +73,7 @@ type UserTournamentTab = 'bracket' | 'results' | string;
 
 type TournamentBracketViewProps = {
   adminMode?: boolean;
+  homeHref?: string;
 };
 
 type TournamentMetrics = {
@@ -146,7 +147,7 @@ const formatScheduledTime = (timeStr: string | undefined | null) => {
       const hourStr = String(hourNum).padStart(2, '0');
       return `${ampm} ${hourStr}:${m}`;
     }
-  } catch (e) {
+  } catch {
     // fallback
   }
   return '';
@@ -210,6 +211,44 @@ function avoidConsecutiveMatches(
   });
 }
 
+function scheduleMatchesWithBracketStages(
+  matches: Match[],
+  courtCount: number,
+  baseDate: string,
+  startTime: string,
+  timeInterval: number
+): Match[] {
+  const playableMatches = matches.filter((match) => match.team1.length > 0 && match.team2.length > 0);
+  const pendingBracketMatches = matches
+    .filter((match) => match.team1.length === 0 || match.team2.length === 0)
+    .sort((left, right) => (left.round - right.round) || (left.match_number - right.match_number));
+  const originalMatchData = new Map(matches.map((match) => [match.id, match]));
+  const scheduledPlayableMatches = avoidConsecutiveMatches(playableMatches, courtCount, baseDate, startTime, timeInterval)
+    .map((match) => {
+      const originalMatch = originalMatchData.get(match.id);
+      return originalMatch
+        ? { ...match, round: originalMatch.round, match_number: originalMatch.match_number }
+        : match;
+    });
+
+  const [startHour, startMinute] = (startTime || '17:30').split(':').map(Number);
+  const playableSlotCount = Math.ceil(scheduledPlayableMatches.length / courtCount);
+  const scheduledPendingBracketMatches = pendingBracketMatches.map((match, index) => {
+    const slot = playableSlotCount + Math.floor(index / courtCount);
+    const totalMinutes = startHour * 60 + startMinute + (slot * timeInterval);
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = totalMinutes % 60;
+
+    return {
+      ...match,
+      court: `${(index % courtCount) + 1}코트`,
+      scheduled_time: `${baseDate || '2026-07-01'}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`,
+    };
+  });
+
+  return [...scheduledPlayableMatches, ...scheduledPendingBracketMatches];
+}
+
 function formatTournamentTitle(title: string) {
   return title
     .replace(/^라뚱\s*대회|^대회경기/u, '대회 경기')
@@ -241,6 +280,22 @@ function getResolvedWinner(match: Match): Match['winner'] {
   }
 
   return match.winner ?? null;
+}
+
+function getBracketStageName(match: Match, matches: Match[]) {
+  const maxRound = Math.max(...matches.map((item) => item.round));
+  const roundsUntilFinal = maxRound - match.round;
+
+  if (roundsUntilFinal <= 0) return '결승';
+  if (roundsUntilFinal === 1) return '4강';
+  if (roundsUntilFinal === 2) return '8강';
+  return '예선';
+}
+
+function formatBracketTeam(team: string[], match?: Match, matches: Match[] = [], isPairTournament = false) {
+  if (team.length > 0) return team.join(' / ');
+  if (!isPairTournament || !match || matches.length === 0) return '대진 대기';
+  return `${getBracketStageName(match, matches)} 진출팀`;
 }
 
 function isResultMatch(match: Match) {
@@ -566,7 +621,7 @@ function getPairStats(
         });
       });
     } else {
-      Object.entries(assignment.pairs_data || {}).forEach(([pairName, players]) => {
+      Object.values(assignment.pairs_data || {}).forEach((players) => {
         if (players && players.length > 0) {
           const key = getTeamKey(players);
           pairStats[key] = {
@@ -638,7 +693,7 @@ function getPairStats(
   return pairStats;
 }
 
-export default function TournamentBracketView({ adminMode = false }: TournamentBracketViewProps) {
+export default function TournamentBracketView({ adminMode = false, homeHref: homeHrefOverride }: TournamentBracketViewProps) {
   const supabase = getSupabaseClient();
   const searchParams = useSearchParams();
   const { profile } = useUser();
@@ -655,7 +710,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
   const [batchCourts, setBatchCourts] = useState(4);
   const [batchStartTime, setBatchStartTime] = useState('17:30');
   const [batchInterval, setBatchInterval] = useState(10);
-  const [batchDate, setBatchDate] = useState('');
+  const batchDate = '';
   const [applyingBatch, setApplyingBatch] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editCourtDraft, setEditCourtDraft] = useState('');
@@ -679,7 +734,6 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
   const [availableTeams, setAvailableTeams] = useState<TeamAssignment[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<TeamAssignment | null>(null);
   const [selectedTournamentAssignment, setSelectedTournamentAssignment] = useState<TeamAssignment | null>(null);
-  const [showPlayerAssignments, setShowPlayerAssignments] = useState(!adminMode);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adminActiveTab, setAdminActiveTab] = useState<AdminTournamentTab>('overview');
   const [userActiveTab, setUserActiveTab] = useState<UserTournamentTab>('bracket');
@@ -767,18 +821,6 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
     }
 
     return null;
-  };
-
-  const isUserReferee = (match: Match) => {
-    if (!currentUser) return false;
-    if (currentUser.role === 'admin' || currentUser.role === 'manager') return true;
-
-    const displayReferee = getDisplayRefereeName(match);
-    if (!displayReferee) return false;
-
-    const cleanCurrentUser = currentUser.full_name.trim().toLowerCase();
-    const refereeNames = displayReferee.split(',').map((name) => name.trim().toLowerCase());
-    return refereeNames.includes(cleanCurrentUser);
   };
 
   const getRefereeOptions = (match: Match) => {
@@ -928,13 +970,6 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
 
 
   const tournamentQueryId = searchParams.get('tournament');
-
-  const matchTypeMeta: Record<string, { label: string; badge: string }> = {
-    level_based: { label: '레벨', badge: 'bg-blue-100 text-blue-700' },
-    mixed_doubles: { label: '혼복', badge: 'bg-rose-100 text-rose-700' },
-    random: { label: '랜덤', badge: 'bg-emerald-100 text-emerald-700' },
-    pairs_custom: { label: '페어전', badge: 'bg-amber-100 text-amber-700' },
-  };
 
   const getTodayLocal = () => getKoreaDate();
 
@@ -1188,16 +1223,15 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
       const sTime = batchStartTime || '17:30';
       const interval = batchInterval || 10;
 
-      // Run ALL matches through scheduling as ONE unified list
-      const optimized = avoidConsecutiveMatches(targetMatches, C, baseDate, sTime, interval);
+      // Keep bracket round and match numbers intact. Empty bracket slots are scheduled
+      // after playable matches in round order, so semifinals always precede the final.
+      const optimized = scheduleMatchesWithBracketStages(targetMatches, C, baseDate, sTime, interval);
 
       // Batch update DB
       const matchesToUpdate = optimized.filter(m => m.id).map(m => ({
         id: m.id,
         court: m.court,
         scheduled_time: m.scheduled_time,
-        match_number: m.match_number,
-        round: m.round
       }));
 
       if (matchesToUpdate.length > 0) {
@@ -1255,14 +1289,6 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
       console.error('개별 경기 일정 수정 오류:', error);
       alert('일정 수정 중 오류가 발생했습니다: ' + error.message);
     }
-  };
-
-  const getTournamentMetrics = (tournamentId?: string | null) => {
-    if (!tournamentId) {
-      return null;
-    }
-
-    return tournamentMetrics[tournamentId] || null;
   };
 
   const getTeamCountFromAssignment = (teamAssignment: TeamAssignment) => {
@@ -1787,32 +1813,45 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
       const matchTypeLabel = getMatchTypeLabel(matchType);
       const tournamentTitle = `대회 경기 ${selectedTeam.round_number}회차 ${matchTypeLabel}`;
       const teamCount = getTeamCountFromAssignment(selectedTeam);
-      const { data: tournamentData, error: tournamentError } = await supabase
-        .from('tournaments')
-        .insert({
-          title: tournamentTitle,
-          tournament_date: selectedTeam.assignment_date,
-          round_number: selectedTeam.round_number || 1,
-          match_type: matchType,
-          team_assignment_id: selectedTeam.id,
-          team_type: selectedTeam.team_type,
-          total_teams: teamCount,
-          matches_per_player: matchesPerPlayer,
+      const tournamentPayload = {
+        title: tournamentTitle,
+        tournament_date: selectedTeam.assignment_date,
+        round_number: selectedTeam.round_number || 1,
+        match_type: matchType,
+        team_assignment_id: selectedTeam.id,
+        team_type: selectedTeam.team_type,
+        total_teams: teamCount,
+        matches_per_player: matchesPerPlayer,
+      };
+
+      if (adminMode) {
+        const response = await fetch('/api/admin/tournaments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tournament: tournamentPayload, matches: generatedMatches }),
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(payload?.error || '대회 생성에 실패했습니다.');
+        }
+      } else {
+        const { data: tournamentData, error: tournamentError } = await supabase
+          .from('tournaments')
+          .insert({ ...tournamentPayload, club_id: (selectedTeam as any).club_id })
+          .select()
+          .single();
+
+        if (tournamentError) throw tournamentError;
+
+        const matchesToInsert = generatedMatches.map((match) => ({
+          ...match,
+          tournament_id: tournamentData.id,
           club_id: (selectedTeam as any).club_id,
-        })
-        .select()
-        .single();
+        }));
 
-      if (tournamentError) throw tournamentError;
-
-      const matchesToInsert = generatedMatches.map((match) => ({
-        ...match,
-        tournament_id: tournamentData.id,
-        club_id: (selectedTeam as any).club_id,
-      }));
-
-      const { error: matchesError } = await supabase.from('tournament_matches').insert(matchesToInsert);
-      if (matchesError) throw matchesError;
+        const { error: matchesError } = await supabase.from('tournament_matches').insert(matchesToInsert);
+        if (matchesError) throw matchesError;
+      }
 
       alert(`대회가 생성되었습니다! (${generatedMatches.length}개 경기)`);
       await fetchTournaments();
@@ -2087,8 +2126,9 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
   const hasResultData = teamStatsEntries.length > 0 || playerStatsEntries.length > 0;
 
   const isPairCustomTournament = selectedTournament?.match_type
-    ? selectedTournament.match_type.startsWith('pairs_custom')
+    ? selectedTournament.match_type.startsWith('pairs_')
     : false;
+  const isKnockoutTournament = selectedTournament?.match_type === 'pairs_knockout';
 
   const currentMatchesForView = useMemo(() => {
     if (!selectedTournament) return [];
@@ -2170,10 +2210,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
     : 'mx-auto flex w-full max-w-3xl flex-col gap-3 px-2.5 pt-0 pb-3 sm:gap-5 sm:px-5 sm:pt-0 sm:pb-5';
 
   const title = adminMode ? '관리자 대진표' : '대회 대진표';
-  const description = adminMode
-    ? ''
-    : '경기 대진표와 경기결과 확인';
-  const homeHref = adminMode ? '/admin' : '/dashboard';
+  const homeHref = homeHrefOverride || (adminMode ? '/admin' : '/dashboard');
   const homeLabel = '홈';
   const sameDateMatches = useMemo(() => {
     if (!selectedTournament) return [];
@@ -2475,6 +2512,12 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                 {selectedTournament ? (
                   <>
                     <section className="rounded-[24px] bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5">
+                      {isKnockoutTournament && (
+                        <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+                          <div className="font-bold">토너먼트 자동 진출 대진표</div>
+                          <div className="mt-1 text-xs text-violet-700">경기 결과를 저장하면 승자가 다음 라운드 슬롯으로 자동 배정됩니다. 부전승도 자동 처리됩니다.</div>
+                        </div>
+                      )}
                       {adminMode && (
                         <div className="mb-6 rounded-[20px] border border-blue-200 bg-blue-50/50 p-4 shadow-sm">
                           <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-1.5">
@@ -2718,7 +2761,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                               </td>
                                             )}
                                             <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
-                                              {match.team1.join(' / ')}
+                                              {formatBracketTeam(match.team1, match, section.matches, isPairCustomTournament)}
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                               <div className="flex items-center justify-center gap-1">
@@ -2772,7 +2815,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                               </div>
                                             </td>
                                             <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
-                                              {match.team2.join(' / ')}
+                                              {formatBracketTeam(match.team2, match, section.matches, isPairCustomTournament)}
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                               <div className="flex flex-col gap-0.5">
@@ -2921,7 +2964,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                         <div className="mt-1.5 sm:mt-2.5 grid grid-cols-[minmax(0,1fr)_100px_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] items-stretch gap-1.5 sm:gap-3 text-sm">
                                           <div className="flex min-w-0 flex-col justify-center rounded-xl bg-white px-2 py-1 text-left text-slate-800">
                                             <span className="text-[10px] sm:text-xs font-semibold text-blue-600">팀1</span>
-                                            <div className="mt-0.5 whitespace-pre-line text-xs font-bold leading-normal text-slate-800">{match.team1.join('\n')}</div>
+                                            <div className="mt-0.5 whitespace-pre-line text-xs font-bold leading-normal text-slate-800">{formatBracketTeam(match.team1, match, section.matches, isPairCustomTournament)}</div>
                                           </div>
 
                                           <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-50 px-1 py-1 text-center">
@@ -2978,7 +3021,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
 
                                           <div className="flex min-w-0 flex-col justify-center rounded-xl bg-white px-2 py-1 text-right text-slate-800">
                                             <span className="text-[10px] sm:text-xs font-semibold text-rose-600">팀2</span>
-                                            <div className="mt-0.5 whitespace-pre-line text-xs font-bold leading-normal text-slate-800">{match.team2.join('\n')}</div>
+                                            <div className="mt-0.5 whitespace-pre-line text-xs font-bold leading-normal text-slate-800">{formatBracketTeam(match.team2, match, section.matches, isPairCustomTournament)}</div>
                                           </div>
                                         </div>
 
@@ -3584,7 +3627,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                             </td>
                                           )}
                                           <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
-                                            {match.team1.join(' / ')}
+                                            {formatBracketTeam(match.team1, match, section.matches, isPairCustomTournament)}
                                           </td>
                                           <td className="px-4 py-3 text-center">
                                             <span className={`inline-block rounded-lg px-2.5 py-1 text-xs font-bold whitespace-nowrap ${
@@ -3594,7 +3637,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                             </span>
                                           </td>
                                           <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
-                                            {match.team2.join(' / ')}
+                                            {formatBracketTeam(match.team2, match, section.matches, isPairCustomTournament)}
                                           </td>
                                           <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
                                             {match.referee_name ? (
@@ -3663,7 +3706,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                       <div className="mt-1.5 sm:mt-2.5 grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_84px_minmax(0,1fr)] items-stretch gap-1.5 sm:gap-3">
                                         <div className="flex min-w-0 flex-col justify-center rounded-xl sm:rounded-2xl bg-white px-2 py-1 sm:px-3 sm:py-4 text-left text-slate-800">
                                           <span className="text-[10px] sm:text-xs font-semibold text-blue-600">팀1</span>
-                                          <div className="mt-0.5 whitespace-pre-line text-xs sm:text-sm font-bold sm:font-medium leading-normal sm:leading-6 sm:text-base text-slate-800">{match.team1.join('\n')}</div>
+                                          <div className="mt-0.5 whitespace-pre-line text-xs sm:text-sm font-bold sm:font-medium leading-normal sm:leading-6 sm:text-base text-slate-800">{formatBracketTeam(match.team1, match, section.matches, isPairCustomTournament)}</div>
                                         </div>
                                         <div className="flex flex-col items-center justify-center rounded-xl sm:rounded-2xl bg-slate-900 px-1 py-1 sm:px-2 sm:py-4 text-center text-white">
                                           <div className="text-[9px] sm:text-[11px] font-medium text-slate-300">{isCompleted ? '점수' : '매치'}</div>
@@ -3673,7 +3716,7 @@ export default function TournamentBracketView({ adminMode = false }: TournamentB
                                         </div>
                                         <div className="flex min-w-0 flex-col justify-center rounded-xl sm:rounded-2xl bg-white px-2 py-1 sm:px-3 sm:py-4 text-right text-slate-800">
                                           <span className="text-[10px] sm:text-xs font-semibold text-rose-600">팀2</span>
-                                          <div className="mt-0.5 whitespace-pre-line text-xs sm:text-sm font-bold sm:font-medium leading-normal sm:leading-6 sm:text-base text-slate-800">{match.team2.join('\n')}</div>
+                                          <div className="mt-0.5 whitespace-pre-line text-xs sm:text-sm font-bold sm:font-medium leading-normal sm:leading-6 sm:text-base text-slate-800">{formatBracketTeam(match.team2, match, section.matches, isPairCustomTournament)}</div>
                                         </div>
                                       </div>
 

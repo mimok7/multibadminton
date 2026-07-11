@@ -1,21 +1,14 @@
 'use server';
 
-import { getProfileByUserId } from '@/lib/auth';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getClubManagerContext } from '@/lib/manager-access';
 
 export async function fetchAdminMatchSessions() {
-  const adminSupabase = await getFilteredAdminClient();
-  const serverSupabase = await getSupabaseServerClient();
-
-  const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
-  if (authError || !user) throw new Error('Unauthorized');
-
-  const profile = await getProfileByUserId(adminSupabase, user.id);
-  if (profile?.role !== 'admin' && profile?.role !== 'manager') {
-    throw new Error('Forbidden');
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    throw new Error(context.error === 'unauthorized' ? 'Unauthorized' : 'Forbidden');
   }
 
-  const { data: sessions, error } = await adminSupabase
+  const { data: sessions, error } = await context.adminSupabase
     .from('match_sessions')
     .select('*')
     .order('created_at', { ascending: false });
@@ -25,16 +18,11 @@ export async function fetchAdminMatchSessions() {
 }
 
 export async function fetchAdminMatchResults(filters: { dateFilter: string; statusFilter: string }) {
-  const adminSupabase = await getFilteredAdminClient();
-  const serverSupabase = await getSupabaseServerClient();
-
-  const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
-  if (authError || !user) throw new Error('Unauthorized');
-
-  const profile = await getProfileByUserId(adminSupabase, user.id);
-  if (profile?.role !== 'admin' && profile?.role !== 'manager') {
-    throw new Error('Forbidden');
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    throw new Error(context.error === 'unauthorized' ? 'Unauthorized' : 'Forbidden');
   }
+  const adminSupabase = context.adminSupabase;
 
   let query = adminSupabase
     .from('match_schedules')

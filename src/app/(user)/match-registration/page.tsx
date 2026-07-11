@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowRight, CalendarDays, MapPin, Users, Target, ArrowLeft } from 'lucide-react';
+import { ArrowRight, CalendarDays, MapPin, Users, ArrowLeft } from 'lucide-react';
 
 import { RequireAuth } from '@/components/AuthGuard';
 import { Button } from '@/components/ui/button';
@@ -595,8 +595,6 @@ export default function MatchRegistrationPage() {
               <div className="mt-4 space-y-4">
                 {userMatches.map((matchInfo) => {
                   const isFull = matchInfo.actualParticipantCount >= matchInfo.schedule.max_participants;
-                  const participantsVisible = showParticipants === matchInfo.schedule.id;
-
                   return (
                     <article key={matchInfo.schedule.id} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
                       <div className="space-y-3">

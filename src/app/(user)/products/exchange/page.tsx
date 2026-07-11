@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/hooks/useUser';
-import { Coins, Gift, RefreshCw, AlertCircle, ShoppingBag, ArrowRight, Sparkles } from 'lucide-react';
+import { Coins, Gift, RefreshCw, AlertCircle, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 
 type Product = {
@@ -25,7 +25,7 @@ type ProductPurchase = {
 };
 
 export default function UserProductsExchangePage() {
-  const { user, profile, loading: userLoading, refreshProfile } = useUser();
+  const { profile, loading: userLoading, refreshProfile } = useUser();
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<ProductPurchase[]>([]);
   

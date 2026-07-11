@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getUserRole, getProfileByUserId } from '@/lib/auth';
 import { getActiveClubId } from '@/lib/club';
+import { advanceBracketWinner, advanceLeagueFinalists, ensureBracketResultCanChange, type BracketMatch } from '@/lib/tournament-bracket';
 
 type RouteContext = { params: Promise<{ matchId: string }> };
 
@@ -252,6 +253,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
+    if (!Array.isArray(match.team1) || !Array.isArray(match.team2) || match.team1.length === 0 || match.team2.length === 0) {
+      return NextResponse.json({ error: '참가 팀이 확정된 뒤에 결과를 저장할 수 있습니다.' }, { status: 409 });
+    }
+
     const payload = await request.json().catch(() => null);
     const scoreTeam1 = typeof payload?.score_team1 === 'number' ? payload.score_team1 : null;
     const scoreTeam2 = typeof payload?.score_team2 === 'number' ? payload.score_team2 : null;
@@ -360,6 +365,19 @@ export async function POST(request: Request, context: RouteContext) {
     const winner =
       finalScore1 > finalScore2 ? 'team1' : finalScore2 > finalScore1 ? 'team2' : 'draw';
 
+    if ((match.next_match_id || match.competition_phase === 'preliminary' || match.competition_phase === 'ranking_final') && winner === 'draw') {
+      return NextResponse.json({ error: '토너먼트 경기는 무승부로 종료할 수 없습니다.' }, { status: 400 });
+    }
+
+    try {
+      await ensureBracketResultCanChange(adminSupabase, match as BracketMatch);
+    } catch (advanceError) {
+      return NextResponse.json(
+        { error: advanceError instanceof Error ? advanceError.message : '토너먼트 진행 상태를 확인하지 못했습니다.' },
+        { status: 409 }
+      );
+    }
+
     const { data: updatedMatch, error: updateError } = await adminSupabase
       .from('tournament_matches')
       .update({
@@ -377,6 +395,19 @@ export async function POST(request: Request, context: RouteContext) {
     if (updateError) {
       return NextResponse.json(
         { error: 'Failed to complete match', details: updateError.message },
+        { status: 500 }
+      );
+    }
+
+    try {
+      await advanceBracketWinner(adminSupabase, updatedMatch as BracketMatch);
+      await advanceLeagueFinalists(adminSupabase, updatedMatch as BracketMatch);
+    } catch (advanceError) {
+      return NextResponse.json(
+        {
+          error: advanceError instanceof Error ? advanceError.message : '승자를 다음 라운드에 배정하지 못했습니다.',
+          match: updatedMatch,
+        },
         { status: 500 }
       );
     }

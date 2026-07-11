@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { ExtendedPlayer } from '../types';
-import { Match } from '@/types';
 
 interface ManualMatchesEditorProps {
   matches: any[]; // editable matches where team slots can be null
@@ -14,8 +13,6 @@ interface ManualMatchesEditorProps {
 }
 
 export default function ManualMatchesEditor({ matches, presentPlayers, onChange, onAssign, onCancel, playerGameCounts }: ManualMatchesEditorProps) {
-  const getDisplayName = (p: any) => p ? `${p.name} (${p.skill_label || ''})` : '선수 미지정';
-
   const handleSelect = (matchIdx: number, team: 'team1' | 'team2', slot: 'player1' | 'player2', playerId: string) => {
     const player = presentPlayers.find(p => p.id === playerId) || null;
     const next = matches.map((m, idx) => idx === matchIdx ? JSON.parse(JSON.stringify(m)) : JSON.parse(JSON.stringify(m)));

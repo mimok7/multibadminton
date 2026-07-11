@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
-import { getProfileByUserId } from '@/lib/auth';
 
 interface MatchAssignmentNotification {
   id: string;

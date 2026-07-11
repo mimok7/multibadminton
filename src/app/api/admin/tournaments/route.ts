@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { getUserRole } from '@/lib/auth';
+import { getClubManagerContext } from '@/lib/manager-access';
+import { advanceBracketWinner, advanceLeagueFinalists, ensureBracketResultCanChange, resolveKnockoutBye } from '@/lib/tournament-bracket';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { createBalancedDoublesMatches, createMixedAndSameSexDoublesMatches, createRandomBalancedDoublesMatches } from '@/utils/match-utils';
 import type { Player } from '@/types';
 
@@ -329,24 +330,49 @@ async function fetchTeamAssignment(
 }
 
 async function requireAdminOrManager() {
-  const supabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient();
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status }) };
+  }
+  return context;
+}
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+async function findScopedTournamentMatch(
+  context: { adminSupabase: any; clubId: string },
+  matchId: string
+) {
+  const { data: scopedMatch } = await context.adminSupabase
+    .from('tournament_matches')
+    .select('*')
+    .eq('id', matchId)
+    .maybeSingle();
 
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  if (scopedMatch) {
+    return { match: scopedMatch, client: context.adminSupabase, needsClubRepair: false };
   }
 
-  const userRole = await getUserRole(supabase, user);
-  if (!userRole || !['admin', 'manager'].includes(userRole)) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
+  // Legacy matches created before club_id was propagated can still be shown by older data paths.
+  // Validate the parent tournament globally before repairing the child row's club scope.
+  const globalClient = getUnfilteredGlobalAdminClient();
+  const { data: legacyMatch } = await globalClient
+    .from('tournament_matches')
+    .select('*')
+    .eq('id', matchId)
+    .maybeSingle();
 
-  return { adminSupabase };
+  if (!legacyMatch) return null;
+
+  const { data: tournament } = await globalClient
+    .from('tournaments')
+    .select('id, club_id')
+    .eq('id', legacyMatch.tournament_id)
+    .maybeSingle();
+
+  if (!tournament || tournament.club_id !== context.clubId) return null;
+  if (legacyMatch.club_id && legacyMatch.club_id !== context.clubId) return null;
+
+  return { match: legacyMatch, client: globalClient, needsClubRepair: !legacyMatch.club_id };
 }
 
 export async function GET(request: Request) {
@@ -551,23 +577,48 @@ export async function POST(request: Request) {
           match?.winner === 'team1' || match?.winner === 'team2' || match?.winner === 'draw'
             ? match.winner
             : null,
+        competition_phase: typeof match?.competition_phase === 'string' ? match.competition_phase : 'standard',
+        competition_group_key: typeof match?.competition_group_key === 'string' ? match.competition_group_key : null,
       }));
 
-      const hasInvalidMatch = matchesToSave.some(
-        (match: {
-          match_number: number;
-          team1: string[];
-          team2: string[];
-        }) => match.match_number <= 0 || match.team1.length === 0 || match.team2.length === 0
+      const bracketTargetMatchNumbers = new Set(
+        matches
+          .map((match: any) => match?.next_match_number)
+          .filter((matchNumber: unknown): matchNumber is number => typeof matchNumber === 'number')
       );
+      const bracketSlotMatchNumbers = new Set(
+        matches
+          .filter((match: any) => match?.is_bracket_slot === true)
+          .map((match: any) => match?.match_number)
+          .filter((matchNumber: unknown): matchNumber is number => typeof matchNumber === 'number')
+      );
+      const sourceTargetMatchNumbers = new Set(
+        matches.flatMap((match: any) => [match?.team1_source_match_number, match?.team2_source_match_number])
+          .filter((matchNumber: unknown): matchNumber is number => typeof matchNumber === 'number')
+      );
+      const hasBracketMatches = bracketTargetMatchNumbers.size > 0 || bracketSlotMatchNumbers.size > 0 || sourceTargetMatchNumbers.size > 0;
+      const hasInvalidMatch = matchesToSave.some((match: {
+        match_number: number;
+        team1: string[];
+        team2: string[];
+      }) => {
+        const isBracketSlot =
+          bracketSlotMatchNumbers.has(match.match_number) ||
+          bracketTargetMatchNumbers.has(match.match_number) ||
+          matches.some((source: any) => source?.match_number === match.match_number && typeof source?.next_match_number === 'number') ||
+          sourceTargetMatchNumbers.has(match.match_number);
+        return match.match_number <= 0 || ((match.team1.length === 0 || match.team2.length === 0) && !isBracketSlot);
+      });
 
       if (hasInvalidMatch) {
+        await adminContext.adminSupabase.from('tournaments').delete().eq('id', createdTournament.id);
         return NextResponse.json({ error: 'Invalid tournament matches payload' }, { status: 400 });
       }
 
-      const { error: matchesError } = await adminContext.adminSupabase
+      const { data: insertedMatches, error: matchesError } = await adminContext.adminSupabase
         .from('tournament_matches')
-        .insert(matchesToSave as any);
+        .insert(matchesToSave as any)
+        .select('id, match_number');
 
       if (matchesError) {
         return NextResponse.json(
@@ -580,6 +631,78 @@ export async function POST(request: Request) {
           },
           { status: 500 }
         );
+      }
+
+      if (hasBracketMatches) {
+        const matchIdByNumber = new Map(
+          (insertedMatches || []).map((match: { id: string; match_number: number }) => [match.match_number, match.id])
+        );
+        const links = matches
+          .map((match: any) => ({
+            matchId: matchIdByNumber.get(match?.match_number),
+            nextMatchId: matchIdByNumber.get(match?.next_match_number),
+            nextMatchSlot: match?.next_match_slot,
+          }))
+          .filter((link: { matchId?: string; nextMatchId?: string; nextMatchSlot?: unknown }) =>
+            link.matchId && link.nextMatchId && (link.nextMatchSlot === 1 || link.nextMatchSlot === 2)
+          );
+
+        for (const link of links) {
+          const { error: linkError } = await (adminContext.adminSupabase
+            .from('tournament_matches') as any)
+            .update({ next_match_id: link.nextMatchId, next_match_slot: link.nextMatchSlot })
+            .eq('id', link.matchId);
+
+          if (linkError) {
+            await adminContext.adminSupabase.from('tournaments').delete().eq('id', createdTournament.id);
+            return NextResponse.json(
+              { error: '토너먼트 연결 정보를 저장하지 못했습니다. SQL 마이그레이션을 먼저 실행하세요.' },
+              { status: 500 }
+            );
+          }
+        }
+
+        const sourceLinks = matches.flatMap((match: any) => {
+          const matchId = matchIdByNumber.get(match?.match_number);
+          return [
+            { matchId, column: 'team1_source_match_id', sourceId: matchIdByNumber.get(match?.team1_source_match_number) },
+            { matchId, column: 'team2_source_match_id', sourceId: matchIdByNumber.get(match?.team2_source_match_number) },
+          ];
+        }).filter((link: { matchId?: string; sourceId?: string }) => link.matchId && link.sourceId);
+
+        for (const link of sourceLinks) {
+          const { error: sourceLinkError } = await (adminContext.adminSupabase
+            .from('tournament_matches') as any)
+            .update({ [link.column]: link.sourceId })
+            .eq('id', link.matchId);
+
+          if (sourceLinkError) {
+            await adminContext.adminSupabase.from('tournaments').delete().eq('id', createdTournament.id);
+            return NextResponse.json(
+              { error: '풀리그 진출 연결 정보를 저장하지 못했습니다. SQL 마이그레이션을 먼저 실행하세요.' },
+              { status: 500 }
+            );
+          }
+        }
+
+        const downstreamMatchNumbers = new Set(
+          matches
+            .map((source: any) => source?.next_match_number)
+            .filter((matchNumber: unknown): matchNumber is number => typeof matchNumber === 'number')
+        );
+        const openingMatches = (insertedMatches || []).filter(
+          (match: { match_number: number }) => !downstreamMatchNumbers.has(match.match_number)
+        );
+        for (const openingMatch of openingMatches) {
+          const { data: openingMatchData } = await (adminContext.adminSupabase
+            .from('tournament_matches') as any)
+            .select('id, next_match_id, next_match_slot, team1, team2, winner')
+            .eq('id', openingMatch.id)
+            .maybeSingle();
+          if (openingMatchData) {
+            await resolveKnockoutBye(adminContext.adminSupabase, openingMatchData.id);
+          }
+        }
       }
     }
 
@@ -665,16 +788,47 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Invalid score payload' }, { status: 400 });
     }
 
+    const scopedMatch = await findScopedTournamentMatch(adminContext, matchId);
+    if (!scopedMatch) {
+      return NextResponse.json({ error: 'Tournament match not found' }, { status: 404 });
+    }
+
+    const existingMatch = scopedMatch.match;
+    const mutationClient = scopedMatch.client;
+
+    if (!Array.isArray(existingMatch.team1) || !Array.isArray(existingMatch.team2) || existingMatch.team1.length === 0 || existingMatch.team2.length === 0) {
+      return NextResponse.json({ error: '참가 팀이 확정된 뒤에 결과를 저장할 수 있습니다.' }, { status: 409 });
+    }
+
+    const isKnockoutMatch = Boolean(existingMatch.next_match_id) || existingMatch.competition_phase === 'preliminary' || existingMatch.competition_phase === 'ranking_final';
+    if (isKnockoutMatch && scoreTeam1 === scoreTeam2) {
+      return NextResponse.json({ error: '토너먼트 경기는 무승부로 종료할 수 없습니다.' }, { status: 400 });
+    }
+
+    try {
+      await ensureBracketResultCanChange(mutationClient, existingMatch);
+    } catch (advanceError) {
+      return NextResponse.json(
+        { error: advanceError instanceof Error ? advanceError.message : '토너먼트 진행 상태를 확인하지 못했습니다.' },
+        { status: 409 }
+      );
+    }
+
     const winner = scoreTeam1 > scoreTeam2 ? 'team1' : scoreTeam2 > scoreTeam1 ? 'team2' : 'draw';
 
-    const { data, error } = await adminContext.adminSupabase
+    const scoreUpdate: Record<string, unknown> = {
+      score_team1: scoreTeam1,
+      score_team2: scoreTeam2,
+      winner,
+      status: 'completed',
+    };
+    if (scopedMatch.needsClubRepair) {
+      scoreUpdate.club_id = adminContext.clubId;
+    }
+
+    const { data, error } = await mutationClient
       .from('tournament_matches')
-      .update({
-        score_team1: scoreTeam1,
-        score_team2: scoreTeam2,
-        winner,
-        status: 'completed',
-      })
+      .update(scoreUpdate)
       .eq('id', matchId)
       .select('*')
       .single();
@@ -688,6 +842,19 @@ export async function PATCH(request: Request) {
           message: isScoreLimit ? '점수는 25점을 초과할 수 없습니다.' : error.message,
           details: error.details,
           hint: error.hint,
+        },
+        { status: 500 }
+      );
+    }
+
+    try {
+      await advanceBracketWinner(mutationClient, data as any);
+      await advanceLeagueFinalists(mutationClient, data as any);
+    } catch (advanceError) {
+      return NextResponse.json(
+        {
+          error: advanceError instanceof Error ? advanceError.message : '승자를 다음 라운드에 배정하지 못했습니다.',
+          match: data,
         },
         { status: 500 }
       );

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { isUserAdmin } from '@/lib/auth';
+import { getClubManagerContext } from '@/lib/manager-access';
 
 type CreateRecurringTemplatePayload = {
   club_id?: string;
@@ -29,26 +28,23 @@ type UpdateRecurringTemplatePayload = {
 
 const VALID_DAYS = new Set([0, 1, 2, 3, 4, 5, 6]);
 
+async function requireManager() {
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status }) };
+  }
+  return context;
+}
+
 export async function POST(req: Request) {
   try {
-    const supabase = await getSupabaseServerClient();
-    const adminSupabase = await getFilteredAdminClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!(await isUserAdmin(supabase, user))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const context = await requireManager();
+    if ('error' in context) return context.error;
+    const { adminSupabase, user, clubId } = context;
 
     const body = (await req.json()) as CreateRecurringTemplatePayload;
-    const clubId = body.club_id;
+    const requestedClubId = body.club_id;
     const name = body.name?.trim();
     const description = body.description?.trim() || null;
     const location = body.location?.trim();
@@ -60,7 +56,7 @@ export async function POST(req: Request) {
       new Set((body.day_of_weeks || []).filter((day): day is number => VALID_DAYS.has(day)))
     ).sort((a, b) => a - b);
 
-    if (!name || !location || !startTime || !endTime || dayOfWeeks.length === 0 || !clubId) {
+    if (!name || !location || !startTime || !endTime || dayOfWeeks.length === 0 || !requestedClubId || requestedClubId !== clubId) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
@@ -96,21 +92,9 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const supabase = await getSupabaseServerClient();
-    const adminSupabase = await getFilteredAdminClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!(await isUserAdmin(supabase, user))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const context = await requireManager();
+    if ('error' in context) return context.error;
+    const { adminSupabase } = context;
 
     const body = (await req.json()) as UpdateRecurringTemplatePayload;
     const { id, ...updateFields } = body;
@@ -152,21 +136,9 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const supabase = await getSupabaseServerClient();
-    const adminSupabase = await getFilteredAdminClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!(await isUserAdmin(supabase, user))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const context = await requireManager();
+    if ('error' in context) return context.error;
+    const { adminSupabase } = context;
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
@@ -194,33 +166,21 @@ export async function DELETE(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const supabase = await getSupabaseServerClient();
-    const adminSupabase = await getFilteredAdminClient();
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!(await isUserAdmin(supabase, user))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const context = await requireManager();
+    if ('error' in context) return context.error;
+    const { adminSupabase, clubId: activeClubId } = context;
 
     const { searchParams } = new URL(req.url);
-    const clubId = searchParams.get('club_id');
+    const requestedClubId = searchParams.get('club_id');
 
-    if (!clubId) {
+    if (!requestedClubId || requestedClubId !== activeClubId) {
       return NextResponse.json({ error: 'Missing club_id' }, { status: 400 });
     }
 
     const { data: templates, error: fetchError } = await adminSupabase
       .from('recurring_match_templates')
       .select('*')
-      .eq('club_id', clubId)
+      .eq('club_id', activeClubId)
       .order('day_of_week')
       .order('start_time');
 

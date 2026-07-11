@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getKoreaDate } from '@/lib/date';
-import { Swords, CalendarDays, RefreshCw, ArrowLeft } from 'lucide-react';
+import { CalendarDays, RefreshCw, ArrowLeft } from 'lucide-react';
 
 export default function TodayMatches() {
   const { user, loading: userLoading } = useUser();

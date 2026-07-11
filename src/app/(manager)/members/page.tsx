@@ -1,8 +1,6 @@
 import { redirect } from 'next/navigation'
 import type { AdminUser } from '@/types'
 import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server'
-import { getClubRole } from '@/lib/club-auth'
-import { isUserAdmin } from '@/lib/auth'
 import UserManagementClient from './UserManagementClient'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
 import { cookies } from 'next/headers'
@@ -40,6 +38,7 @@ export default async function ManagerMembersPage({
   const [
     { data: clubMembersRows, error },
     { data: aliasesRows },
+    { data: levelInfoRows },
     { data: recentAttendanceRows }
   ] = await Promise.all([
     filteredAdmin
@@ -56,6 +55,7 @@ export default async function ManagerMembersPage({
       .eq('club_id', activeClubId)
       .neq('role', 'admin'),
     (filteredAdmin as any).from('club_level_aliases').select('level_code, alias').eq('club_id', activeClubId),
+    (filteredAdmin as any).from('level_info').select('code, name, description, score').order('score', { ascending: false, nullsFirst: false }),
     (filteredAdmin as any).from('attendances').select('user_id, attended_at, status').eq('club_id', activeClubId).eq('status', 'present').order('attended_at', { ascending: false })
   ])
 
@@ -102,13 +102,15 @@ export default async function ManagerMembersPage({
   // Level Options (A3 ~ E1)
   const aliasMap = new Map<string, string>((aliasesRows || []).map((r: any) => [r.level_code, r.alias]));
   
-  const levelOptions = SKILL_LEVEL_CODES.map((code, index) => ({
-      code,
-      description: aliasMap.get(code) || code,
-      score: SKILL_LEVEL_CODES.length - index,
-  }));
+  const levelOptions = (levelInfoRows?.length ? levelInfoRows : SKILL_LEVEL_CODES.map((code) => ({ code, name: code, description: code, score: null })))
+    .map((row: any) => ({
+      code: row.code,
+      description: aliasMap.get(row.code) || row.description || row.name || row.code,
+      standardDescription: row.description || row.name || row.code,
+      score: row.score,
+    }));
 
-  const levelOptionByCode = new Map<string, any>(levelOptions.map((option) => [option.code, option]))
+  const levelOptionByCode = new Map<string, any>(levelOptions.map((option: any) => [option.code, option]))
   users = users.map((user) => ({
     ...user,
     skill_level: String(user.skill_level ?? '').trim().toUpperCase() || 'E2',
@@ -154,6 +156,7 @@ export default async function ManagerMembersPage({
     <div className="w-full p-6 pt-0">
       <UserManagementClient
         users={users}
+        clubId={activeClubId}
         myUserId={user.id}
         myUserEmail={user.email || ''}
         levelOptions={levelOptions}

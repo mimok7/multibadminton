@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Plus, Settings, Users, Calendar, X, Save, ArrowRight } from 'lucide-react';
+import { Plus, Settings, Users, Calendar, X, ArrowRight } from 'lucide-react';
 import { createClub, updateClub, deleteClub, getClubManagers, searchUsers, addClubManager, removeClubManager } from './actions';
 import { setActiveClubAction } from '@/app/actions/club';
 import { useRouter } from 'next/navigation';
@@ -20,7 +20,7 @@ interface Club {
 
 export default function ClubManagementClient({ initialClubs }: { initialClubs: Club[] }) {
     const router = useRouter();
-    const [clubs, setClubs] = useState<Club[]>(initialClubs);
+    const [clubs] = useState<Club[]>(initialClubs);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
     const [selectedClub, setSelectedClub] = useState<Club | null>(null);

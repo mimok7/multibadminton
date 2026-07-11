@@ -9,10 +9,44 @@ import {
   matchesRoutePrefix,
 } from '@/lib/route-access';
 import { getUserRole, getRoleFromUser } from '@/lib/auth';
-import { getClubRole } from '@/lib/club-auth';
 import { normalizeClubId } from '@/lib/club-scope';
 
 import type { NextRequest } from 'next/server';
+
+// 클럽 역할은 시스템 역할이 user인 클럽 매니저도 확인할 수 있어야 합니다.
+// 미들웨어의 일반 클라이언트는 RLS에 의해 club_members 행을 읽지 못할 수
+// 있으므로, 사용자와 활성 클럽을 모두 조건으로 고정한 서버 전용 REST 조회를 사용합니다.
+async function getClubRoleForMiddleware(userId: string, clubId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!baseUrl || !serviceRoleKey) return null;
+
+  const headers = {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+  };
+
+  const profileUrl = new URL('/rest/v1/profiles', baseUrl);
+  profileUrl.searchParams.set('select', 'id');
+  profileUrl.searchParams.set('or', `(user_id.eq.${userId},id.eq.${userId})`);
+  profileUrl.searchParams.set('limit', '1');
+  const profileResponse = await fetch(profileUrl, { headers, cache: 'no-store' });
+  if (!profileResponse.ok) return null;
+  const profiles = (await profileResponse.json()) as Array<{ id?: string }>;
+  const profileId = profiles[0]?.id;
+  if (!profileId) return null;
+
+  const memberUrl = new URL('/rest/v1/club_members', baseUrl);
+  memberUrl.searchParams.set('select', 'role');
+  memberUrl.searchParams.set('user_id', `eq.${profileId}`);
+  memberUrl.searchParams.set('club_id', `eq.${clubId}`);
+  memberUrl.searchParams.set('status', 'eq.active');
+  memberUrl.searchParams.set('limit', '1');
+  const memberResponse = await fetch(memberUrl, { headers, cache: 'no-store' });
+  if (!memberResponse.ok) return null;
+  const members = (await memberResponse.json()) as Array<{ role?: string | null }>;
+  return members[0]?.role ?? null;
+}
 
 function shouldRequirePasswordChange(value: unknown) {
   return value === true || value === 'true';
@@ -230,7 +264,7 @@ export async function middleware(req: NextRequest) {
 
       // 클럽 쿠키가 있으면 해당 클럽에서의 역할을 확인
       if (activeClubId) {
-        const clubRole = await getClubRole(supabase, user.id, activeClubId);
+        const clubRole = await getClubRoleForMiddleware(user.id, activeClubId);
         if (!clubRole || !['owner', 'admin', 'manager'].includes(clubRole)) {
           console.log('[Middleware] Redirecting to /unauthorized', { activeClubId, clubRole, userId: user.id });
           const url = req.nextUrl.clone();

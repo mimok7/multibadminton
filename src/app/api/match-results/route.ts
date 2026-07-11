@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
+import { getProfileByUserId } from '@/lib/auth';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { DEFAULT_MATCH_WAGER, MAX_MATCH_WAGER, type CoinSettlementMode } from '@/lib/coins';
 import { notifyWaitingMatchesForSession } from '@/lib/match-preparation-notifications';
 import { syncSessionMatchFlow } from '@/lib/match-session-flow';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient } from '@/lib/supabase-server';
+import { getClubManagerContext } from '@/lib/manager-access';
 
 type MatchParticipantRow = {
   id: number;
@@ -97,20 +97,15 @@ function buildCoinDeltas(params: {
 }
 
 export async function POST(request: Request) {
-  const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient();
-
-  const cookieStore = await cookies();
-  const activeClubId = cookieStore.get('active_club_id')?.value || '';
-
-  const {
-    data: { user },
-    error: authError,
-  } = await serverSupabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const context = await getClubManagerContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return NextResponse.json({ error: status === 401 ? 'Unauthorized' : status === 400 ? 'Club not selected' : 'Forbidden' }, { status });
   }
+
+  const adminSupabase = context.adminSupabase;
+  const activeClubId = context.clubId;
+  const user = context.user;
 
   const body = await request.json().catch(() => null);
   const normalizedMatchId = Number(body?.match_id);
@@ -141,15 +136,13 @@ export async function POST(request: Request) {
 
   // 1. 프로필 정보 및 코인 세팅 병렬 조회
   const [currentProfile, coinSettings] = await Promise.all([
-    getProfileByUserId(serverSupabase, user.id),
+    getProfileByUserId(adminSupabase, user.id),
     readCoinSettings(),
   ]);
 
   if (!currentProfile) {
     return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
   }
-
-  const canManage = isAdminOrManagerRole(currentProfile.role);
 
   // 2. 매치 데이터 및 기존 결과 테이블(최초 입력자 확인용) 병렬 조회
   const [matchRowResult, existingMatchResultResult] = await Promise.all([
@@ -171,17 +164,6 @@ export async function POST(request: Request) {
 
   if (matchError || !matchRow) {
     return NextResponse.json({ error: '경기 정보를 찾을 수 없습니다.' }, { status: 404 });
-  }
-
-  const isParticipant = [
-    matchRow.team1_player1_id,
-    matchRow.team1_player2_id,
-    matchRow.team2_player1_id,
-    matchRow.team2_player2_id,
-  ].includes(user.id);
-
-  if (!canManage && !isParticipant) {
-    return NextResponse.json({ error: '점수 저장은 경기 참여자 또는 관리자만 가능합니다.' }, { status: 403 });
   }
 
   const team1Ids = [matchRow.team1_player1_id, matchRow.team1_player2_id].filter((value): value is string => Boolean(value));

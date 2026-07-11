@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+  getFilteredAdminClient,
+  getSupabaseServerClient,
+  getUnfilteredGlobalAdminClient,
+} from '@/lib/supabase-server';
 import { isUserAdmin } from '@/lib/auth';
+import { getClubRole } from '@/lib/club-auth';
+import { getActiveClubId } from '@/lib/club';
 import { getKoreaDate } from '@/lib/date';
 import {
   decorateDescriptionForScheduleSource,
@@ -17,7 +23,7 @@ type ParticipantProfile = {
   skill_level?: string | null;
 };
 
-async function requireAdmin() {
+async function requireScheduleManager() {
   const supabase = await getSupabaseServerClient();
   const adminSupabase = await getFilteredAdminClient();
 
@@ -30,7 +36,14 @@ async function requireAdmin() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  if (!(await isUserAdmin(supabase, user))) {
+  const isGlobalManager = await isUserAdmin(supabase, user);
+  const activeClubId = await getActiveClubId();
+  const clubRole = activeClubId
+    ? await getClubRole(getUnfilteredGlobalAdminClient(), user.id, activeClubId)
+    : null;
+  const canManageSchedules = isGlobalManager || ['owner', 'admin', 'manager'].includes(clubRole || '');
+
+  if (!canManageSchedules) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
@@ -39,7 +52,7 @@ async function requireAdmin() {
 
 export async function GET(request: Request) {
   try {
-    const adminContext = await requireAdmin();
+    const adminContext = await requireScheduleManager();
 
     if ('error' in adminContext) {
       return adminContext.error;
@@ -257,7 +270,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const adminContext = await requireAdmin();
+    const adminContext = await requireScheduleManager();
 
     if ('error' in adminContext) {
       return adminContext.error;
@@ -334,7 +347,7 @@ export async function PATCH(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const adminContext = await requireAdmin();
+    const adminContext = await requireScheduleManager();
 
     if ('error' in adminContext) {
       return adminContext.error;
@@ -628,7 +641,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const adminContext = await requireAdmin();
+    const adminContext = await requireScheduleManager();
 
     if ('error' in adminContext) {
       return adminContext.error;

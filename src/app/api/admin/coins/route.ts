@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getProfileByUserId, isAdminRole } from '@/lib/auth';
+import { getProfileByUserId, getUserRole, isAdminRole } from '@/lib/auth';
+import { getClubRole } from '@/lib/club-auth';
 import { DEFAULT_COIN_SETTINGS, INITIAL_COIN_BALANCE, type CoinSettlementMode } from '@/lib/coins';
 import { readCoinSettings, writeCoinSettings } from '@/lib/coin-settings';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
+import { getFilteredAdminClient, getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 
 async function requireAdmin() {
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return { error: NextResponse.json({ error: 'Club not selected' }, { status: 400 }) };
+  }
+
   const serverSupabase = await getSupabaseServerClient();
   const adminSupabase = await getFilteredAdminClient();
+  const roleLookupClient = getUnfilteredGlobalAdminClient();
   const {
     data: { user },
     error: authError,
@@ -16,27 +24,41 @@ async function requireAdmin() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const currentProfile = await getProfileByUserId(serverSupabase, user.id);
-  if (!currentProfile || !isAdminRole(currentProfile.role)) {
+  const [currentProfile, globalRole, clubRole] = await Promise.all([
+    getProfileByUserId(roleLookupClient, user.id),
+    getUserRole(roleLookupClient, user),
+    getClubRole(roleLookupClient, user.id, clubId),
+  ]);
+  const canManageClub = isAdminRole(globalRole) || ['owner', 'admin', 'manager'].includes(clubRole || '');
+
+  if (!currentProfile || !canManageClub) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return { adminSupabase, currentProfile };
+  return { adminSupabase, currentProfile, clubId };
 }
 
 export async function GET() {
   const context = await requireAdmin();
   if ('error' in context) return context.error;
 
-  const { adminSupabase, currentProfile } = context;
+  const { adminSupabase, currentProfile, clubId } = context;
   const coinSettings = await readCoinSettings();
 
-  const [{ data: profiles, error: profilesError }, { data: transactions, error: transactionsError }] = await Promise.all([
-    adminSupabase
-      .from('profiles')
-      .select('id, user_id, username, full_name, email, role, coin_balance, coin_wins, coin_losses, coin_updated_at')
-      .order('coin_balance', { ascending: false })
-      .order('full_name', { ascending: true }),
+  const { data: members, error: membersError } = await adminSupabase
+    .from('club_members')
+    .select('user_id, role, coin_balance, coin_wins, coin_losses')
+    .eq('club_id', clubId)
+    .eq('status', 'active');
+
+  const profileIds = (members || []).map((member) => member.user_id).filter(Boolean);
+  const [{ data: profileRows, error: profilesError }, { data: transactions, error: transactionsError }] = await Promise.all([
+    profileIds.length > 0
+      ? adminSupabase
+        .from('profiles')
+        .select('id, user_id, username, full_name, email, role, coin_updated_at')
+        .in('id', profileIds)
+      : Promise.resolve({ data: [], error: null }),
     adminSupabase
       .from('profile_coin_transactions')
       .select('id, profile_id, match_id, transaction_type, delta, wager_amount, team_side, team1_score, team2_score, created_at')
@@ -44,12 +66,28 @@ export async function GET() {
       .limit(50),
   ]);
 
-  if (profilesError || transactionsError) {
+  if (membersError || profilesError || transactionsError) {
     return NextResponse.json(
-      { error: profilesError?.message || transactionsError?.message || '코인 데이터를 불러오지 못했습니다.' },
+      { error: membersError?.message || profilesError?.message || transactionsError?.message || '코인 데이터를 불러오지 못했습니다.' },
       { status: 500 }
     );
   }
+
+  const profileById = new Map((profileRows || []).map((profile) => [profile.id, profile]));
+  const profiles = (members || [])
+    .map((member) => {
+      const profile = profileById.get(member.user_id);
+      if (!profile) return null;
+      return {
+        ...profile,
+        role: member.role,
+        coin_balance: member.coin_balance ?? 0,
+        coin_wins: member.coin_wins ?? 0,
+        coin_losses: member.coin_losses ?? 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => (right?.coin_balance ?? 0) - (left?.coin_balance ?? 0) || (left?.full_name || '').localeCompare(right?.full_name || ''));
 
   return NextResponse.json({
     initialCoinBalance: INITIAL_COIN_BALANCE,
@@ -64,7 +102,7 @@ export async function POST(request: Request) {
   const context = await requireAdmin();
   if ('error' in context) return context.error;
 
-  const { adminSupabase } = context;
+  const { adminSupabase, clubId } = context;
   const body = await request.json().catch(() => null);
   const action = String(body?.action || '');
 
@@ -76,25 +114,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 });
     }
 
-    const { data: profile, error: profileError } = await adminSupabase
-      .from('profiles')
+    const { data: member, error: memberError } = await adminSupabase
+      .from('club_members')
       .select('coin_balance')
-      .eq('id', profileId)
+      .eq('club_id', clubId)
+      .eq('user_id', profileId)
+      .eq('status', 'active')
       .single();
 
-    if (profileError || !profile) {
+    if (memberError || !member) {
       return NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const nextBalance = Math.max(0, (profile.coin_balance ?? 0) + delta);
+    const nextBalance = Math.max(0, (member.coin_balance ?? 0) + delta);
 
     const { error } = await adminSupabase
-      .from('profiles')
+      .from('club_members')
       .update({
         coin_balance: nextBalance,
-        coin_updated_at: new Date().toISOString(),
       })
-      .eq('id', profileId);
+      .eq('club_id', clubId)
+      .eq('user_id', profileId)
+      .eq('status', 'active');
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -112,12 +153,11 @@ export async function POST(request: Request) {
     }
 
     const { error } = await adminSupabase
-      .from('profiles')
-      .update({
-        coin_balance: coinBalance,
-        coin_updated_at: new Date().toISOString(),
-      })
-      .eq('id', profileId);
+      .from('club_members')
+      .update({ coin_balance: coinBalance })
+      .eq('club_id', clubId)
+      .eq('user_id', profileId)
+      .eq('status', 'active');
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -135,12 +175,10 @@ export async function POST(request: Request) {
     }
 
     const { error } = await adminSupabase
-      .from('profiles')
-      .update({
-        coin_balance: coinBalance,
-        coin_updated_at: new Date().toISOString(),
-      })
-      .not('id', 'is', null);
+      .from('club_members')
+      .update({ coin_balance: coinBalance })
+      .eq('club_id', clubId)
+      .eq('status', 'active');
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
