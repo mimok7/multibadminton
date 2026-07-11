@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useUser } from '@/hooks/useUser';
 import { Coins, Gift, RefreshCw, AlertCircle, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
+import { formatKSTDateTime } from '@/lib/date';
 
 type Product = {
   id: string;
@@ -257,7 +258,7 @@ export default function UserProductsExchangePage() {
                   <div>
                     <span className="font-semibold text-slate-800 text-sm">{purchase.product_name}</span>
                     <p className="mt-1 text-[10px] text-slate-400">
-                      교환일: {new Date(purchase.created_at).toLocaleString('ko-KR')}
+                      교환일: {formatKSTDateTime(purchase.created_at)}
                     </p>
                   </div>
                   <div className="text-right">

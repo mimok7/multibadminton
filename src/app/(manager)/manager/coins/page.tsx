@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_COIN_SETTINGS, type CoinSettings, type CoinSettlementMode } from '@/lib/coins';
 import { Button } from '@/components/ui/button';
+import { formatKSTDateTime } from '@/lib/date';
 
 type CoinProfile = {
   id: string;
@@ -535,7 +536,7 @@ export default function AdminCoinsPage() {
                   <td className="px-3 py-4">
                     <div className="text-lg font-semibold text-amber-600">{profile.coin_balance ?? 0}</div>
                     <div className="text-xs text-slate-500">
-                      업데이트 {new Date(profile.coin_updated_at).toLocaleString('ko-KR')}
+                      업데이트 {formatKSTDateTime(profile.coin_updated_at)}
                     </div>
                   </td>
                   <td className="px-3 py-4 text-slate-700">
@@ -613,7 +614,7 @@ export default function AdminCoinsPage() {
                       {transaction.delta >= 0 ? `+${transaction.delta}` : transaction.delta}
                     </div>
                     <div className="text-xs text-slate-500">
-                      {transaction.transaction_type === 'win' ? '승리 정산' : '패배 차감'} · {new Date(transaction.created_at).toLocaleString('ko-KR')}
+                      {transaction.transaction_type === 'win' ? '승리 정산' : '패배 차감'} · {formatKSTDateTime(transaction.created_at)}
                     </div>
                   </div>
                 </div>

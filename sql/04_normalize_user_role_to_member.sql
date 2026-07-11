@@ -24,11 +24,11 @@ ALTER TABLE public.club_members
 -- Legacy user labels are normal members, not a separate permission level.
 UPDATE public.profiles
 SET role = 'member'
-WHERE LOWER(TRIM(COALESCE(role, ''))) IN ('user', 'member_user', '일반회원', '일반 사용자', 'owner', 'manager');
+WHERE LOWER(TRIM(COALESCE(role, ''))) IN ('user', 'member_user', '일반회원', '일반 사용자', 'owner', 'manager', 'admin');
 
 UPDATE public.profiles
 SET role = 'superadmin'
-WHERE LOWER(TRIM(COALESCE(role, ''))) IN ('admin', 'administrator', 'superadmin', '시스템 관리자');
+WHERE LOWER(TRIM(COALESCE(role, ''))) IN ('administrator', 'superadmin', '시스템 관리자', '슈퍼관리자');
 
 -- Rename the dedicated global administrator username.
 UPDATE public.profiles

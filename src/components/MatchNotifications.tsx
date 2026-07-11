@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
+import { formatKSTDateTime, getKoreaDate } from '@/lib/date';
 
 interface MatchAssignmentNotification {
   id: string;
@@ -25,7 +26,7 @@ export default function MatchNotifications() {
 
     const checkForNewMatches = async () => {
       try {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getKoreaDate();
         // useUser 훅에서 캐시되어 제공받는 profile 정보를 재사용하여 30초마다 발생하는 DB 중복 조회를 방지합니다.
         const myProfile = profile;
 
@@ -189,7 +190,7 @@ export default function MatchNotifications() {
                         {notification.message}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {new Date(notification.created_at).toLocaleString('ko-KR')}
+                        {formatKSTDateTime(notification.created_at)}
                       </p>
                     </div>
                   </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Match } from '@/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { getKoreaDate } from '@/lib/date';
+import { formatKSTDate, getKoreaDate } from '@/lib/date';
 
 import { 
   ExtendedPlayer, 
@@ -510,7 +510,7 @@ function PlayersPage() {
       await fetchAvailableDates();
       
       alert(
-        `${scheduleInserts.length}개 경기가 ${new Date(selectedAssignDate).toLocaleDateString('ko-KR')} ` +
+        `${scheduleInserts.length}개 경기가 ${formatKSTDate(selectedAssignDate)} ` +
         `일정으로 성공적으로 배정되었습니다!`
       );
     } catch (error) {

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getKoreaDate } from '@/lib/date';
+import { formatKSTDate } from '@/lib/date';
 import { CalendarDays, RefreshCw, ArrowLeft } from 'lucide-react';
 
 export default function TodayMatches() {
@@ -75,12 +76,7 @@ export default function TodayMatches() {
             <div className="space-y-0.5 pl-2">
               <h1 className="text-xl font-bold tracking-tight">오늘의 경기 일정</h1>
               <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">
-                {new Date().toLocaleDateString('ko-KR', { 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric',
-                  weekday: 'long'
-                })}
+                {formatKSTDate(new Date())}
               </p>
             </div>
             <Link href="/dashboard">

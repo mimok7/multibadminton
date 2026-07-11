@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getKoreaDate } from '@/lib/date';
 
 export default function DatabaseTestPage() {
   const [testResults, setTestResults] = useState<any[]>([]);
@@ -46,7 +47,7 @@ export default function DatabaseTestPage() {
         });
 
         // 3. Attendances 테이블 조회 (오늘 날짜)
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getKoreaDate();
         const { data: todayAttendances, error: attendanceError } = await supabase
           .from('attendances')
           .select('*')

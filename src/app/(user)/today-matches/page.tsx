@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
-import { getKoreaDate } from '@/lib/date';
+import { formatKSTDate, getKoreaDate } from '@/lib/date';
 import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -515,12 +515,7 @@ export default function TodayMatches() {
 
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] px-2">
               <span className="text-slate-300 font-medium">
-                {new Date().toLocaleDateString('ko-KR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  weekday: 'long',
-                })}
+                {formatKSTDate(new Date())}
               </span>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="rounded-md bg-white/10 px-2 py-1">

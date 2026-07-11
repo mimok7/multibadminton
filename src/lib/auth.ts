@@ -26,7 +26,9 @@ export type AppProfile = Pick<
 type ProfileLookupClient = Pick<SupabaseClient<Database, any, any>, 'from'>;
 
 // `admin` is retained as a legacy alias; the canonical global role is superadmin.
-const ADMIN_ROLE_ALIASES = new Set(['admin', 'administrator', 'superadmin', '시스템 관리자', '관리자']);
+// Global administration is intentionally separate from club-level admin.
+// The admin role in club_members must not grant system access.
+const ADMIN_ROLE_ALIASES = new Set(['superadmin', '시스템 관리자', '슈퍼관리자']);
 const MANAGER_ROLE_ALIASES = new Set(['manager', '매니저', '운영자']);
 const USER_ROLE_ALIASES = new Set(['user', 'member', '일반 사용자', '일반회원']);
 

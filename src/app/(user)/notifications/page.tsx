@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useUser } from "@/hooks/useUser";
 import { useClub } from "@/hooks/useClub";
 import { getSupabaseClient } from "@/lib/supabase";
+import { formatKSTDateTime } from "@/lib/date";
 import {
   Bell,
   Check,
@@ -487,7 +488,7 @@ export default function NotificationsPage() {
                         {typeLabel}
                       </span>
                       <span className="text-[10px] text-slate-400 shrink-0">
-                        {new Date(n.created_at).toLocaleString("ko-KR")}
+                        {formatKSTDateTime(n.created_at)}
                       </span>
                     </div>
 

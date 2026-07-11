@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Bell } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
+import { formatKSTDate, formatKSTDateTime, getKoreaDate } from '@/lib/date';
 
 type NotificationRow = {
   id: string;
@@ -352,7 +353,7 @@ export default function AdminNotificationsPage() {
     // Header Info
     csvContent += `설문 질문,"${s.question.replace(/"/g, '""')}"\n`;
     csvContent += `설문 설명,"${(s.description || '').replace(/"/g, '""')}"\n`;
-    csvContent += `설문 생성일,${new Date(s.created_at).toLocaleString()}\n`;
+    csvContent += `설문 생성일,${formatKSTDateTime(s.created_at)}\n`;
     csvContent += `총 응답자,${s.response_count}명\n\n`;
     
     // Summary Stats
@@ -376,7 +377,7 @@ export default function AdminNotificationsPage() {
       responses.forEach((r: any) => {
         const u = users.find(user => user.id === r.user_id);
         const name = u ? u.label : '알 수 없는 사용자';
-        const voteTime = r.created_at ? new Date(r.created_at).toLocaleString() : '-';
+        const voteTime = r.created_at ? formatKSTDateTime(r.created_at) : '-';
         csvContent += `"${name.replace(/"/g, '""')}","${r.selected_option.replace(/"/g, '""')}",${voteTime}\n`;
       });
     }
@@ -385,7 +386,7 @@ export default function AdminNotificationsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    const filename = `설문결과_${s.question.replace(/[/\\?%*:|"<>]/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `설문결과_${s.question.replace(/[/\\?%*:|"<>]/g, '_')}_${getKoreaDate()}.csv`;
     link.setAttribute('download', filename);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
@@ -802,7 +803,7 @@ export default function AdminNotificationsPage() {
                       <div className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md inline-block mb-1.5">{typeLabel}</div>
                       <div className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1" title={n.title}>{n.title}</div>
                     </div>
-                    <div className="text-[9px] text-slate-400 shrink-0">{new Date(n.created_at).toLocaleDateString()}</div>
+                    <div className="text-[9px] text-slate-400 shrink-0">{formatKSTDate(n.created_at)}</div>
                   </div>
                   <div className="mt-2.5 text-xs text-slate-600 whitespace-pre-line leading-relaxed line-clamp-4" title={n.message}>{n.message}</div>
                   {n.file_url && (
@@ -911,7 +912,7 @@ export default function AdminNotificationsPage() {
                         {readStatusNode}
                       </td>
                       <td className="p-3 text-slate-400 whitespace-nowrap">
-                        {new Date(n.created_at).toLocaleString()}
+                        {formatKSTDateTime(n.created_at)}
                       </td>
                       <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
                         {!n.is_read && n.total_count === 1 && (
@@ -951,7 +952,7 @@ export default function AdminNotificationsPage() {
                     </span>
                     <h3 className="font-bold text-slate-800 text-base mt-1">{s.question}</h3>
                   </div>
-                  <span className="text-xs text-gray-500">{new Date(s.created_at).toLocaleDateString()}</span>
+                  <span className="text-xs text-gray-500">{formatKSTDate(s.created_at)}</span>
                 </div>
                 {s.description && (
                   <p className="text-xs text-gray-600 mb-2 whitespace-pre-line">{s.description}</p>

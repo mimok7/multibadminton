@@ -5,6 +5,7 @@ import { requireSuperadmin } from '@/lib/superadmin'
 import UserManagementClient from './UserManagementClient'
 import type { Database } from '@/types/supabase'
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels'
+import { getKoreaDate } from '@/lib/date'
 import { getActiveClubId } from '@/lib/club'
 
 export const dynamic = 'force-dynamic'
@@ -45,7 +46,7 @@ export default async function AdminMembersPage({
   const today = new Date()
   const cutoff = new Date(today)
   cutoff.setDate(today.getDate() - 30)
-  const cutoffDate = cutoff.toISOString().slice(0, 10)
+  const cutoffDate = getKoreaDate(cutoff)
 
   const [
     rpc,

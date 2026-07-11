@@ -6,6 +6,7 @@ import { createClub, getClubLevelAliases, updateClubLevelAliases, deleteClub } f
 import { setActiveClubAction } from '@/app/actions/club';
 import { SKILL_LEVEL_CODES } from '@/lib/skill-levels';
 import { useRouter } from 'next/navigation';
+import { formatKSTDate } from '@/lib/date';
 
 interface Club {
     id: string;
@@ -165,7 +166,7 @@ export default function ClubManagementClient({ initialClubs }: { initialClubs: C
                                 <td className="px-6 py-4 text-slate-600 text-sm">
                                     <div className="flex items-center gap-1.5">
                                         <Calendar className="size-4 text-slate-400" />
-                                        <span>{new Date(club.created_at).toLocaleDateString()}</span>
+                                        <span>{formatKSTDate(club.created_at)}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-right">

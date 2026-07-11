@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
 import { Plus, Trash2, Edit2, AlertCircle, Coins, Gift, RefreshCw, Copy, Check, ToggleLeft, ToggleRight, LayoutGrid, List } from 'lucide-react';
 
 type Product = {
@@ -831,7 +832,7 @@ export default function AdminProductsPage() {
                       -{purchase.coin_price}코인
                     </span>
                     <span className="text-xs text-slate-400">
-                      {new Date(purchase.created_at).toLocaleString('ko-KR')}
+                      {formatKSTDateTime(purchase.created_at)}
                     </span>
                   </div>
                 </div>
@@ -861,7 +862,7 @@ export default function AdminProductsPage() {
                         {isApplied ? '신청완료' : '지급완료'}
                       </span>
                       <span className="text-[10px] font-medium text-slate-400">
-                        {new Date(purchase.created_at).toLocaleDateString('ko-KR')}
+                      {formatKSTDate(purchase.created_at)}
                       </span>
                     </div>
 

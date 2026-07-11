@@ -1,9 +1,10 @@
 import { getSupabaseClient } from '@/lib/supabase';
+import { getKoreaDate } from '@/lib/date';
 
 const supabase = getSupabaseClient();
 
 export const debugAttendanceData = async (setDebugInfo: (info: string) => void) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getKoreaDate();
 
   let debugText = '=== 출석 데이터 디버깅 ===\n';
   debugText += `오늘 날짜: ${today}\n\n`;

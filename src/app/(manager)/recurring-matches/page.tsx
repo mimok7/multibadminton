@@ -6,6 +6,7 @@ import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { Button } from '@/components/ui/button';
 import type { Json } from '@/types/supabase';
+import { formatKSTDateTime } from '@/lib/date';
 
 interface RecurringTemplate {
   id: string | null;
@@ -369,7 +370,7 @@ export default function RecurringMatchPage() {
               <h3 className="font-semibold text-green-800 mb-2">생성 결과</h3>
               <p className="text-green-700">{generationResult.message}</p>
               <p className="text-sm text-green-600 mt-1">
-                실행 시간: {new Date(generationResult.execution_time).toLocaleString()}
+                실행 시간: {formatKSTDateTime(generationResult.execution_time)}
               </p>
             </div>
           )}

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trophy } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchLevelInfoMap, getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
+import { formatKSTDate } from '@/lib/date';
 
 interface TeamAssignment {
   id: string;
@@ -3309,7 +3310,7 @@ export default function TournamentMatchesPage() {
                 <div>
                   <h3 className="text-base font-semibold text-gray-900 sm:text-lg">{tournament.title}</h3>
                   <div className="mt-1 space-y-1 text-xs text-gray-600 sm:text-sm">
-                    <div>📅 {new Date(tournament.created_at).toLocaleDateString('ko-KR')}</div>
+                    <div>📅 {formatKSTDate(tournament.created_at)}</div>
                     <div>👥 {tournament.total_teams}팀 참가</div>
                     <div>🎯 {tournament.team_type}</div>
                   </div>

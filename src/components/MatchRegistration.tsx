@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getProfileByUserId } from '@/lib/auth';
 import { formatNameWithCoins } from '@/lib/player-display';
+import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
 import { useClub } from '@/hooks/useClub';
 import type { Database } from '@/types/supabase';
 
@@ -52,7 +53,7 @@ export default function MatchRegistration({
   const [loading, setLoading] = useState(false);
   const [userRegistration, setUserRegistration] = useState<Participant | null>(null);
   const formatMatchDate = (value: string | null, options: Intl.DateTimeFormatOptions) =>
-    value ? new Date(value).toLocaleDateString('ko-KR', options) : '날짜 미정';
+    value ? formatKSTDate(value) : '날짜 미정';
 
   // 참가자 목록 조회
   const fetchParticipants = async () => {
@@ -394,7 +395,7 @@ export default function MatchRegistration({
                   )}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {new Date(participant.registered_at).toLocaleDateString('ko-KR')}
+                  {formatKSTDate(participant.registered_at)}
                 </div>
               </div>
             ))}

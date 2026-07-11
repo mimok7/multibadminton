@@ -16,6 +16,7 @@ import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/sch
 import type { CoinSettlementMode } from '@/lib/coins';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { getLevelNameFromCode } from '@/lib/level-info';
+import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
 import {
   fetchMyTournamentMatches,
   normalizeTournamentPlayerName,
@@ -96,7 +97,7 @@ function MatchResultDisplay({ selectedMatch, user, supabase }: {
       <div className="flex justify-between items-center">
         <span className="font-medium">완료 시간:</span>
         <span className="text-green-600 text-xs">
-          {new Date(matchResult.completed_at).toLocaleString('ko-KR')}
+          {formatKSTDateTime(matchResult.completed_at)}
         </span>
       </div>
       <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-1.5">
@@ -1306,11 +1307,7 @@ export default function MySchedulePage() {
 
   const formatCompactDate = (value?: string | null) =>
     value
-      ? new Date(value).toLocaleDateString('ko-KR', {
-          month: 'short',
-          day: 'numeric',
-          weekday: 'short',
-        })
+      ? formatKSTDate(value)
       : '날짜 미정';
 
   const formatTimeRange = (start?: string | null, end?: string | null) =>
@@ -2249,12 +2246,7 @@ export default function MySchedulePage() {
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">날짜</div>
                     <div className="mt-1 text-sm font-medium text-slate-800">
-                      {new Date(selectedMatch.match_date).toLocaleDateString('ko-KR', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        weekday: 'short',
-                      })}
+                      {formatKSTDate(selectedMatch.match_date)}
                     </div>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">

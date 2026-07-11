@@ -5,6 +5,7 @@ import { getLevelScore } from '@/utils/match-helpers';
 import { GeneratedMatch, MatchSession } from '../types';
 import type { ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
+import { formatKSTDateTime } from '@/lib/date';
 
 type AssignedScheduleDetail = ScheduledMatchView & {
   session_id: string | null;
@@ -403,7 +404,7 @@ export default function MatchSessionStatus({
                           남은 경기: {session.total_matches - session.assigned_matches}경기
                         </div>
                         <div className="text-xs text-gray-500">
-                          생성일시: {new Date(session.created_at).toLocaleString('ko-KR')}
+                          생성일시: {formatKSTDateTime(session.created_at)}
                         </div>
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-2">

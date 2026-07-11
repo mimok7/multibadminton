@@ -196,7 +196,7 @@ export default function LoginPage() {
       }
 
       const role = signInData.user?.app_metadata?.role || signInData.user?.user_metadata?.role;
-      const isAdmin = role === 'admin' || role === 'administrator' || role === '관리자';
+      const isAdmin = role === 'superadmin' || role === '시스템 관리자' || role === '슈퍼관리자';
       const isManager = role === 'manager' || role === '매니저' || role === '운영자';
       
       // 사용자 클럽 목록 조회 및 active_club_id 쿠키 자동 갱신 (서버사이드 처리)
@@ -215,7 +215,7 @@ export default function LoginPage() {
       }
 
       let defaultPath = DEFAULT_USER_REDIRECT;
-      if (isAdmin) defaultPath = '/admin';
+      if (isAdmin) defaultPath = '/superadmin';
       else if (isManager) defaultPath = '/manager';
 
       let nextPath = mustChangePassword ? '/change-password' : defaultPath;

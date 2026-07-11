@@ -10,6 +10,7 @@ import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { getKoreaDate } from '@/lib/date';
+import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
 import { getLevelNameFromCode } from '@/lib/level-info';
 import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -56,7 +57,7 @@ interface UserMatchInfo {
 }
 
 function formatMatchDate(value: string | null, options: Intl.DateTimeFormatOptions) {
-  return value ? new Date(value).toLocaleDateString('ko-KR', options) : '날짜 미정';
+  return value ? formatKSTDate(value) : '날짜 미정';
 }
 
 export default function MatchRegistrationPage() {
@@ -686,7 +687,7 @@ export default function MatchRegistrationPage() {
 
                         {matchInfo.participation?.registered_at && matchInfo.isRegistered && (
                           <p className="text-xs text-slate-500">
-                            신청일시 {new Date(matchInfo.participation.registered_at).toLocaleString('ko-KR')}
+                            신청일시 {formatKSTDateTime(matchInfo.participation.registered_at)}
                           </p>
                         )}
                       </div>

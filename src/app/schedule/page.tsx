@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RequireAuth } from '@/components/AuthGuard';
 import type { Database } from '@/types/supabase';
+import { formatKSTDate } from '@/lib/date';
 
 interface MatchSession {
   id: string;
@@ -312,7 +313,7 @@ function ScheduleManagePage() {
                 <h4 className="font-medium">{session.session_name}</h4>
               </div>
               <div className="text-sm text-gray-600">
-                <div>날짜: {new Date(session.session_date).toLocaleDateString('ko-KR')}</div>
+                <div>날짜: {formatKSTDate(session.session_date)}</div>
                 <div>총 경기: {session.total_matches}경기</div>
                 <div>배정된 경기: {session.assigned_matches}경기</div>
               </div>

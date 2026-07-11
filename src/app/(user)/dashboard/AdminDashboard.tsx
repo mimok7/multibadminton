@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
+import { getKoreaDate } from '@/lib/date';
 import { useClub } from '@/hooks/useClub';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -249,7 +250,7 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
     const fetchAdminData = async () => {
       try {
         setLoading(true);
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getKoreaDate();
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -259,7 +260,7 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
         let att1Query = supabase.from('attendances').select('*', { count: 'exact', head: true }).eq('attended_at', today);
         let ms1Query = supabase.from('match_schedules').select('*', { count: 'exact', head: true });
         let ms2Query = supabase.from('match_schedules').select('*', { count: 'exact', head: true }).gte('match_date', today).eq('status', 'scheduled');
-        let att2Query = supabase.from('attendances').select('user_id').gte('attended_at', sevenDaysAgo.toISOString().slice(0, 10));
+        let att2Query = supabase.from('attendances').select('user_id').gte('attended_at', getKoreaDate(sevenDaysAgo));
         let att3Query = supabase.from('attendances').select('status').eq('user_id', userId).eq('attended_at', today);
 
         if (decodedClubId) {
@@ -341,7 +342,7 @@ export default function AdminDashboard({ userId, email }: { userId: string; emai
     try {
       setMyAttendanceStatus(status);
       
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getKoreaDate();
       
       const { data: existingAttendanceData } = await supabase
         .from('attendances')

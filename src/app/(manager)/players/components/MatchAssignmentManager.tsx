@@ -6,6 +6,7 @@ import { getProfileByUserId } from '@/lib/auth';
 import { NotificationService } from '@/utils/notification-service';
 import { MatchSession, GeneratedMatch, AvailableDate } from '../types';
 import { getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
+import { formatKSTDate } from '@/lib/date';
 
 interface MatchAssignmentManagerProps {
   matchSessions: MatchSession[];
@@ -357,7 +358,7 @@ export default function MatchAssignmentManager({
               <option value="">날짜를 선택하세요</option>
               {availableDates.map(dateInfo => (
                 <option key={dateInfo.date} value={dateInfo.date}>
-                  {new Date(dateInfo.date).toLocaleDateString('ko-KR')} 
+                  {formatKSTDate(dateInfo.date)}
                   ({dateInfo.location} | 여유: {dateInfo.availableSlots}명 | {dateInfo.timeRange})
                 </option>
               ))}
@@ -554,7 +555,7 @@ export default function MatchAssignmentManager({
                     </p>
                     {selectedAssignDate && (
                       <p className="text-xs text-blue-600 mt-1">
-                        배정 날짜: {new Date(selectedAssignDate).toLocaleDateString('ko-KR')} |
+                        배정 날짜: {formatKSTDate(selectedAssignDate)} |
                         참여자: {selectedMatches.size * 4}명
                       </p>
                     )}
