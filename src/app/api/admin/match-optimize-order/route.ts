@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+  getFilteredAdminClient,
+  getSupabaseServerClient,
+  getUnfilteredGlobalAdminClient,
+} from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
-import { isAdminOrManagerRole } from '@/lib/auth';
+import { getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
+import { getActiveClubId } from '@/lib/club';
+import { getClubRole } from '@/lib/club-auth';
 
 function addMinutesToTimeString(time: string | null | undefined, minutesToAdd: number) {
   if (!time) return null;
@@ -26,13 +32,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const roleLookupClient = getUnfilteredGlobalAdminClient();
+    const [profile, activeClubId] = await Promise.all([
+      getProfileByUserId(roleLookupClient, user.id),
+      getActiveClubId(),
+    ]);
+    const clubRole = activeClubId
+      ? await getClubRole(roleLookupClient, user.id, activeClubId)
+      : null;
+    const canManage = isAdminOrManagerRole(profile?.role)
+      || ['owner', 'admin', 'manager'].includes(String(clubRole || '').trim().toLowerCase());
 
-    if (!isAdminOrManagerRole((profile as any)?.role)) {
+    if (!canManage) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

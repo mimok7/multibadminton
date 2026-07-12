@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProfileByUserId, isAdminOrManagerRole } from '@/lib/auth';
+import { getActiveClubId } from '@/lib/club';
+import { getClubRole } from '@/lib/club-auth';
 import { DEFAULT_MATCH_WAGER } from '@/lib/coins';
 import { notifyWaitingMatchesForSession } from '@/lib/match-preparation-notifications';
 import { syncSessionMatchFlow } from '@/lib/match-session-flow';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+  getFilteredAdminClient,
+  getSupabaseServerClient,
+  getUnfilteredGlobalAdminClient,
+} from '@/lib/supabase-server';
 
 type MatchRow = {
   id: number;
@@ -37,10 +43,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid match_id' }, { status: 400 });
   }
 
-  const currentProfile = await getProfileByUserId(serverSupabase, user.id);
+  // 인증은 사용자 세션으로 확인하고, 역할 조회는 클럽 범위와 무관하게 수행한다.
+  const roleLookupClient = getUnfilteredGlobalAdminClient();
+  const [currentProfile, activeClubId] = await Promise.all([
+    getProfileByUserId(roleLookupClient, user.id),
+    getActiveClubId(),
+  ]);
   if (!currentProfile) {
     return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
   }
+
+  const clubRole = activeClubId
+    ? await getClubRole(roleLookupClient, user.id, activeClubId)
+    : null;
 
   const { data: matchRow, error: matchError } = await adminSupabase
     .from('generated_matches')
@@ -52,16 +67,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '경기 정보를 찾을 수 없습니다.' }, { status: 404 });
   }
 
-  const participantIds = [
-    matchRow.team1_player1_id,
-    matchRow.team1_player2_id,
-    matchRow.team2_player1_id,
-    matchRow.team2_player2_id,
-  ].filter((value): value is string => Boolean(value));
-
-  const canManage = isAdminOrManagerRole(currentProfile.role) || participantIds.includes(currentProfile.id);
+  const canManage = isAdminOrManagerRole(currentProfile.role)
+    || ['owner', 'admin', 'manager'].includes(String(clubRole || '').trim().toLowerCase());
   if (!canManage) {
-    return NextResponse.json({ error: '이 경기의 참가자 또는 관리자/매니저만 경기를 시작할 수 있습니다.' }, { status: 403 });
+    return NextResponse.json({ error: '관리자 또는 매니저만 경기를 시작할 수 있습니다.' }, { status: 403 });
   }
 
   if (matchRow.status === 'completed' || matchRow.status === 'cancelled') {
@@ -100,54 +109,11 @@ export async function POST(request: Request) {
   }
 
   if (matchRow.status === 'in_progress') {
-    if (matchRow.session_id) {
-      const { data: activeSessionMatches, error: activeSessionMatchesError } = await adminSupabase
-        .from('generated_matches')
-        .select('id')
-        .eq('session_id', matchRow.session_id)
-        .eq('status', 'in_progress');
-
-      if (activeSessionMatchesError) {
-        return NextResponse.json({ error: activeSessionMatchesError.message }, { status: 500 });
-      }
-
-      const activeIds = (activeSessionMatches || []).map((match) => match.id);
-      if (activeIds.length > 0) {
-        await adminSupabase
-          .from('generated_matches')
-          .update({ status: 'scheduled', updated_at: new Date().toISOString() })
-          .in('id', activeIds);
-
-        await adminSupabase
-          .from('match_schedules')
-          .update({ status: 'scheduled', updated_at: new Date().toISOString() })
-          .in('generated_match_id', activeIds);
-      }
-    } else {
-      const { error: generatedUpdateError } = await adminSupabase
-        .from('generated_matches')
-        .update({ status: 'scheduled', updated_at: new Date().toISOString() })
-        .eq('id', matchId);
-
-      if (generatedUpdateError) {
-        return NextResponse.json({ error: generatedUpdateError.message }, { status: 500 });
-      }
-
-      const { error: scheduleUpdateError } = await adminSupabase
-        .from('match_schedules')
-        .update({ status: 'scheduled', updated_at: new Date().toISOString() })
-        .eq('generated_match_id', matchId);
-
-      if (scheduleUpdateError) {
-        return NextResponse.json({ error: scheduleUpdateError.message }, { status: 500 });
-      }
-    }
-
     return NextResponse.json({
       data: {
         match_id: matchId,
-        status: 'scheduled',
-        active_match_ids: [],
+        status: 'in_progress',
+        active_match_ids: [matchId],
       },
     });
   }

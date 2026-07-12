@@ -25,7 +25,9 @@ async function getAuthorizedContext(matchId: number) {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const currentProfile = await getProfileByUserId(serverSupabase, user.id);
+  // profiles 조회는 클럽 격리 RLS로 현재 사용자의 행이 숨겨질 수 있으므로
+  // 인증된 사용자 ID를 관리자 클라이언트로 해석한다.
+  const currentProfile = await getProfileByUserId(adminSupabase, user.id);
 
   if (!currentProfile) {
     return { error: NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 }) };

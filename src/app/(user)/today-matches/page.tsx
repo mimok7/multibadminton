@@ -73,6 +73,7 @@ export default function TodayMatches() {
   const [startSaving, setStartSaving] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [canManageActiveClub, setCanManageActiveClub] = useState(false);
   const [activeTab, setActiveTab] = useState<'schedule' | 'ranking'>('schedule');
   const [watchModalUrl, setWatchModalUrl] = useState<string | null>(null);
   const router = useRouter();
@@ -121,6 +122,31 @@ export default function TodayMatches() {
 
     fetchTodayMatches();
   }, [userLoading, user?.id, supabase]);
+
+  useEffect(() => {
+    if (userLoading || !user) {
+      setCanManageActiveClub(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadClubRole = async () => {
+      try {
+        const response = await fetch('/api/user/active-club', { credentials: 'include' });
+        const payload = await response.json().catch(() => null);
+        const clubRole = String(payload?.clubRole || '').trim().toLowerCase();
+        const canManage = ['owner', 'admin', 'manager', '관리자', '매니저', '운영자'].includes(clubRole);
+        if (!cancelled) setCanManageActiveClub(canManage);
+      } catch {
+        if (!cancelled) setCanManageActiveClub(false);
+      }
+    };
+
+    void loadClubRole();
+    return () => {
+      cancelled = true;
+    };
+  }, [userLoading, user?.id]);
 
   const rankings = useMemo(() => {
     interface PlayerStats {
@@ -231,7 +257,7 @@ export default function TodayMatches() {
     );
   }
 
-  const canManageMatches = isAdmin;
+  const canManageMatches = isAdmin || canManageActiveClub;
 
   const myParticipantIds = new Set(
     [user?.id, profile?.id, profile?.user_id].filter((value): value is string => Boolean(value))
@@ -252,42 +278,15 @@ export default function TodayMatches() {
 
   const canStartPrimaryMatch = Boolean(
     primaryMatch?.generated_match_id &&
-    (primaryMatch.status === 'scheduled' || primaryMatch.status === 'in_progress') &&
+    primaryMatch.status === 'scheduled' &&
     canManageMatches
   );
 
   const handlePrimaryMatchStart = async () => {
     if (!primaryMatch?.generated_match_id || !canStartPrimaryMatch) return;
 
-    let capacity: number | null = null;
-    if (primaryMatch.status === 'scheduled') {
-      const capacityInput = prompt('동시 진행할 게임 수(코트수)를 입력해 주세요 (숫자):', '2');
-      if (capacityInput === null) return; // User cancelled
-      capacity = parseInt(capacityInput, 10);
-      if (isNaN(capacity) || capacity <= 0) {
-        alert('올바른 숫자를 입력해 주세요.');
-        return;
-      }
-    }
-
     try {
       setStartSaving(true);
-
-      // Automatically run optimize order silently first
-      if (primaryMatch.status === 'scheduled') {
-        const optimizeRes = await fetch('/api/admin/match-optimize-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            date: getKoreaDate(),
-          }),
-        });
-
-        if (!optimizeRes.ok) {
-          console.warn('자동 순서정렬 실패 (매치 시작은 계속 진행):', await optimizeRes.text().catch(() => ''));
-        }
-      }
 
       const response = await fetch('/api/match-start', {
         method: 'POST',
@@ -295,7 +294,6 @@ export default function TodayMatches() {
         credentials: 'include',
         body: JSON.stringify({
           match_id: primaryMatch.generated_match_id,
-          capacity,
         }),
       });
 
@@ -305,6 +303,9 @@ export default function TodayMatches() {
       }
 
       await loadTodayMatches();
+      alert(`게임을 시작했습니다. ${payload?.data?.waiting_match_ids?.length
+        ? '다음 게임은 순서에 따라 자동으로 시작됩니다.'
+        : ''}`.trim());
     } catch (error) {
       console.error('오늘 게임 시작 오류:', error);
       alert(getFriendlyErrorMessage(error));
@@ -534,7 +535,7 @@ export default function TodayMatches() {
                 {primaryMatch.status === 'scheduled' && (
                   <div className="mb-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2.5 text-[13px] font-medium text-amber-400 flex items-center gap-2">
                     <span>⚠️</span>
-                    <span>순서 정렬을 실행한 후 게임 시작을 하세요</span>
+                    <span>대기 중인 게임은 앞선 경기가 끝나면 배정된 순서대로 자동 시작됩니다.</span>
                   </div>
                 )}
                 <div className="rounded-[22px] bg-white/8 px-3 py-3">
@@ -582,7 +583,7 @@ export default function TodayMatches() {
                         </button>
                       ) : (
                         <span className="rounded-full bg-white/10 px-3 py-2 text-xs font-medium text-slate-200 shrink-0">
-                          {primaryMatch.status === 'in_progress' ? '진행 중' : '자동 시작 대기'}
+                          {primaryMatch.status === 'in_progress' ? '진행 중' : '다음 경기 대기'}
                         </span>
                       )}
                     </div>
