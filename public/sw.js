@@ -65,6 +65,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Next.js 페이지/RSC 요청은 서비스 워커 캐시 대상에서 제외한다.
+  // 인증 세션과 라우터 응답은 항상 Next 서버가 직접 처리해야 한다.
+  if (!isStaticAssetRequest(event.request, url)) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

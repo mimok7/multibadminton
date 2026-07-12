@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient, getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getUserRole, isAdminRole } from '@/lib/auth';
 import { getClubRole } from '@/lib/club-auth';
 import { getActiveClubId } from '@/lib/club';
@@ -28,6 +28,7 @@ async function requireAdmin() {
 
   const supabase = await getSupabaseServerClient();
   const adminSupabase = await getFilteredAdminClient();
+  const roleLookupClient = getUnfilteredGlobalAdminClient();
 
   const {
     data: { user },
@@ -39,8 +40,8 @@ async function requireAdmin() {
   }
 
   const [userRole, clubRole] = await Promise.all([
-    getUserRole(supabase, user),
-    getClubRole(adminSupabase, user.id, clubId),
+    getUserRole(roleLookupClient, user),
+    getClubRole(roleLookupClient, user.id, clubId),
   ]);
   const canManageClub = isAdminRole(userRole) || ['owner', 'admin', 'manager'].includes(clubRole || '');
 

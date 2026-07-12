@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/supabase';
 import { CLUB_SCOPED_TABLES, normalizeClubId } from '@/lib/club-scope';
+import { isSuperadminProfile } from '@/lib/auth';
 
 type ServerSupabaseClient = ReturnType<typeof createServerClient<Database>>;
 type AdminSupabaseClient = ReturnType<typeof createClient<Database>>;
@@ -133,6 +134,31 @@ export function getUnfilteredGlobalAdminClient(): AdminSupabaseClient {
 export async function getFilteredAdminClient(): Promise<AdminSupabaseClient> {
   const cookieStore = await cookies();
   const activeClubId = normalizeClubId(cookieStore.get('active_club_id')?.value);
+
+  // 슈퍼관리자는 특정 클럽의 필터를 적용하지 않고 전체 클럽을 관리한다.
+  // 권한은 세션 사용자와 profiles의 시스템 역할을 함께 확인한다.
+  const sessionClient = await getUnfilteredSupabaseServerClient();
+  const { data: { user } } = await sessionClient.auth.getUser();
+  if (user) {
+    const globalAdmin = getUnfilteredGlobalAdminClient();
+    const { data: profileByUserId } = await globalAdmin
+      .from('profiles')
+      .select('role, username')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+    const profile = profileByUserId ?? (await globalAdmin
+      .from('profiles')
+      .select('role, username')
+      .eq('id', user.id)
+      .limit(1)
+      .maybeSingle()).data;
+
+    if (isSuperadminProfile(profile)) {
+      return createAdminClient();
+    }
+  }
+
   // 필터 래퍼는 client.from을 수정하므로 요청 간 클럽 범위가 섞이지 않게 전용 인스턴스를 사용한다.
   const adminClient = createAdminClient();
   return withClubFilter(adminClient, activeClubId) as AdminSupabaseClient;
