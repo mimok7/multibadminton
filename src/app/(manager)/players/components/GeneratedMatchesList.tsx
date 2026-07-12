@@ -121,16 +121,6 @@ export default function GeneratedMatchesList({
     onManualMatchChange(updatedMatches);
   };
 
-  const isSelectedInMatch = (match: any, playerId: string) => {
-    if (!playerId) return false;
-    const ids = [] as string[];
-    if (match.team1?.player1?.id) ids.push(match.team1.player1.id);
-    if (match.team1?.player2?.id) ids.push(match.team1.player2.id);
-    if (match.team2?.player1?.id) ids.push(match.team2.player1.id);
-    if (match.team2?.player2?.id) ids.push(match.team2.player2.id);
-    return ids.includes(playerId);
-  };
-
   const getAvailablePlayers = (match: any) => {
     const selectedIds = new Set<string>();
     if (match.team1?.player1?.id) selectedIds.add(match.team1.player1.id);

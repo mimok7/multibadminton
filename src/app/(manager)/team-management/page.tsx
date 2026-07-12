@@ -54,13 +54,6 @@ interface TeamConfig {
   numLevelGroups?: number; // pairs 모드용: 2, 3, 4 그룹으로 분할
 }
 
-interface FourTeamsAssignment {
-  team1: string[];
-  team2: string[];
-  team3: string[];
-  team4: string[];
-}
-
 interface MemberOption {
   id: string;
   fullName: string;
@@ -254,7 +247,6 @@ export default function TeamManagementPage() {
   const [assignments, setAssignments] = useState<Record<string, TeamName>>({});
   const [loading, setLoading] = useState(true);
   const [teamConfig, setTeamConfig] = useState<TeamConfig>({ type: '2teams' });
-  const [customTeams, setCustomTeams] = useState<string[][]>([]);
   const [showCustomEditor, setShowCustomEditor] = useState(false);
   const [selectedRoundForModal, setSelectedRoundForModal] = useState<RoundSummary | null>(null);
   const [pairGroups, setPairGroups] = useState<{groupName: string; players: string[]}[]>([]);
@@ -1912,14 +1904,6 @@ export default function TeamManagementPage() {
       ...prev,
       [playerName]: team
     }));
-  };
-
-  const unassignPlayer = (playerName: string) => {
-    setAssignments((prev) => {
-      const next = { ...prev };
-      delete next[playerName];
-      return next;
-    });
   };
 
   const resetCurrentAssignments = () => {

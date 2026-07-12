@@ -2,9 +2,6 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
@@ -13,39 +10,12 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Search, Camera, User, X, ArrowLeft } from 'lucide-react';
 import { AvatarCropModal } from '@/components/profile/AvatarCropModal';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  SKILL_LEVEL_GROUP_CODES,
-  getSkillLevelGroupCode,
-  type SkillLevelGroupCode,
-} from '@/lib/skill-levels';
-import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { getLevelNameFromCode } from '@/lib/level-info';
-
-const formSchema = z.object({
-  username: z.string().min(2, { message: '닉네임은 2자 이상이어야 합니다.' }),
-  gender: z.string().nullable().or(z.literal('')),
-});
 
 export default function ProfilePage() {
   const { user, profile, loading: userLoading } = useUser();
   const { clubId, loading: clubLoading, clubMember: clubMemberInfo } = useClub();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const [members, setMembers] = useState<any[]>([]);
   const [myVotes, setMyVotes] = useState<Record<string, string>>({});
@@ -61,7 +31,6 @@ export default function ProfilePage() {
   const [draftVotes, setDraftVotes] = useState<Record<string, string>>({});
   const [modifiedVotes, setModifiedVotes] = useState<Record<string, string>>({});
   const [ratingSettings, setRatingSettings] = useState<{ start_date: string | null; end_date: string | null } | null>(null);
-  const [allVotes, setAllVotes] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [allLevels, setAllLevels] = useState<any[]>([]);
@@ -133,29 +102,10 @@ export default function ProfilePage() {
   };
   const levelInfoMap = useLevelInfoMap();
   const targetProfile = myLatestProfile || profile;
-  const displayName = targetProfile?.full_name || targetProfile?.username || '회원';
   const levelLabel = targetProfile?.skill_level_name || getLevelNameFromCode(levelInfoMap, targetProfile?.skill_level, targetProfile?.skill_level || '미지정');
-  const levelOptions = SKILL_LEVEL_GROUP_CODES.map((code) => ({
-    code,
-    name: getLevelNameFromCode(levelInfoMap, code, code) || code,
-  }));
   const roleLabel = clubMemberInfo?.role === 'owner' ? '소유자' :
                     clubMemberInfo?.role === 'admin' ? '관리자' :
                     clubMemberInfo?.role === 'manager' ? '매니저' : '일반 회원';
-  const genderLabel =
-    targetProfile?.gender === 'male' || targetProfile?.gender === 'M'
-      ? '남성'
-      : targetProfile?.gender === 'female' || targetProfile?.gender === 'F'
-        ? '여성'
-        : '미설정';
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      username: '',
-      gender: '',
-    },
-  });
 
   useEffect(() => {
     if (!userLoading && !user) {
@@ -163,13 +113,7 @@ export default function ProfilePage() {
       return;
     }
 
-    if (profile) {
-      form.reset({
-        username: profile.username || '',
-        gender: profile.gender || '',
-      });
-    }
-  }, [user, profile, userLoading, router, form]);
+  }, [user, userLoading, router]);
 
   const loadRatingData = async (currentUserId: string, targetClubId: string | null) => {
     setLoadingData(true);
@@ -255,7 +199,6 @@ export default function ProfilePage() {
       const { data: votesData } = await votesQuery;
 
       if (votesData) {
-        setAllVotes(votesData);
         const userVotesMap: Record<string, string> = {};
         votesData.forEach((vote: any) => {
           if (vote.voter_id === currentUserId) {
@@ -313,28 +256,6 @@ export default function ProfilePage() {
       setModifiedVotes((prev) => ({
         ...prev,
         [subjectId]: levelCode,
-      }));
-    }
-  };
-
-  const handleResetToDefault = (subjectId: string, originalLevel: string) => {
-    setDraftVotes((prev) => ({
-      ...prev,
-      [subjectId]: originalLevel || '',
-    }));
-
-    const originalVal = myVotes[subjectId] || originalLevel || '';
-    const targetVal = originalLevel || '';
-    if (targetVal === originalVal) {
-      setModifiedVotes((prev) => {
-        const next = { ...prev };
-        delete next[subjectId];
-        return next;
-      });
-    } else {
-      setModifiedVotes((prev) => ({
-        ...prev,
-        [subjectId]: targetVal,
       }));
     }
   };
@@ -428,12 +349,6 @@ export default function ProfilePage() {
     return now >= start && now <= end;
   };
 
-  const formatPeriodDate = (isoString: string | null) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  };
-
   const hasDraftChanges = () => {
     return Object.keys(modifiedVotes).length > 0;
   };
@@ -460,64 +375,6 @@ export default function ProfilePage() {
     const lvl = allLevels.find(l => l.code.toLowerCase() === code.toLowerCase());
     return lvl?.description || lvl?.name || code;
   };
-
-  const getMemberStats = (memberId: string) => {
-    const memberVotes = allVotes.filter((v) => v.subject_id === memberId);
-    const totalVotes = memberVotes.length;
-
-    if (totalVotes === 0) {
-      return { totalVotes, avgScore: null, nearestLevelName: '평가 없음 (-)' };
-    }
-
-    let sumScore = 0;
-    memberVotes.forEach((v) => {
-      const normalizedCode = v.skill_level.toLowerCase();
-      const score = levelInfoMap[normalizedCode]?.score ?? 0;
-      sumScore += score;
-    });
-
-    const avgScore = sumScore / totalVotes;
-
-    let closestCode = '';
-    let minDiff = Infinity;
-    allLevels.forEach((level) => {
-      const normalizedOption = level.code.toLowerCase();
-      const optionScore = levelInfoMap[normalizedOption]?.score ?? 0;
-      const diff = Math.abs(optionScore - avgScore);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestCode = level.code;
-      }
-    });
-
-    const nearestLevelName = getLevelNameFromCode(levelInfoMap, closestCode, closestCode);
-    return {
-      totalVotes,
-      avgScore: Number(avgScore.toFixed(1)),
-      nearestLevelName,
-    };
-  };
-
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!user) {
-      alert('로그인이 필요합니다.');
-      router.push('/login');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const targetProfileId = profile?.id || myLatestProfile?.id || user.id;
-    const { error } = await supabase.from('profiles').update(values).eq('id', targetProfileId);
-
-    setIsSubmitting(false);
-    if (error) {
-      console.error('프로필 업데이트 오류:', error);
-      alert(`프로필 업데이트 실패: ${error.message}`);
-    } else {
-      alert('프로필이 성공적으로 업데이트되었습니다.');
-    }
-  }
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();

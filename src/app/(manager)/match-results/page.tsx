@@ -81,15 +81,14 @@ const formatSessionName = (session: { session_date: string, session_name: string
 
 function MatchResultsPage() {
   const [rawMatches, setRawMatches] = useState<AssignedMatch[]>([]);
-  const [sortField, setSortField] = useState<string>('default');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const sortField = 'default';
+  const sortDirection = 'asc';
   const [matchSessions, setMatchSessions] = useState<MatchSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [isMobile, setIsMobile] = useState(false);
   
   const supabase = getSupabaseClient();
@@ -284,41 +283,6 @@ function MatchResultsPage() {
       return comparison * directionMultiplier;
     });
   }, [rawMatches, sortField, sortDirection]);
-
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const renderSortIndicator = (field: string) => {
-    if (sortField !== field) return <span className="text-gray-300 ml-1 font-normal text-[10px]">⇅</span>;
-    return sortDirection === 'asc' 
-      ? <span className="text-blue-500 ml-1 font-bold text-[10px]">▲</span> 
-      : <span className="text-blue-500 ml-1 font-bold text-[10px]">▼</span>;
-  };
-
-  const groupedMatches = useMemo(() => {
-    const groupsMap = new Map<string, { session: any, matches: AssignedMatch[] }>();
-    
-    assignedMatches.forEach(match => {
-      const session = match.generated_match?.session;
-      const sessionId = session?.id || 'no-session';
-      
-      if (!groupsMap.has(sessionId)) {
-        groupsMap.set(sessionId, {
-          session: session,
-          matches: []
-        });
-      }
-      groupsMap.get(sessionId)!.matches.push(match);
-    });
-    
-    return Array.from(groupsMap.values());
-  }, [assignedMatches]);
 
   // 모바일 전용 결과 제출 카드 컴포넌트 (조회 전용)
   function MobileMatchResultCard({ match }: { match: AssignedMatch, onSaved: () => void }) {

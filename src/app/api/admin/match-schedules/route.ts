@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
   getFilteredAdminClient,
-  getSupabaseServerClient,
   getUnfilteredSupabaseServerClient,
   getUnfilteredGlobalAdminClient,
 } from '@/lib/supabase-server';

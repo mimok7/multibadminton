@@ -10,8 +10,7 @@ import {
   ExtendedPlayer, 
   MatchSession, 
   GeneratedMatch, 
-  AvailableDate,
-  LEVEL_LABELS 
+  AvailableDate
 } from './types';
 
 import { 
@@ -20,7 +19,6 @@ import {
   calculatePlayerGameCounts,
   fetchTodayPlayers,
   fetchAvailableScheduleDates,
-  fetchGeneratedMatchesBySession,
   fetchRegisteredSchedules
 } from './utils';
 
@@ -54,9 +52,9 @@ function PlayersPage() {
   
   // 일정 관리를 위한 상태
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
-  const [selectedAssignDate, setSelectedAssignDate] = useState<string>('');
+  const [selectedAssignDate] = useState<string>('');
   // 생성 및 배정 대상 일정과 참가자 선택 상태
-  const [selectedGenDate, setSelectedGenDate] = useState<string>('');
+  const [selectedGenDate] = useState<string>('');
   const [selectedPlayerIdsForGen, setSelectedPlayerIdsForGen] = useState<Set<string>>(new Set());
   const [registeredPlayersForGen, setRegisteredPlayersForGen] = useState<ExtendedPlayer[] | null>(null);
 

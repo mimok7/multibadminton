@@ -120,7 +120,6 @@ export default function UserManagementClient({
             : [],
         [levelOptionsFromDb]
     );
-    const hasSearchQuery = searchQuery.trim().length > 0;
     const etcLevelOption = useMemo(
         () => findEtcLevelOption(levelOptionsFromDb),
         [levelOptionsFromDb]

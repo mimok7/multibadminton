@@ -4,11 +4,7 @@ import ClubSelectorClient from './ClubSelectorClient';
 import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getUserRole } from '@/lib/auth';
 
-export default async function SelectClubPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ redirectTo?: string }>;
-}) {
+export default async function SelectClubPage() {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   

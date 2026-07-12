@@ -47,11 +47,6 @@ function addDays(base: Date, days: number) {
   return next;
 }
 
-function findNextMatchingDate(base: Date, dayOfWeek: number) {
-  const dayOffset = (dayOfWeek - base.getDay() + 7) % 7;
-  return addDays(base, dayOffset);
-}
-
 async function hasExistingSchedule(
   supabase: AdminSupabaseClient,
   matchDate: string,

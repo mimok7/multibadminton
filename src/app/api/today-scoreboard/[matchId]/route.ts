@@ -136,7 +136,7 @@ export async function GET(_request: Request, context: RouteContext) {
       isAdmin,
       currentUserName,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
@@ -167,7 +167,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const body = await request.json();
-    const { action, team, value, score1, score2, winner, isCompleted, referee_id, referee_name } = body;
+    const { action, score1, score2, winner, isCompleted } = body;
 
     // We only support absolute score updates from scoreboard UI or completion
     if (score1 !== undefined || score2 !== undefined || winner !== undefined) {
@@ -235,7 +235,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }
 }

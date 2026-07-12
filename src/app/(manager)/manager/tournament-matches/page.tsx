@@ -506,7 +506,6 @@ export default function TournamentMatchesPage() {
         }
 
         let bestIndex = 0;
-        let bestValue = Number.POSITIVE_INFINITY;
 
         // Collect candidates with their values, then pick randomly among equally-good options
         const candidateValues: { index: number; value: number }[] = [];
@@ -527,7 +526,6 @@ export default function TournamentMatchesPage() {
         const bestCandidates = candidateValues.filter(c => c.value === minValue);
         // Pick randomly among the best candidates for varied regeneration
         bestIndex = bestCandidates[Math.floor(Math.random() * bestCandidates.length)].index;
-        bestValue = minValue;
 
         return bestIndex;
       };
@@ -553,10 +551,7 @@ export default function TournamentMatchesPage() {
     return roundPairs;
   };
 
-  const matchTeamLockedPairs = (
-    pairs: TeamLockedPair[],
-    numberOfCourts: number
-  ) => {
+  const matchTeamLockedPairs = (pairs: TeamLockedPair[]) => {
     const matches: Array<{ left: TeamLockedPair; right: TeamLockedPair }> = [];
     const used = new Set<number>();
 
@@ -572,7 +567,6 @@ export default function TournamentMatchesPage() {
 
       const current = sortedPairs[index];
       let bestOpponentIndex = -1;
-      let bestDiff = Number.POSITIVE_INFINITY;
 
       // Collect all valid opponents, then pick randomly among equally-good ones
       const opponentOptions: { opponentIndex: number; diff: number }[] = [];
@@ -595,7 +589,6 @@ export default function TournamentMatchesPage() {
         const bestOptions = opponentOptions.filter(o => o.diff === minDiff);
         const picked = bestOptions[Math.floor(Math.random() * bestOptions.length)];
         bestOpponentIndex = picked.opponentIndex;
-        bestDiff = picked.diff;
       }
 
       if (bestOpponentIndex < 0) {
@@ -904,7 +897,7 @@ export default function TournamentMatchesPage() {
       if (h && m) {
         return `${h}:${m}`;
       }
-    } catch (e) {
+    } catch {
       // fallback
     }
     return '';
@@ -916,10 +909,9 @@ export default function TournamentMatchesPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [generatedMatches, setGeneratedMatches] = useState<Match[]>([]);
-  const [tournamentMatches, setTournamentMatches] = useState<Match[]>([]);
   const [matchesPerPlayer, setMatchesPerPlayer] = useState(1);
-  const [startTime, setStartTime] = useState('17:30');
-  const [timeInterval, setTimeInterval] = useState(10);
+  const [startTime] = useState('17:30');
+  const [timeInterval] = useState(10);
   const [viewType, setViewType] = useState<'card' | 'table'>('table');
   const [tournamentDate, setTournamentDate] = useState('');
   const [roundNumber, setRoundNumber] = useState(1);
@@ -1921,7 +1913,7 @@ export default function TournamentMatchesPage() {
             pairMatchCount,
             matchType
           );
-          const matchedPairs = matchTeamLockedPairs(pairsForRound, maxCourts);
+          const matchedPairs = matchTeamLockedPairs(pairsForRound);
 
           for (const { left, right } of matchedPairs) {
             if (convertedMatches.length >= maxTotalMatches) {
@@ -2296,7 +2288,6 @@ export default function TournamentMatchesPage() {
       const slotIdx = matchSlots.get(match) ?? 0;
       const courtIdx = matchCourts.get(match) ?? 0;
       
-      const round = slotIdx + 1;
       const courtNum = courtIdx + 1;
       const matchNumber = idx + 1;
 
@@ -2864,19 +2855,6 @@ export default function TournamentMatchesPage() {
                 <>
                   {/* 팀 점수 통계 요약 */}
                   {generatedMatches.length > 0 && (() => {
-                    const allTeamScores: number[] = [];
-                    generatedMatches.forEach(match => {
-                      const team1Score = (match.team1_levels || []).reduce((sum, l) => sum + l, 0);
-                      const team2Score = (match.team2_levels || []).reduce((sum, l) => sum + l, 0);
-                      allTeamScores.push(team1Score, team2Score);
-                    });
-                    
-                    const avgScore = allTeamScores.reduce((a, b) => a + b, 0) / allTeamScores.length;
-                    const maxScore = Math.max(...allTeamScores);
-                    const minScore = Math.min(...allTeamScores);
-                    const scoreDiff = maxScore - minScore;
-                    const scoreDiffPercent = (scoreDiff / avgScore * 100).toFixed(1);
-
                     // 차이 2점 이상인 경기 찾기
                     const badMatches: number[] = [];
                     generatedMatches.forEach((match, idx) => {

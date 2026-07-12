@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getFilteredAdminClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 
 type TeamAssignmentRow = {
@@ -73,10 +73,6 @@ const extractSkillLevel = (nameWithLevel: string) => {
 
 const getTeamKey = (players: string[]) =>
   [...players].map((player) => player.trim()).sort((left, right) => left.localeCompare(right, 'ko-KR')).join(' / ');
-
-function isResultMatch(match: MatchRow) {
-  return match.status === 'completed';
-}
 
 function normalizeMatches(data: MatchRow[]) {
   return (data || [])
@@ -522,7 +518,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
       }
 
-      const { data: matchesData, error: matchesError } = await adminSupabase
+      const { data: matchesData } = await adminSupabase
         .from('tournament_matches')
         .select('*')
         .eq('tournament_id', tournamentId)

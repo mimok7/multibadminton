@@ -29,7 +29,7 @@ export default function Header() {
           const { club } = await res.json();
           setActiveClub(club);
         }
-      } catch (e) {
+    } catch {
         // ignore
       }
     };

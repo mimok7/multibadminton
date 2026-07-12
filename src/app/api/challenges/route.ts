@@ -76,9 +76,6 @@ async function getTodayChallengePool(adminSupabase: any, today: string, clubId: 
     throw new Error(assignedSchedulesError.message);
   }
 
-  const assignedScheduleIds = (assignedSchedules || [])
-    .map((schedule: any) => schedule.id)
-    .filter((value: any): value is string => Boolean(value));
   const assignedGeneratedMatchIds = Array.from(
     new Set(
       (assignedSchedules || [])

@@ -78,7 +78,7 @@ export async function GET(request: Request) {
 
     const status = isAttendanceStatus(data?.status) ? data.status : null;
     return NextResponse.json({ status, attendedAt });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Unexpected attendance status error' }, { status: 500 });
   }
 }
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ status, attendedAt, ok: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Unexpected attendance save error' }, { status: 500 });
   }
 }

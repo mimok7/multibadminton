@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { Button } from '@/components/ui/button';
@@ -48,7 +47,6 @@ function parseNumberOrNull(value: string): number | null {
 export default function RecurringMatchPage() {
   const { user } = useUser();
   const { clubId, loading: clubLoading } = useClub();
-  const supabase = getSupabaseClient();
   const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);

@@ -11,7 +11,7 @@ export const debugAttendanceData = async (setDebugInfo: (info: string) => void) 
 
   try {
     // 1. attendances 테이블에서 오늘 데이터 조회
-    const { data: attendanceData, error: attErr } = await supabase
+    const { data: attendanceData } = await supabase
       .from('attendances')
       .select('*')
       .eq('attended_at', today);
@@ -25,7 +25,7 @@ export const debugAttendanceData = async (setDebugInfo: (info: string) => void) 
     debugText += '\n';
 
     // 2. match_participants에서 오늘 참가자 조회
-    const { data: schedules, error: schedErr } = await supabase
+    const { data: schedules } = await supabase
       .from('match_schedules')
       .select('id')
       .eq('match_date', today);
@@ -40,7 +40,7 @@ export const debugAttendanceData = async (setDebugInfo: (info: string) => void) 
 
     if (schedules && schedules.length > 0) {
       const scheduleIds = schedules.map(s => s.id);
-      const { data: participants, error: partErr } = await supabase
+      const { data: participants } = await supabase
         .from('match_participants')
         .select('*')
         .in('match_schedule_id', scheduleIds)

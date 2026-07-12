@@ -84,11 +84,6 @@ type TeamParticipantsModalState = {
   teams: { name: string; players: string[] }[];
 } | null;
 
-type GroupedPairMatches = {
-  groupName: string;
-  matches: Match[];
-}[];
-
 const toStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
@@ -215,7 +210,7 @@ const formatScheduledTime = (timeStr: string | undefined | null) => {
     if (h && m) {
       return `${h}:${m}`;
     }
-  } catch (e) {
+  } catch {
     // fallback
   }
   return '';
@@ -920,49 +915,6 @@ function PairTournamentSettingsContent() {
       : scheduleMatchesOptimally(matches, courtCount, assignment.assignment_date, startTime, timeInterval);
   };
 
-  const getPairSettingsSummary = (settings = pairGroupSettings) =>
-    settings
-      .map((group) => {
-        const base = `${group.groupName}:${getPairFormatLabel(group.format)}`;
-        if (group.format === 'round_robin') {
-          return `${base} ${group.roundRobinRepeats}회`;
-        }
-        if (group.format === 'round_robin_knockout') {
-          return `${base} 리그 ${group.roundRobinRepeats}회 + ${group.knockoutQualifiers}강`;
-        }
-        return base;
-      })
-      .join(' / ');
-
-  const getGeneratedPlayerGameCounts = (matches: Match[]) => {
-    const counts: Record<string, number> = {};
-
-    matches.forEach((match) => {
-      [...match.team1, ...match.team2].forEach((player) => {
-        const normalizedPlayerName = getPlayerName(player);
-        counts[normalizedPlayerName] = (counts[normalizedPlayerName] || 0) + 1;
-      });
-    });
-
-    return counts;
-  };
-
-  const groupGeneratedMatches = (matches: Match[]): GroupedPairMatches => {
-    const grouped = new Map<string, Match[]>();
-
-    matches.forEach((match) => {
-      const groupName = extractGroupLabelFromCourt(match.court) || '기타 그룹';
-      const current = grouped.get(groupName) || [];
-      current.push(match);
-      grouped.set(groupName, current);
-    });
-
-    return Array.from(grouped.entries()).map(([groupName, groupedMatches]) => ({
-      groupName,
-      matches: groupedMatches,
-    }));
-  };
-
   const pairAssignments = useMemo(
     () => teamAssignments.filter(
       (assignment) =>
@@ -972,11 +924,6 @@ function PairTournamentSettingsContent() {
     ),
     [teamAssignments]
   );
-  const groupedGeneratedMatches = useMemo(
-    () => groupGeneratedMatches(generatedMatches),
-    [generatedMatches]
-  );
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -2088,7 +2035,6 @@ function PairTournamentSettingsContent() {
                           const team1Score = (match.team1_levels || []).reduce((sum, score) => sum + score, 0);
                           const team2Score = (match.team2_levels || []).reduce((sum, score) => sum + score, 0);
                           const hasResult = match.score_team1 != null && match.score_team2 != null;
-                          const courtNum = match.court ? match.court.replace(/[^0-9]/g, '') : '';
 
                           return (
                             <div key={match.id || `match-${match.match_number}`} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">

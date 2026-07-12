@@ -39,7 +39,6 @@ export default function ScoreboardPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isLive, setIsLive] = useState(true);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const claimAttempted = useRef(false);
 
@@ -427,7 +426,7 @@ export default function ScoreboardPage() {
           role="button"
           tabIndex={0}
           onClick={() => canEdit && !isCompleted && handleScoreChange(leftTeamKey, 1)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); canEdit && !isCompleted && handleScoreChange(leftTeamKey, 1); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (canEdit && !isCompleted) handleScoreChange(leftTeamKey, 1); } }}
           className={`group relative flex flex-1 flex-col items-center justify-center transition-all duration-150 active:brightness-110 ${
             canEdit && !isCompleted
               ? 'cursor-pointer active:scale-[0.98]'
@@ -496,7 +495,7 @@ export default function ScoreboardPage() {
           role="button"
           tabIndex={0}
           onClick={() => canEdit && !isCompleted && handleScoreChange(rightTeamKey, 1)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); canEdit && !isCompleted && handleScoreChange(rightTeamKey, 1); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (canEdit && !isCompleted) handleScoreChange(rightTeamKey, 1); } }}
           className={`group relative flex flex-1 flex-col items-center justify-center transition-all duration-150 active:brightness-110 ${
             canEdit && !isCompleted
               ? 'cursor-pointer active:scale-[0.98]'

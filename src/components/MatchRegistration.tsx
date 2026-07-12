@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getProfileByUserId } from '@/lib/auth';
 import { formatNameWithCoins } from '@/lib/player-display';
-import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
+import { formatKSTDate } from '@/lib/date';
 import { useClub } from '@/hooks/useClub';
 import type { Database } from '@/types/supabase';
 
@@ -52,7 +52,7 @@ export default function MatchRegistration({
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(false);
   const [userRegistration, setUserRegistration] = useState<Participant | null>(null);
-  const formatMatchDate = (value: string | null, options: Intl.DateTimeFormatOptions) =>
+  const formatMatchDate = (value: string | null) =>
     value ? formatKSTDate(value) : '날짜 미정';
 
   // 참가자 목록 조회
@@ -284,12 +284,7 @@ export default function MatchRegistration({
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-xl font-semibold text-gray-900">
-            {formatMatchDate(schedule.match_date, {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              weekday: 'long'
-            })}
+            {formatMatchDate(schedule.match_date)}
           </h3>
           <p className="text-gray-600 mt-1">
             {schedule.start_time} - {schedule.end_time}

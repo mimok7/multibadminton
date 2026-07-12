@@ -218,7 +218,7 @@ export default function AdminCoinsPage() {
     }));
   };
 
-  const applyPreset = (preset: 'zero_start_winner_one') => {
+  const applyPreset = () => {
     setCoinSettings({
       initialCoinBalance: 0,
       settlementMode: 'winner_only_fixed',
@@ -319,7 +319,7 @@ export default function AdminCoinsPage() {
             <Button
               variant={coinSettings.settlementMode === 'winner_only_fixed' ? 'default' : 'outline'}
               disabled={savingSettings}
-              onClick={() => applyPreset('zero_start_winner_one')}
+              onClick={applyPreset}
             >
               0코인 시작 + 승자 1코인
             </Button>
