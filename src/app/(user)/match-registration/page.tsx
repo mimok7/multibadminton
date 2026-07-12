@@ -10,7 +10,7 @@ import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { getKoreaDate } from '@/lib/date';
-import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
+import { formatKST, formatKSTDateTime } from '@/lib/date';
 import { getLevelNameFromCode } from '@/lib/level-info';
 import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -56,8 +56,8 @@ interface UserMatchInfo {
   }>;
 }
 
-function formatMatchDate(value: string | null, options: Intl.DateTimeFormatOptions) {
-  return value ? formatKSTDate(value) : '날짜 미정';
+function formatMatchDate(value: string | null, options: Intl.DateTimeFormatOptions = {}) {
+  return value ? formatKST(value, options) : '날짜 미정';
 }
 
 export default function MatchRegistrationPage() {
@@ -103,7 +103,6 @@ export default function MatchRegistrationPage() {
         .eq('status', 'scheduled')
         .eq('club_id', activeClubId)
         .or(`match_date.gte.${todayStr},schedule_source.eq.tournament,description.ilike.%[대회 경기]%`)
-        .is('generated_match_id', null)
         .order('match_date', { ascending: true })
         .order('start_time', { ascending: true })
         .limit(100);
@@ -195,26 +194,28 @@ export default function MatchRegistrationPage() {
       let profilesById: Record<string, { username?: string; full_name?: string; skill_level?: string | null }> = {};
 
       if (uniqueUserIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, user_id, username, full_name, skill_level')
-          .or(uniqueUserIds.map((id) => `id.eq.${id},user_id.eq.${id}`).join(','));
+        const params = new URLSearchParams();
+        scheduleIds.forEach((scheduleId) => params.append('scheduleId', scheduleId));
 
-        if (profilesError) {
-          console.error('프로필 조회 오류:', profilesError);
-        } else {
-          profilesById = (profilesData || []).reduce((acc: Record<string, any>, row: any) => {
-            const info = {
-              username: row.username,
-              full_name: row.full_name,
-              skill_level: row.skill_level ?? null,
-            };
-
-            if (row.id) acc[row.id] = info;
-            if (row.user_id) acc[row.user_id] = info;
-            return acc;
-          }, {});
+        const profilesResponse = await fetch(`/api/user/match-participants?${params.toString()}`);
+        if (!profilesResponse.ok) {
+          throw new Error('참가자 프로필을 조회하지 못했습니다.');
         }
+
+        const { profiles: profilesData = [] } = await profilesResponse.json() as {
+          profiles?: Array<{ id: string; user_id: string | null; username: string | null; full_name: string | null; skill_level: string | null }>;
+        };
+        profilesById = profilesData.reduce((acc: Record<string, any>, row: any) => {
+          const info = {
+            username: row.username,
+            full_name: row.full_name,
+            skill_level: row.skill_level ?? null,
+          };
+
+          if (row.id) acc[row.id] = info;
+          if (row.user_id) acc[row.user_id] = info;
+          return acc;
+        }, {});
       }
 
       const participantsBySchedule = participantsAll.reduce((acc: Record<string, any[]>, participant) => {
@@ -224,7 +225,7 @@ export default function MatchRegistrationPage() {
           id: participant.id,
           user_id: participant.user_id,
           username: profileInfo.username || null,
-          full_name: profileInfo.full_name || null,
+          full_name: profileInfo.full_name?.trim() || null,
           skill_level: profileInfo.skill_level ?? null,
           status: participant.status,
           registered_at: participant.registered_at,
