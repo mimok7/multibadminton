@@ -11,7 +11,7 @@ import {
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { Button } from '@/components/ui/button';
-import { formatKSTDate } from '@/lib/date';
+import { formatKSTDateKorean } from '@/lib/date';
 
 interface MatchSchedule {
   id: string;
@@ -1604,7 +1604,7 @@ export default function MatchSchedulePage() {
                       <div className="mb-3 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <h3 className="text-base font-bold text-gray-900 sm:text-lg">
-                            {formatKSTDate(group.matchDate)}
+                            {formatKSTDateKorean(group.matchDate)}
                           </h3>
                           <p className="mt-1 text-sm text-gray-600">
                             총 {group.schedules.length}경기 · 참가자 {group.participants.length}명 · 출석 처리{' '}
@@ -1650,7 +1650,7 @@ export default function MatchSchedulePage() {
                                   </div>
                                   <div>
                                     <p>👥 참가자: {schedule.current_participants} / {schedule.max_participants}명</p>
-                                    <p>📅 생성일: {formatKSTDate(schedule.created_at)}</p>
+                                    <p>📅 생성일: {formatKSTDateKorean(schedule.created_at)}</p>
                                   </div>
                                 </div>
 
@@ -2098,7 +2098,7 @@ export default function MatchSchedulePage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">일자별 참가자 출석 처리</h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    {formatKSTDate(attendanceModalDate)} 참가자를 해당 날짜의 출석으로 변경합니다.
+                {formatKSTDateKorean(attendanceModalDate)} 참가자를 해당 날짜의 출석으로 변경합니다.
                   </p>
                 </div>
                 <button

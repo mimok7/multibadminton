@@ -10,6 +10,13 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
+type InstallWindow = Window & {
+  deferredPrompt?: BeforeInstallPromptEvent;
+};
+
+const INSTALL_DISMISSED_KEY = 'badminton-install-prompt-dismissed';
+const INSTALL_COMPLETED_KEY = 'badminton-pwa-installed';
+
 function isAppInstalled() {
   if (typeof window === 'undefined') {
     return false;
@@ -17,7 +24,8 @@ function isAppInstalled() {
 
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true ||
+    window.localStorage.getItem(INSTALL_COMPLETED_KEY) === 'true'
   );
 }
 
@@ -26,33 +34,29 @@ export default function AppInstallPrompt() {
   const [installed, setInstalled] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setInstalled(isAppInstalled());
-    setDismissed(window.localStorage.getItem('badminton-install-prompt-dismissed') === 'true');
-
-    // 모바일 기기 감지
-    const ua = navigator.userAgent;
-    const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    setIsMobile(mobile);
+    setDismissed(window.localStorage.getItem(INSTALL_DISMISSED_KEY) === 'true');
 
     // 이미 전역 window 객체에 캡처된 prompt가 있다면 바로 가져옴
-    if ((window as any).deferredPrompt) {
-      setDeferredPrompt((window as any).deferredPrompt);
+    const installWindow = window as InstallWindow;
+    if (installWindow.deferredPrompt) {
+      setDeferredPrompt(installWindow.deferredPrompt);
     }
 
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
-      (window as any).deferredPrompt = event;
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
+      const promptEvent = event as BeforeInstallPromptEvent;
+      installWindow.deferredPrompt = promptEvent;
+      setDeferredPrompt(promptEvent);
     };
 
     const handleAppInstalled = () => {
       setInstalled(true);
+      window.localStorage.setItem(INSTALL_COMPLETED_KEY, 'true');
       setDeferredPrompt(null);
-      (window as any).deferredPrompt = null;
-      window.localStorage.removeItem('badminton-install-prompt-dismissed');
+      installWindow.deferredPrompt = undefined;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -76,9 +80,10 @@ export default function AppInstallPrompt() {
       const choiceResult = await deferredPrompt.userChoice;
       if (choiceResult.outcome === 'accepted') {
         setInstalled(true);
+        window.localStorage.setItem(INSTALL_COMPLETED_KEY, 'true');
       }
       setDeferredPrompt(null);
-      (window as any).deferredPrompt = null;
+      (window as InstallWindow).deferredPrompt = undefined;
     } catch (err) {
       console.error('PWA 설치 도중 오류:', err);
       setShowInstructions(true);
@@ -87,10 +92,10 @@ export default function AppInstallPrompt() {
 
   const handleDismiss = () => {
     setDismissed(true);
-    window.localStorage.setItem('badminton-install-prompt-dismissed', 'true');
+    window.localStorage.setItem(INSTALL_DISMISSED_KEY, 'true');
   };
 
-  const shouldShow = !installed && !dismissed && isMobile;
+  const shouldShow = !installed && !dismissed;
 
   if (!shouldShow) {
     return (
@@ -125,14 +130,14 @@ export default function AppInstallPrompt() {
                   <div className="flex items-start gap-2.5">
                     <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">2</span>
                     <p>
-                      <strong>Chrome / Samsung Internet:</strong> 우측 상단 또는 하단 <strong>메뉴(더보기)</strong> 버튼을 클릭합니다.
+                      <strong>컴퓨터 Chrome / Edge:</strong> 주소창 오른쪽의 <strong>앱 설치</strong> 아이콘 또는 우측 상단 <strong>메뉴(더보기)</strong>를 클릭합니다.
                     </p>
                   </div>
                   
                   <div className="flex items-start gap-2.5">
                     <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">3</span>
                     <p>
-                      메뉴 리스트에서 <strong>'홈 화면에 추가'</strong> 또는 <strong>'앱 설치'</strong>를 선택하여 완료합니다.
+                      메뉴에서 <strong>“앱 설치”</strong> 또는 모바일의 <strong>“홈 화면에 추가”</strong>를 선택하여 완료합니다.
                     </p>
                   </div>
                 </div>
@@ -192,7 +197,7 @@ export default function AppInstallPrompt() {
                   앱 설치
                 </Button>
                 <p className="text-xs text-gray-500">
-                  설치 버튼이 작동하지 않으면 브라우저 메뉴에서 “홈 화면에 추가”를 사용해 주세요.
+                  컴퓨터에서는 Chrome 또는 Edge 주소창의 앱 설치 아이콘이나 브라우저 메뉴를 사용해 주세요.
                 </p>
               </div>
             </div>
@@ -219,7 +224,7 @@ export default function AppInstallPrompt() {
                 이 브라우저에서는 자동 설치를 지원하지 않습니다. 아래 방법을 통해 홈 화면에 추가해 주세요!
               </div>
               
-              <div className="space-y-2.5">
+                <div className="space-y-2.5">
                 <div className="flex items-start gap-2.5">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">1</span>
                   <p>
@@ -230,14 +235,14 @@ export default function AppInstallPrompt() {
                 <div className="flex items-start gap-2.5">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">2</span>
                   <p>
-                    <strong>Chrome / Samsung Internet:</strong> 우측 상단 또는 하단 <strong>메뉴(더보기)</strong> 버튼을 클릭합니다.
+                      <strong>컴퓨터 Chrome / Edge:</strong> 주소창 오른쪽의 <strong>앱 설치</strong> 아이콘 또는 우측 상단 <strong>메뉴(더보기)</strong>를 클릭합니다.
                   </p>
                 </div>
                 
                 <div className="flex items-start gap-2.5">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">3</span>
                   <p>
-                    메뉴 리스트에서 <strong>'홈 화면에 추가'</strong> 또는 <strong>'앱 설치'</strong>를 선택하여 완료합니다.
+                    메뉴에서 <strong>“앱 설치”</strong> 또는 모바일의 <strong>“홈 화면에 추가”</strong>를 선택하여 완료합니다.
                   </p>
                 </div>
               </div>

@@ -41,6 +41,20 @@ export function formatKSTDate(value: Date | string | number | null | undefined):
   return formatKST(value, { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
+export function formatKSTDateKorean(value: Date | string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+
+  const parts = new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: KOREA_TIME_ZONE,
+  }).formatToParts(asDate(value));
+  const dateParts = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return `${dateParts.year}년 ${dateParts.month}월 ${dateParts.day}일`;
+}
+
 export function formatKSTDateTime(value: Date | string | number | null | undefined): string {
   return formatKST(value, {
     year: 'numeric',
