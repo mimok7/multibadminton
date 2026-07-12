@@ -5,7 +5,7 @@ import { ArrowLeft, Swords, Users, RefreshCw, Sparkles, MessageSquare, ShieldAle
 
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/hooks/useUser';
-import { formatCurrentUserNameWithCoins, formatNameWithCoins } from '@/lib/player-display';
+import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
 
 type PrepPartner = {
   id: string;
@@ -31,6 +31,7 @@ type EligiblePlayer = {
 type ChallengePerson = {
   id: string;
   name: string;
+  skill_level: string | null;
   coin_balance: number | null;
   response?: string;
 };
@@ -72,6 +73,7 @@ function getStatusBadgeClass(status: string) {
 function getResponseLabel(status?: string | null) {
   if (status === 'accepted') return '수락';
   if (status === 'held') return '보류';
+  if (status === 'cancelled') return '취소됨';
   return '대기';
 }
 
@@ -79,6 +81,17 @@ function getResponseBadgeClass(status?: string | null) {
   if (status === 'accepted') return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25';
   if (status === 'held') return 'bg-amber-500/10 text-amber-600 border-amber-500/25';
   return 'bg-slate-100 text-slate-500 border-slate-200';
+}
+
+function formatChallengePlayer(
+  name: string,
+  skillLevel: string | null | undefined,
+  coinBalance: number | null | undefined,
+  showCoins = true,
+) {
+  const skill = skillLevel?.trim() || '급수 미지정';
+  const coins = showCoins && typeof coinBalance === 'number' ? String(coinBalance) : '-';
+  return `${name} (${skill}, ${coins})`;
 }
 
 export default function ChallengePage() {
@@ -312,6 +325,33 @@ export default function ChallengePage() {
     }
   };
 
+  const handleCancelChallenge = async (challengeId: string) => {
+    if (!await confirm('모든 참여자가 아직 대기 중인 제안입니다. 취소하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setRespondingId(challengeId);
+      const response = await fetch('/api/challenges', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ challenge_id: challengeId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || '게임 제안 취소에 실패했습니다.');
+      }
+
+      await loadChallenges();
+    } catch (error) {
+      console.error('challenge cancel error', error);
+      alert(error instanceof Error ? error.message : '게임 제안 취소 중 오류가 발생했습니다.');
+    } finally {
+      setRespondingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-12">
       <div className="mx-auto w-full max-w-6xl px-2.5 pt-0 pb-4 sm:px-6 sm:pt-0 sm:pb-8">
@@ -516,7 +556,7 @@ export default function ChallengePage() {
                           <option value="">-- 파트너 선택 안함 (지정 취소) --</option>
                           {tournamentPartners.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.name} ({p.skill_level})
+                            {formatChallengePlayer(p.name, p.skill_level, p.coin_balance, isCoinEnabled)}
                             </option>
                           ))}
                         </select>
@@ -605,7 +645,7 @@ export default function ChallengePage() {
                         <option value="">파트너 선택</option>
                         {partnerOptions.map((player) => (
                           <option key={player.id} value={player.id}>
-                            {formatNameWithCoins(player.name, isCoinEnabled ? player.coin_balance : null)}
+                            {formatChallengePlayer(player.name, player.skill_level, player.coin_balance, isCoinEnabled)}
                           </option>
                         ))}
                       </select>
@@ -628,7 +668,7 @@ export default function ChallengePage() {
                         <option value="">첫 번째 상대 선택</option>
                         {opponent1Options.map((player) => (
                           <option key={player.id} value={player.id}>
-                            {formatNameWithCoins(player.name, isCoinEnabled ? player.coin_balance : null)}
+                            {formatChallengePlayer(player.name, player.skill_level, player.coin_balance, isCoinEnabled)}
                           </option>
                         ))}
                       </select>
@@ -651,7 +691,7 @@ export default function ChallengePage() {
                         <option value="">두 번째 상대 선택</option>
                         {opponent2Options.map((player) => (
                           <option key={player.id} value={player.id}>
-                            {formatNameWithCoins(player.name, isCoinEnabled ? player.coin_balance : null)}
+                            {formatChallengePlayer(player.name, player.skill_level, player.coin_balance, isCoinEnabled)}
                           </option>
                         ))}
                       </select>
@@ -740,7 +780,7 @@ export default function ChallengePage() {
                         <div className="flex items-center gap-2">
                           <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div>
                           <span className="text-sm font-bold text-slate-800">
-                            {challenge.challenger?.name}님의 매치 대결 요청
+                            {challenge.challenger && formatChallengePlayer(challenge.challenger.name, challenge.challenger.skill_level, challenge.challenger.coin_balance, isCoinEnabled)}님의 매치 대결 요청
                           </span>
                         </div>
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatusBadgeClass(challenge.status)}`}>
@@ -752,13 +792,13 @@ export default function ChallengePage() {
                         <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-slate-100 px-3 py-2">
                           <span className="text-slate-400 text-xs">우리 팀</span>
                           <span className="font-semibold text-slate-700">
-                            {formatNameWithCoins(challenge.challenger?.name || '선수', isCoinEnabled ? challenge.challenger?.coin_balance : null)} & {formatNameWithCoins(challenge.partner?.name || '선수', isCoinEnabled ? challenge.partner?.coin_balance : null)}
+                            {challenge.challenger && formatChallengePlayer(challenge.challenger.name, challenge.challenger.skill_level, challenge.challenger.coin_balance, isCoinEnabled)} & {challenge.partner && formatChallengePlayer(challenge.partner.name, challenge.partner.skill_level, challenge.partner.coin_balance, isCoinEnabled)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-slate-100 px-3 py-2">
                           <span className="text-slate-400 text-xs">상대 팀</span>
                           <span className="font-semibold text-slate-700">
-                            {challenge.opponents.map((player) => formatNameWithCoins(player.name, isCoinEnabled ? player.coin_balance : null)).join(' & ')}
+                            {challenge.opponents.map((player) => formatChallengePlayer(player.name, player.skill_level, player.coin_balance, isCoinEnabled)).join(' & ')}
                           </span>
                         </div>
                         
@@ -821,7 +861,7 @@ export default function ChallengePage() {
                     <article key={challenge.id} className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition-all hover:border-slate-200">
                       <div className="flex items-center justify-between gap-3 border-b border-slate-200/50 pb-3 mb-3">
                         <span className="text-sm font-bold text-slate-800">
-                          {challenge.partner?.name} 파트너 제안 매치
+                          {challenge.partner && formatChallengePlayer(challenge.partner.name, challenge.partner.skill_level, challenge.partner.coin_balance, isCoinEnabled)} 파트너 제안 매치
                         </span>
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatusBadgeClass(challenge.status)}`}>
                           {getResponseLabel(challenge.status)}
@@ -833,7 +873,7 @@ export default function ChallengePage() {
                           <div className="text-slate-400 mb-1.5">파트너</div>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-bold text-slate-800 text-[13px]">
-                              {formatNameWithCoins(challenge.partner?.name || '선수', isCoinEnabled ? challenge.partner?.coin_balance : null)}
+                              {challenge.partner && formatChallengePlayer(challenge.partner.name, challenge.partner.skill_level, challenge.partner.coin_balance, isCoinEnabled)}
                             </span>
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold border ${getResponseBadgeClass(challenge.partner?.response)}`}>
                               {getResponseLabel(challenge.partner?.response)}
@@ -846,7 +886,7 @@ export default function ChallengePage() {
                             <div className="text-slate-400 mb-1.5">상대 {idx + 1}</div>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-bold text-slate-800 text-[13px]">
-                                {formatNameWithCoins(opponent.name, isCoinEnabled ? opponent.coin_balance : null)}
+                                {formatChallengePlayer(opponent.name, opponent.skill_level, opponent.coin_balance, isCoinEnabled)}
                               </span>
                               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold border ${getResponseBadgeClass(opponent.response)}`}>
                                 {getResponseLabel(opponent.response)}
@@ -855,6 +895,19 @@ export default function ChallengePage() {
                           </div>
                         ))}
                       </div>
+                      {challenge.status === 'pending' && (
+                        <div className="mt-3 flex justify-end border-t border-slate-200/30 pt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void handleCancelChallenge(challenge.id)}
+                            disabled={respondingId === challenge.id}
+                            className="h-9 rounded-xl border-rose-200 bg-white px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                          >
+                            {respondingId === challenge.id ? '취소 중...' : '제안 취소'}
+                          </Button>
+                        </div>
+                      )}
                     </article>
                   ))
                 )}

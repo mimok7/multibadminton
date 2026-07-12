@@ -61,7 +61,7 @@ function formatMatchDate(value: string | null, options: Intl.DateTimeFormatOptio
 }
 
 export default function MatchRegistrationPage() {
-  const { user, profile } = useUser();
+  const { user, profile, loading: userLoading } = useUser();
   const { clubId, loading: clubLoading } = useClub();
   const supabase = getSupabaseClient();
   const participantProfileId = profile?.id ?? null;
@@ -78,7 +78,7 @@ export default function MatchRegistrationPage() {
   const [showParticipants, setShowParticipants] = useState<string | null>(null);
 
   const fetchSchedulesAndParticipation = useCallback(async () => {
-    if (clubLoading) {
+    if (clubLoading || userLoading) {
       return;
     }
     try {
@@ -102,7 +102,7 @@ export default function MatchRegistrationPage() {
         .select('id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants')
         .eq('status', 'scheduled')
         .eq('club_id', activeClubId)
-        .or(`match_date.gte.${todayStr},schedule_source.eq.tournament,description.ilike.%[대회 경기]%`)
+        .gte('match_date', todayStr)
         .order('match_date', { ascending: true })
         .order('start_time', { ascending: true })
         .limit(100);
@@ -128,23 +128,22 @@ export default function MatchRegistrationPage() {
         
       let recurringCount = 0;
       schedulesList = filteredSchedules.filter((schedule) => {
-        if (!schedule.match_date) {
+        if (!schedule.match_date || schedule.match_date < todayStr) {
           return false;
         }
 
         const source = inferScheduleSource(schedule as any);
 
-        if (source === 'tournament') {
-          return true; // 대회 경기는 항상 표시
+        if (source === 'recurring') {
+          if (recurringCount < 10) {
+            recurringCount++;
+            return true; // 정기 모임은 오늘 이후 10개 표시
+          }
         }
 
-        if (source === 'recurring') {
-          if (schedule.match_date >= todayStr) {
-            if (recurringCount < 10) {
-              recurringCount++;
-              return true; // 정기 모임은 오늘 이후 10개 표시
-            }
-          }
+        // 대회 일정도 오늘 이후 일정만 표시한다.
+        if (source === 'tournament') {
+          return true;
         }
 
         return false;
@@ -282,7 +281,7 @@ export default function MatchRegistrationPage() {
     } finally {
       setLoading(false);
     }
-  }, [participantKeys, supabase, clubId, clubLoading]);
+  }, [participantKeys, supabase, clubId, clubLoading, userLoading]);
 
   const registerForMatch = async (scheduleId: string, isWaitlist: boolean = false) => {
     if (!user) return;
@@ -425,7 +424,6 @@ export default function MatchRegistrationPage() {
         })
       );
 
-      setTimeout(fetchSchedulesAndParticipation, 300);
       alert(isWaitlist ? '대기 신청이 완료되었습니다.' : '참가 신청이 완료되었습니다.');
     } catch (error) {
       console.error('신청 중 오류:', error);
@@ -494,7 +492,6 @@ export default function MatchRegistrationPage() {
         })
       );
 
-      setTimeout(fetchSchedulesAndParticipation, 300);
       alert('참가가 취소되었습니다.');
     } catch (error) {
       console.error('참가 취소 중 오류:', error);
@@ -506,26 +503,6 @@ export default function MatchRegistrationPage() {
 
   useEffect(() => {
     fetchSchedulesAndParticipation();
-  }, [fetchSchedulesAndParticipation]);
-
-  useEffect(() => {
-    const onFocus = () => {
-      fetchSchedulesAndParticipation();
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchSchedulesAndParticipation();
-      }
-    };
-
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
   }, [fetchSchedulesAndParticipation]);
 
   useEffect(() => {

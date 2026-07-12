@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badminton-pwa-v2';
+const CACHE_NAME = 'badminton-pwa-v3';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -56,6 +56,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // 인증 API와 페이지 이동은 서비스 워커가 가로채지 않는다.
+  // 세션 쿠키와 서버 응답을 항상 브라우저/Next 서버가 직접 처리하도록 한다.
+  if (event.request.mode === 'navigate' || url.pathname.startsWith('/api/')) {
     return;
   }
 

@@ -84,6 +84,7 @@ export default function UserManagementClient({
     const [startDate, setStartDate] = useState(formatToLocalDateTimeString(ratingSettings?.start_date));
     const [endDate, setEndDate] = useState(formatToLocalDateTimeString(ratingSettings?.end_date));
     const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [resultMessage, setResultMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const [draftsByUserId, setDraftsByUserId] = useState<Record<string, UpdateUserPayload & { email?: string | null }>>({});
     const [searchQuery, setSearchQuery] = useState('');
@@ -213,9 +214,9 @@ export default function UserManagementClient({
 
             setIsSavingSettings(false);
             if (res?.error) {
-                alert(`설정 저장 실패: ${res.error}`);
+                setResultMessage({ type: 'error', text: `설정 저장 실패: ${res.error}` });
             } else {
-                alert('평가 기간이 성공적으로 저장되었습니다.');
+                setResultMessage({ type: 'success', text: '평가 기간이 성공적으로 저장되었습니다.' });
                 router.refresh();
             }
         });
@@ -225,11 +226,11 @@ export default function UserManagementClient({
         startTransition(async () => {
             const result = await updateLevelAliases(clubId, levelAliases);
             if (result.error) {
-                alert(`레벨 별칭 저장 실패: ${result.error}`);
+                setResultMessage({ type: 'error', text: `레벨 별칭 저장 실패: ${result.error}` });
                 return;
             }
 
-            alert('클럽별 레벨 별칭이 저장되었습니다.');
+            setResultMessage({ type: 'success', text: '클럽별 레벨 별칭이 저장되었습니다.' });
             router.refresh();
         });
     };
@@ -248,11 +249,11 @@ export default function UserManagementClient({
         startTransition(async () => {
             const result = await updateLevelAliases(clubId, standardAliases);
             if (result.error) {
-                alert(`기본 별칭 일괄 적용 실패: ${result.error}`);
+                setResultMessage({ type: 'error', text: `기본 별칭 일괄 적용 실패: ${result.error}` });
                 return;
             }
 
-            alert('level_info.description 별칭이 클럽에 일괄 적용되었습니다.');
+            setResultMessage({ type: 'success', text: 'level_info.description 별칭이 클럽에 일괄 적용되었습니다.' });
             router.refresh();
         });
     };
@@ -343,6 +344,7 @@ export default function UserManagementClient({
 
     const saveEdit = (user: AdminUser) => {
         const draft = getDraft(user);
+        setResultMessage(null);
 
         startTransition(async () => {
             const payload: UpdateUserPayload = {
@@ -353,7 +355,7 @@ export default function UserManagementClient({
             };
             const res = await updateUser(user.id, payload);
             if (res?.error) {
-                alert(`수정 실패: ${res.error}`);
+                setResultMessage({ type: 'error', text: `수정 실패: ${res.error}` });
             } else {
                 setMemberList((prev) => prev.map((item) => item.id === user.id ? ({
                     ...item,
@@ -363,6 +365,7 @@ export default function UserManagementClient({
                     gender: draft.gender ?? undefined,
                     role: draft.role === 'admin' ? 'admin' : normalizeEditableRole(draft.role),
                 }) : item));
+                setResultMessage({ type: 'success', text: '회원 정보가 저장되었습니다.' });
                 router.refresh();
             }
         });
@@ -592,9 +595,11 @@ export default function UserManagementClient({
 
     const saveAllEdits = () => {
         if (dirtyCount === 0) {
-            alert('저장할 수정 내용이 없습니다.');
+            setResultMessage({ type: 'error', text: '저장할 수정 내용이 없습니다.' });
             return;
         }
+
+        setResultMessage(null);
 
         const items = memberList
             .filter((user) => dirtyUserIds.includes(user.id))
@@ -615,7 +620,7 @@ export default function UserManagementClient({
         startTransition(async () => {
             const res = await updateUsersBulk(items);
             if ('error' in res && res.error) {
-                alert(`전체 저장 실패: ${res.error}`);
+                setResultMessage({ type: 'error', text: `전체 저장 실패: ${res.error}` });
                 return;
             }
 
@@ -637,7 +642,7 @@ export default function UserManagementClient({
                 };
             }));
             const updatedCount = 'updatedCount' in res ? res.updatedCount : items.length;
-            alert(`전체 저장이 완료되었습니다. (${updatedCount}명)`);
+            setResultMessage({ type: 'success', text: `전체 저장이 완료되었습니다. (${updatedCount}명)` });
             router.refresh();
         });
     };
@@ -1085,6 +1090,21 @@ export default function UserManagementClient({
 
     return (
         <div className="space-y-4 sm:space-y-6">
+            {resultMessage && (
+                <div
+                    role="status"
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium shadow-sm ${
+                        resultMessage.type === 'success'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : 'border-rose-200 bg-rose-50 text-rose-800'
+                    }`}
+                >
+                    <span>{resultMessage.text}</span>
+                    <button type="button" onClick={() => setResultMessage(null)} className="rounded px-2 py-1 text-xs underline underline-offset-2">
+                        닫기
+                    </button>
+                </div>
+            )}
             <section className="relative overflow-hidden rounded-[24px] bg-[#0f172a] px-4 py-4 text-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.85)] mb-4 sm:mb-6">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_120%,rgba(99,102,241,0.15),transparent_50%)] pointer-events-none" />
                 <div className="relative z-10 flex items-center justify-between px-1">

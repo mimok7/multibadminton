@@ -276,10 +276,10 @@ function serializeChallenge(
     created_at: challenge.created_at,
     responded_at: challenge.responded_at,
     challenger: challenger
-      ? { id: challenger.id, name: getProfileName(challenger), coin_balance: challenger.coin_balance ?? null }
+      ? { id: challenger.id, name: getProfileName(challenger), skill_level: challenger.skill_level ?? null, coin_balance: challenger.coin_balance ?? null }
       : null,
     partner: partner
-      ? { id: partner.id, name: getProfileName(partner), coin_balance: partner.coin_balance ?? null, response: challenge.partner_response }
+      ? { id: partner.id, name: getProfileName(partner), skill_level: partner.skill_level ?? null, coin_balance: partner.coin_balance ?? null, response: challenge.partner_response }
       : null,
     opponents: [opponent1, opponent2]
       .map((profile, index) =>
@@ -287,6 +287,7 @@ function serializeChallenge(
           ? {
               id: profile.id,
               name: getProfileName(profile),
+              skill_level: profile.skill_level ?? null,
               coin_balance: profile.coin_balance ?? null,
               response: index === 0 ? challenge.opponent1_response : challenge.opponent2_response,
             }
@@ -321,13 +322,15 @@ export async function GET() {
     });
   }
 
-  const currentProfile = await getProfileByUserId(serverSupabase, user.id);
+  // profiles는 클럽 격리 RLS 정책의 영향을 받을 수 있으므로,
+  // 인증된 사용자 ID를 서비스 롤 클라이언트로 해석한다.
+  const currentProfile = await getProfileByUserId(adminSupabase, user.id);
 
   if (!currentProfile) {
     return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
   }
 
-  const userRole = await getUserRole(serverSupabase, user);
+  const userRole = await getUserRole(adminSupabase, user);
   const isAdmin = ['admin', 'manager'].includes(userRole || '');
 
   try {
@@ -412,7 +415,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
   }
 
-  const currentProfile = await getProfileByUserId(serverSupabase, user.id);
+  const currentProfile = await getProfileByUserId(adminSupabase, user.id);
 
   if (!currentProfile) {
     return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
@@ -513,4 +516,59 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function DELETE(request: Request) {
+  const serverSupabase = await getSupabaseServerClient();
+  const adminSupabase = await getFilteredAdminClient();
+  const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const currentProfile = await getProfileByUserId(adminSupabase, user.id);
+  if (!currentProfile) {
+    return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const challengeId = String(body?.challenge_id || '').trim();
+  if (!challengeId) {
+    return NextResponse.json({ error: '취소할 제안이 지정되지 않았습니다.' }, { status: 400 });
+  }
+
+  const { data: challenge, error: challengeError } = await adminSupabase
+    .from('challenge_requests')
+    .select('id, challenger_id, status, partner_response, opponent1_response, opponent2_response')
+    .eq('id', challengeId)
+    .maybeSingle();
+
+  if (challengeError || !challenge) {
+    return NextResponse.json({ error: '게임 제안을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  if (challenge.challenger_id !== currentProfile.id) {
+    return NextResponse.json({ error: '제안한 회원만 취소할 수 있습니다.' }, { status: 403 });
+  }
+
+  const allPending = [challenge.status, challenge.partner_response, challenge.opponent1_response, challenge.opponent2_response]
+    .every((value) => value === 'pending');
+
+  if (!allPending) {
+    return NextResponse.json({ error: '모든 참여자가 대기 중일 때만 제안을 취소할 수 있습니다.' }, { status: 409 });
+  }
+
+  const { error: updateError } = await adminSupabase
+    .from('challenge_requests')
+    .update({ status: 'cancelled', responded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', challengeId)
+    .eq('challenger_id', currentProfile.id)
+    .eq('status', 'pending');
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }
