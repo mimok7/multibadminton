@@ -17,7 +17,7 @@ async function getMatchRefereeInfo(
   currentProfileId: string | null,
   currentUserName: string | null
 ) {
-  let refereeId = match.referee_id as string | null;
+  const refereeId = match.referee_id as string | null;
   let refereeName = match.referee_name as string | null;
   let isReferee = false;
 

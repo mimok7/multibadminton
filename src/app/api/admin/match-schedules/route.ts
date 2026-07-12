@@ -115,7 +115,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to search profiles' }, { status: 500 });
       }
 
-      let profiles = (membersData || [])
+      const profiles = (membersData || [])
         .map((row: any) => ({
           id: row.profiles.id,
           user_id: row.profiles.user_id,

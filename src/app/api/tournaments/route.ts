@@ -522,7 +522,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
       }
 
-      let { data: matchesData, error: matchesError } = await adminSupabase
+      const { data: matchesData, error: matchesError } = await adminSupabase
         .from('tournament_matches')
         .select('*')
         .eq('tournament_id', tournamentId)

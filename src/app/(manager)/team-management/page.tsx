@@ -1158,7 +1158,7 @@ export default function TeamManagementPage() {
       const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1;
       const rawValues = weights.map((weight) => (total * weight) / weightSum);
       const allocated = rawValues.map((value) => Math.floor(value));
-      let remaining = total - allocated.reduce((sum, value) => sum + value, 0);
+      const remaining = total - allocated.reduce((sum, value) => sum + value, 0);
 
       const remainders = rawValues
         .map((value, index) => ({ index, remainder: value - allocated[index] }))

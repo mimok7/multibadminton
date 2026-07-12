@@ -87,7 +87,7 @@ async function getTodayChallengePool(adminSupabase: any, today: string, clubId: 
     ),
   );
 
-  let blockedUserIds = new Set<string>();
+  const blockedUserIds = new Set<string>();
 
   // 1. 일반 경기(generated_matches) 중 현재 대기/진행 중인 경기에 배정된 선수들 차단
   if (assignedGeneratedMatchIds.length > 0) {

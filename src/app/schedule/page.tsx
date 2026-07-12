@@ -194,7 +194,7 @@ function ScheduleManagePage() {
     try {
       setLoading(true);
       const [hours, minutes] = bulkStartTime.split(':').map(Number);
-      let currentTimeInMinutes = hours * 60 + minutes;
+      const currentTimeInMinutes = hours * 60 + minutes;
       const scheduleInserts: MatchScheduleInsert[] = [];
       let assignedCount = 0;
 

@@ -644,7 +644,7 @@ export default function TournamentMatchesPage() {
   // 경기 점수 차이 최소화를 위한 팀 재배치 함수 (모든 경기가 1점 이하가 될 때까지 반복)
   const optimizeMatchBalancing = (matches: Match[]): Match[] => {
     const MAX_ITERATIONS = 100000; // 최대 반복 횟수 (충분히 큼)
-    let currentMatches = JSON.parse(JSON.stringify(matches));
+    const currentMatches = JSON.parse(JSON.stringify(matches));
     let bestMatches = JSON.parse(JSON.stringify(matches));
     let bestScore = calculateMaxScoreDifference(currentMatches);
     const initialScore = bestScore;

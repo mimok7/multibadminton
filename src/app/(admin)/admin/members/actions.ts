@@ -275,9 +275,9 @@ function romanizeSyllable(char: string): string {
         const jung = ['a', 'ae', 'ya', 'yae', 'eo', 'e', 'yeo', 'ye', 'o', 'wa', 'wae', 'oe', 'yo', 'u', 'wo', 'we', 'wi', 'yu', 'eu', 'ui', 'i'];
         const jong = ['', 'g', 'kk', 'gs', 'n', 'nj', 'nh', 'd', 'l', 'lg', 'lm', 'lb', 'ls', 'lt', 'lp', 'lh', 'm', 'b', 'bs', 's', 'ss', 'ng', 'j', 'ch', 'k', 't', 'p', 'h'];
 
-        let c = cho[lIndex];
+        const c = cho[lIndex];
         let v = jung[vIndex];
-        let j = jong[tIndex];
+        const j = jong[tIndex];
 
         if (c === '' && v === 'yu') v = 'yoo';
         if (c === '' && v === 'u') v = 'woo';

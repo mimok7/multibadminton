@@ -213,7 +213,7 @@ export default function AdminNotificationsPage() {
           fileName = uploadData.fileName;
         }
 
-        let targetUserIds = selectedUserIds;
+        const targetUserIds = selectedUserIds;
 
         if (targetUserIds.length === 0) {
           alert('발송 대상자가 없습니다.');
