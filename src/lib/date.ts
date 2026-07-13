@@ -55,6 +55,14 @@ export function formatKSTDateKorean(value: Date | string | number | null | undef
   return `${dateParts.year}년 ${dateParts.month}월 ${dateParts.day}일`;
 }
 
+export function formatTimeHHmm(value: string | null | undefined): string {
+  if (!value) return '';
+
+  const timePart = value.includes('T') ? value.split('T')[1] : value;
+  const match = timePart.match(/^(\d{1,2}):(\d{2})/);
+  return match ? `${match[1].padStart(2, '0')}:${match[2]}` : value;
+}
+
 export function formatKSTDateTime(value: Date | string | number | null | undefined): string {
   return formatKST(value, {
     year: 'numeric',

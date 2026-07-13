@@ -5,7 +5,7 @@ import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { Button } from '@/components/ui/button';
 import type { Json } from '@/types/supabase';
-import { formatKSTDateTime } from '@/lib/date';
+import { formatKSTDateTime, formatTimeHHmm } from '@/lib/date';
 
 interface RecurringTemplate {
   id: string | null;
@@ -589,7 +589,7 @@ export default function RecurringMatchPage() {
                         {template.day_name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {template.start_time} - {template.end_time}
+                        {formatTimeHHmm(template.start_time)} - {formatTimeHHmm(template.end_time)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {template.location}

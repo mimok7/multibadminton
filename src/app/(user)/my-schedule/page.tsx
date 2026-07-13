@@ -16,7 +16,7 @@ import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/sch
 import type { CoinSettlementMode } from '@/lib/coins';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { getLevelNameFromCode } from '@/lib/level-info';
-import { formatKSTDate, formatKSTDateTime } from '@/lib/date';
+import { formatKSTDate, formatKSTDateTime, formatTimeHHmm } from '@/lib/date';
 import {
   fetchMyTournamentMatches,
   normalizeTournamentPlayerName,
@@ -446,7 +446,7 @@ function AssignedMatchCard({
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusMeta.chipClass}`}>
           {statusMeta.label}
         </span>
-        <span>{match.match_time || '시간 미정'}</span>
+        <span>{formatTimeHHmm(match.match_time) || '시간 미정'}</span>
       </div>
 
       {isEditable ? (
@@ -2252,7 +2252,7 @@ export default function MySchedulePage() {
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">시간</div>
                     <div className="mt-1 text-sm font-medium text-slate-800">
-                      {selectedMatch.start_time} - {selectedMatch.end_time}
+                      {formatTimeHHmm(selectedMatch.start_time)} - {formatTimeHHmm(selectedMatch.end_time)}
                     </div>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">

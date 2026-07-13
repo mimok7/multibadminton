@@ -10,7 +10,7 @@ import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { getKoreaDate } from '@/lib/date';
-import { formatKST, formatKSTDateTime } from '@/lib/date';
+import { formatKST, formatKSTDateTime, formatTimeHHmm } from '@/lib/date';
 import { getLevelNameFromCode } from '@/lib/level-info';
 import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -595,7 +595,7 @@ export default function MatchRegistrationPage() {
                           <div className="mt-2 space-y-1.5 text-sm text-slate-600">
                             <div className="flex items-center gap-2">
                               <CalendarDays className="size-4 text-slate-400" />
-                              <span>{matchInfo.schedule.start_time || '시간 미정'} - {matchInfo.schedule.end_time || '시간 미정'}</span>
+                              <span>{formatTimeHHmm(matchInfo.schedule.start_time) || '시간 미정'} - {formatTimeHHmm(matchInfo.schedule.end_time) || '시간 미정'}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <MapPin className="size-4 text-slate-400" />
@@ -692,7 +692,7 @@ export default function MatchRegistrationPage() {
                             weekday: 'short',
                           })}
                         </p>
-                        <p className="mt-1 text-sm text-slate-600">{matchInfo.schedule.start_time || '시간 미정'} · {matchInfo.schedule.location || '장소 미정'}</p>
+                        <p className="mt-1 text-sm text-slate-600">{formatTimeHHmm(matchInfo.schedule.start_time) || '시간 미정'} · {matchInfo.schedule.location || '장소 미정'}</p>
                       </div>
                       {matchInfo.isWaitlisted ? (
                         <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
@@ -737,7 +737,7 @@ export default function MatchRegistrationPage() {
                           month: 'long',
                           day: 'numeric',
                           weekday: 'short',
-                        })} · {activeMatch.schedule.start_time || '시간 미정'}
+                        })} · {formatTimeHHmm(activeMatch.schedule.start_time) || '시간 미정'}
                       </h3>
                       {(() => {
                         const waitlistCount = activeMatch.participants.filter((p) => p.status === 'waitlisted').length;

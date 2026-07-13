@@ -5,7 +5,7 @@ import { getLevelScore } from '@/utils/match-helpers';
 import { GeneratedMatch, MatchSession } from '../types';
 import type { ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
-import { formatKSTDateTime } from '@/lib/date';
+import { formatKSTDateTime, formatTimeHHmm } from '@/lib/date';
 
 type AssignedScheduleDetail = ScheduledMatchView & {
   session_id: string | null;
@@ -359,7 +359,7 @@ export default function MatchSessionStatus({
                       {originalSchedules.map((schedule) => (
                         <div key={schedule.id} className="w-full max-w-md rounded border bg-white p-3">
                           <div className="font-medium text-gray-800">
-                            {schedule.start_time} - {schedule.end_time}
+                            {formatTimeHHmm(schedule.start_time)} - {formatTimeHHmm(schedule.end_time)}
                           </div>
                           <div className="text-sm text-gray-600">{schedule.location || '장소 미정'}</div>
                           <div className="text-sm text-gray-600">

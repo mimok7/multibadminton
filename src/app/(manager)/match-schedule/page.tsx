@@ -11,7 +11,7 @@ import {
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { Button } from '@/components/ui/button';
-import { formatKSTDateKorean } from '@/lib/date';
+import { formatKSTDateKorean, formatTimeHHmm } from '@/lib/date';
 
 interface MatchSchedule {
   id: string;
@@ -1634,7 +1634,7 @@ export default function MatchSchedulePage() {
                               <div className="flex-1">
                                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                                   <h4 className="text-base font-semibold text-gray-900 sm:text-lg">
-                                    🕐 {schedule.start_time} - {schedule.end_time}
+                                    🕐 {formatTimeHHmm(schedule.start_time)} - {formatTimeHHmm(schedule.end_time)}
                                   </h4>
                                   <span className={`px-3 py-1 rounded text-sm font-semibold ${getScheduleSourceBadgeClass(schedule.schedule_source)}`}>
                                     {getScheduleSourceLabel(schedule.schedule_source)}

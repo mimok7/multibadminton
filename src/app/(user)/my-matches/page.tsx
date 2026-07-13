@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getKoreaDate } from '@/lib/date';
-import { formatKSTDate } from '@/lib/date';
+import { formatKSTDate, formatTimeHHmm } from '@/lib/date';
 import { CalendarDays, RefreshCw, ArrowLeft } from 'lucide-react';
 
 export default function TodayMatches() {
@@ -151,7 +151,7 @@ export default function TodayMatches() {
                           )}
                         </h3>
                         <div className="text-xs text-slate-500 flex items-center gap-4 mt-1">
-                          <span>⏰ {match.match_time || '시간 미정'}</span>
+                          <span>⏰ {formatTimeHHmm(match.match_time) || '시간 미정'}</span>
                           <span>🏟️ 코트 {match.court_number || '미정'}</span>
                         </div>
                       </div>

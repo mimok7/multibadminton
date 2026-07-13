@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
-import { formatKSTDate, getKoreaDate } from '@/lib/date';
+import { formatKSTDate, formatTimeHHmm, getKoreaDate } from '@/lib/date';
 import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -406,7 +406,7 @@ export default function TodayMatches() {
                 )}
               </h3>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                <span>⏰ {match.match_time || '시간 미정'}</span>
+                <span>⏰ {formatTimeHHmm(match.match_time) || '시간 미정'}</span>
               </div>
             </div>
           </div>

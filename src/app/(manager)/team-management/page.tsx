@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase';
-import { getKoreaDate } from '@/lib/date';
+import { formatTimeHHmm, getKoreaDate } from '@/lib/date';
 import { fetchAdminMembers } from './actions';
 import {
   fetchLevelInfoMap,
@@ -2292,7 +2292,7 @@ export default function TeamManagementPage() {
               <option value="">(출석 기준)</option>
               {schedules.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.match_date} {s.start_time} · {s.location} [{getScheduleSourceLabel(s.schedule_source)}]
+                  {s.match_date} {formatTimeHHmm(s.start_time)} · {s.location} [{getScheduleSourceLabel(s.schedule_source)}]
                 </option>
               ))}
             </select>

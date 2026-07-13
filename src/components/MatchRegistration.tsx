@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getProfileByUserId } from '@/lib/auth';
 import { formatNameWithCoins } from '@/lib/player-display';
-import { formatKSTDate } from '@/lib/date';
+import { formatKSTDate, formatTimeHHmm } from '@/lib/date';
 import { useClub } from '@/hooks/useClub';
 import type { Database } from '@/types/supabase';
 
@@ -287,7 +287,7 @@ export default function MatchRegistration({
             {formatMatchDate(schedule.match_date)}
           </h3>
           <p className="text-gray-600 mt-1">
-            {schedule.start_time} - {schedule.end_time}
+            {formatTimeHHmm(schedule.start_time)} - {formatTimeHHmm(schedule.end_time)}
           </p>
           <p className="text-gray-600">
             📍 {schedule.location}

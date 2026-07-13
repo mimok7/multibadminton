@@ -1,6 +1,6 @@
 export { supabase } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
-import { getKoreaDate } from '@/lib/date';
+import { formatTimeHHmm, getKoreaDate } from '@/lib/date';
 import { AvailableDate, ExtendedPlayer, GeneratedMatch } from './types';
 import type { Database } from '@/types/supabase';
 import { getAdminLevelDisplay, getNormalizedSkillCode } from '@/lib/level-display';
@@ -111,7 +111,7 @@ export const fetchAvailableScheduleDates = async (): Promise<AvailableDate[]> =>
       currentParticipants,
       availableSlots: totalCapacity - currentParticipants,
       location: groupedSchedules[0]?.location || '장소 미정',
-      timeRange: `${groupedSchedules[0]?.start_time || '시간'} - ${groupedSchedules[groupedSchedules.length - 1]?.end_time || '미정'}`,
+      timeRange: `${formatTimeHHmm(groupedSchedules[0]?.start_time) || '시간'} - ${formatTimeHHmm(groupedSchedules[groupedSchedules.length - 1]?.end_time) || '미정'}`,
     };
   });
 };
