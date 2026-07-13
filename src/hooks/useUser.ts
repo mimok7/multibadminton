@@ -14,6 +14,9 @@ let cachedUserId: string | null = null;
 let cachedUser: User | null = null;
 let hasResolvedAuth = false;
 let pendingProfileRequest: { userId: string; promise: Promise<Profile | null> } | null = null;
+// 여러 전역 컴포넌트(Header, 알림, 페이지)가 동시에 useUser()를 호출해도
+// 최초 세션 조회는 한 번만 수행합니다.
+let initialSessionPromise: Promise<Awaited<ReturnType<ReturnType<typeof getSupabaseClient>['auth']['getSession']>>> | null = null;
 
 const AUTH_TIMEOUT_MS = 10000;
 
@@ -33,6 +36,13 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promi
         reject(error);
       });
   });
+}
+
+function getInitialSession(supabase: ReturnType<typeof getSupabaseClient>) {
+  if (!initialSessionPromise) {
+    initialSessionPromise = supabase.auth.getSession();
+  }
+  return initialSessionPromise;
 }
 
 export function useUser() {
@@ -117,7 +127,7 @@ export function useUser() {
         const {
           data: { session },
           error: sessionError,
-        } = await withTimeout(supabase.auth.getSession());
+        } = await withTimeout(getInitialSession(supabase));
         
         if (!isMounted) return;
 
@@ -141,6 +151,8 @@ export function useUser() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        // 로그인/로그아웃 이후 새로 마운트되는 컴포넌트는 최신 세션을 읽어야 합니다.
+        initialSessionPromise = null;
         // Supabase Auth 내부 잠금이 해제된 뒤 프로필 쿼리를 실행해야 교착 상태가 발생하지 않습니다.
         const timeoutId = window.setTimeout(() => {
           deferredAuthUpdates.delete(timeoutId);

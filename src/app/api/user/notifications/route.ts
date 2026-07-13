@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const isSummaryRequest = new URL(request.url).searchParams.get('summary') === '1';
     const serverSupabase = await getSupabaseServerClient();
     const {
       data: { user },
@@ -20,6 +21,17 @@ export async function GET() {
     }
 
     const adminSupabase = await getFilteredAdminClient() as any;
+    if (isSummaryRequest) {
+      const { count, error } = await adminSupabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+
+      if (error) throw error;
+      return NextResponse.json({ unreadCount: count ?? 0 });
+    }
+
     const { data: notifications, error } = await adminSupabase
       .from('notifications')
       .select('id, title, message, type, is_read, created_at, read_at, survey_id, surveys(id, question, description, options, is_active, max_responses, option_limits)')

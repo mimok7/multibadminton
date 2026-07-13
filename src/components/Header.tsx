@@ -37,11 +37,10 @@ export default function Header() {
 
     const fetchUnread = async () => {
       try {
-        const res = await fetch('/api/user/notifications');
+        const res = await fetch('/api/user/notifications?summary=1', { cache: 'no-store' });
         if (!res.ok) return;
-        const { notifications } = await res.json();
-        const count = (notifications || []).filter((n: any) => !n.is_read).length;
-        setUnreadCount(count);
+        const { unreadCount } = await res.json();
+        setUnreadCount(Number(unreadCount) || 0);
       } catch {
         setUnreadCount(0);
       }
