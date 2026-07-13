@@ -1,7 +1,25 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
+
+// 로그인 검증 전용 클라이언트입니다.
+// 이 API는 세션을 응답 쿠키에 저장하지 않고, 브라우저가 setSession()으로
+// 한 번만 저장하게 해야 refresh token rotation 충돌을 피할 수 있습니다.
+function createPasswordCheckClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    },
+  );
+}
 
 type ProfileLookupRow = {
   id: string;
@@ -119,14 +137,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 });
     }
 
-    const supabase = await getSupabaseServerClient();
+    const supabase = createPasswordCheckClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     if (error || !data.user || !data.session) {
       return NextResponse.json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 });
     }
 
     if (profile.user_id && profile.user_id !== data.user.id && profile.id !== data.user.id) {
-      await supabase.auth.signOut();
       return NextResponse.json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 });
     }
 
@@ -136,6 +153,8 @@ export async function POST(request: Request) {
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
       },
+    }, {
+      headers: { 'Cache-Control': 'private, no-store' },
     });
   } catch {
     return NextResponse.json({ error: '로그인 처리 중 오류가 발생했습니다.' }, { status: 500 });
