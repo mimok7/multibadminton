@@ -7,7 +7,7 @@ import { ArrowRight, CalendarDays, Gift, LogOut, Shield, Swords, Target, Trophy,
 
 import MatchNotifications from '@/components/MatchNotifications';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
-import { useUser } from '@/hooks/useUser';
+import type { AppProfile } from '@/lib/auth';
 import { getLevelNameFromCode } from '@/lib/level-info';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getKoreaDate } from '@/lib/date';
@@ -110,10 +110,19 @@ function normalizeAttendanceStatus(value: string | null | undefined): Attendance
 
 
 
-export default function ClientDashboard({ userId, email }: { userId: string; email: string }) {
+export default function ClientDashboard({
+  userId,
+  email,
+  profile,
+  userIsAdmin,
+}: {
+  userId: string;
+  email: string;
+  profile: AppProfile | null;
+  userIsAdmin: boolean;
+}) {
   const router = useRouter();
   const supabase = getSupabaseClient();
-  const { profile, isAdmin: userIsAdmin } = useUser();
   const levelInfoMap = useLevelInfoMap();
 
   const [loadingAttendance, setLoadingAttendance] = useState(true);
@@ -142,89 +151,20 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         setLoadingAttendance(true);
         const today = getKoreaDate();
 
-        // 1. 클럽 정보 + 코인 설정을 동시에 조회
-        const [clubRes, coinRes] = await Promise.all([
-          fetch('/api/user/active-club').catch(() => null),
-          fetch('/api/coins/settings').catch(() => null),
-        ]);
-
+        const response = await fetch('/api/user/dashboard-summary', { cache: 'no-store' });
+        const payload = response.ok ? await response.json().catch(() => null) : null;
         if (cancelled) return;
 
-        // 클럽 정보 처리
-        if (clubRes?.ok) {
-          const clubData = await clubRes.json();
-          if (clubData.club) {
-            setActiveClub(clubData.club);
-          }
-          if (clubData.member) {
-            setClubMemberInfo(clubData.member);
-          }
-          const role = clubData.clubRole;
-          if (role === 'owner' || role === 'admin' || role === 'manager') {
-            setIsClubManager(true);
-          }
-        }
-
-        // 코인 설정 처리
-        if (coinRes?.ok) {
-          const coinData = await coinRes.json();
-          setIsCoinEnabled(coinData.isCoinEnabled !== false);
-        }
-
-        if (cancelled) return;
-
-        // 2. 출석 상태 + 현재 클럽의 오늘 일정 조회
-        const [attendanceRes, schedulesResponse] = await Promise.all([
-          fetch(`/api/attendance/status?date=${today}`),
-          fetch(`/api/user/match-schedules?date=${today}`, { cache: 'no-store' }),
-        ]);
-
-        if (cancelled) return;
-
-        // 출석 상태 처리
-        if (attendanceRes?.ok) {
-          const payload = await attendanceRes.json().catch(() => null);
-          setMyAttendanceStatus(normalizeAttendanceStatus(payload?.status));
-        } else {
-          setMyAttendanceStatus(null);
-        }
-
-        // 오늘 일정 처리: 여러 코트/일정이 있어도 누락하지 않는다.
-        const schedulesPayload = schedulesResponse.ok
-          ? await schedulesResponse.json().catch(() => null)
-          : null;
-        const schedulesList = Array.isArray(schedulesPayload?.schedules)
-          ? schedulesPayload.schedules
-          : [];
+        const schedulesList = Array.isArray(payload?.schedules) ? payload.schedules : [];
+        const registration = payload?.registration ?? null;
+        setActiveClub(payload?.club ?? null);
+        setClubMemberInfo(payload?.member ?? null);
+        setIsCoinEnabled(payload?.isCoinEnabled !== false);
+        setIsClubManager(['owner', 'admin', 'manager'].includes(payload?.member?.role));
+        setMyAttendanceStatus(normalizeAttendanceStatus(payload?.attendanceStatus));
         setTodaySchedules(schedulesList);
-
-        // 3. 참가 신청 상태 조회
-        const userProfileId = profile?.id || userId;
-        if (schedulesList.length > 0 && userProfileId) {
-          const params = new URLSearchParams();
-          schedulesList.forEach((item: any) => params.append('scheduleId', item.id));
-          const participantsResponse = await fetch(`/api/user/match-participants?${params.toString()}`, {
-            cache: 'no-store',
-          });
-          const participantsPayload = participantsResponse.ok
-            ? await participantsResponse.json().catch(() => null)
-            : null;
-          const participantKeys = [userId, profile?.id].filter(Boolean);
-          const participations = (participantsPayload?.participants || []).filter(
-            (item: any) => participantKeys.includes(item.user_id) && ['registered', 'waitlisted', 'attended'].includes(item.status)
-          );
-
-          if (participations.length > 0) {
-            setIsRegisteredToday(true);
-            setTodayRegistration(participations[0]);
-          } else {
-            setIsRegisteredToday(false);
-            setTodayRegistration(null);
-          }
-        } else {
-          setIsRegisteredToday(false);
-          setTodayRegistration(null);
-        }
+        setIsRegisteredToday(Boolean(registration));
+        setTodayRegistration(registration);
       } catch (error) {
         console.error('대시보드 데이터 로딩 오류:', error);
       } finally {
@@ -237,7 +177,7 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
     return () => {
       cancelled = true;
     };
-  }, [userId, profile]);
+  }, [userId]);
 
   /** 재조회용: 참가 신청 변경 후 다시 불러올 때 사용 */
   const fetchAttendanceAndRegistration = async () => {

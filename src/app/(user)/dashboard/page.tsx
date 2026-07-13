@@ -6,7 +6,7 @@ import { useUser } from '@/hooks/useUser';
 import ClientDashboard from './ClientDashboard';
 
 export default function DashboardPage() {
-  const { user, loading } = useUser();
+  const { user, profile, isAdmin, loading } = useUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -16,5 +16,7 @@ export default function DashboardPage() {
     }
   }, [loading, user, router]);
 
-  return <ClientDashboard userId={user?.id ?? ''} email={user?.email ?? ''} />;
+  if (loading || !user) return null;
+
+  return <ClientDashboard userId={user.id} email={user.email ?? ''} profile={profile} userIsAdmin={isAdmin} />;
 }
