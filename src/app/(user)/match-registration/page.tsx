@@ -97,34 +97,25 @@ export default function MatchRegistrationPage() {
       const todayStr = getKoreaDate();
       let schedulesList: MatchSchedule[] = [];
 
-      const { data: schedulesData, error: schedulesError } = await supabase
-        .from('match_schedules')
-        .select('id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants')
-        .eq('status', 'scheduled')
-        .eq('club_id', activeClubId)
-        .gte('match_date', todayStr)
-        .order('match_date', { ascending: true })
-        .order('start_time', { ascending: true })
-        .limit(100);
+      const schedulesResponse = await fetch('/api/user/match-schedules', {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include',
+      });
 
-      if (schedulesError) {
-        console.error('경기 일정 조회 오류:', schedulesError);
+      if (!schedulesResponse.ok) {
+        const payload = await schedulesResponse.json().catch(() => null);
+        console.error('경기 일정 조회 오류:', payload);
         setSchedules([]);
         setUserMatches([]);
         return;
       }
 
-      const filteredSchedules: MatchSchedule[] = (schedulesData || [])
-        .filter((schedule) => {
-          const description = schedule.description || '';
-          return schedule.generated_match_id == null
-            && inferScheduleSource(schedule as any) !== 'generated'
-            && !description.includes('자동 배정된 경기');
-        })
-        .map((schedule) => ({
-          ...schedule,
-          status: schedule.status || 'scheduled',
-        }));
+      const schedulesPayload = (await schedulesResponse.json()) as {
+        schedules?: MatchSchedule[];
+        clubId?: string | null;
+      };
+      const filteredSchedules: MatchSchedule[] = schedulesPayload.schedules || [];
         
       let recurringCount = 0;
       schedulesList = filteredSchedules.filter((schedule) => {
@@ -158,30 +149,31 @@ export default function MatchRegistrationPage() {
 
       const scheduleIds = schedulesList.map((schedule) => schedule.id);
 
-      const participationsRes = participantKeys.length > 0
-        ? await supabase
-            .from('match_participants')
-            .select('id, match_schedule_id, user_id, status, registered_at')
-            .in('user_id', participantKeys)
-            .in('match_schedule_id', scheduleIds)
-        : { data: [], error: null };
-
-      const participantsRes = await supabase
-        .from('match_participants')
-        .select('id, user_id, status, registered_at, match_schedule_id')
-        .in('match_schedule_id', scheduleIds)
-        .in('status', ['registered', 'waitlisted']);
-
-      if (participationsRes.error) {
-        console.error('참가 정보 조회 오류:', participationsRes.error);
+      const params = new URLSearchParams();
+      scheduleIds.forEach((scheduleId) => params.append('scheduleId', scheduleId));
+      const profilesResponse = await fetch(`/api/user/match-participants?${params.toString()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!profilesResponse.ok) {
+        throw new Error('참가자 정보를 조회하지 못했습니다.');
       }
 
-      if (participantsRes.error) {
-        console.error('참가자 목록 조회 오류:', participantsRes.error);
-      }
-
-      const participationsData = (participationsRes.data || []) as MatchParticipant[];
-      const participantsAll = (participantsRes.data || []) as Array<{
+      const participantsPayload = await profilesResponse.json() as {
+        profiles?: Array<{ id: string; user_id: string | null; username: string | null; full_name: string | null; skill_level: string | null }>;
+        participants?: Array<{
+          id: string;
+          user_id: string;
+          status: string;
+          registered_at: string;
+          match_schedule_id: string;
+        }>;
+      };
+      const participationsData = (participantsPayload.participants || [])
+        .filter((participant) => participantKeys.includes(participant.user_id)) as MatchParticipant[];
+      const participantsAll = (participantsPayload.participants || []).filter((participant) =>
+        ['registered', 'attended', 'waitlisted'].includes(participant.status)
+      ) as Array<{
         id: string;
         user_id: string;
         status: string;
@@ -193,17 +185,7 @@ export default function MatchRegistrationPage() {
       let profilesById: Record<string, { username?: string; full_name?: string; skill_level?: string | null }> = {};
 
       if (uniqueUserIds.length > 0) {
-        const params = new URLSearchParams();
-        scheduleIds.forEach((scheduleId) => params.append('scheduleId', scheduleId));
-
-        const profilesResponse = await fetch(`/api/user/match-participants?${params.toString()}`);
-        if (!profilesResponse.ok) {
-          throw new Error('참가자 프로필을 조회하지 못했습니다.');
-        }
-
-        const { profiles: profilesData = [] } = await profilesResponse.json() as {
-          profiles?: Array<{ id: string; user_id: string | null; username: string | null; full_name: string | null; skill_level: string | null }>;
-        };
+        const profilesData = participantsPayload.profiles || [];
         profilesById = profilesData.reduce((acc: Record<string, any>, row: any) => {
           const info = {
             username: row.username,
@@ -244,7 +226,7 @@ export default function MatchRegistrationPage() {
         const allParticipantsForSchedule = participantsBySchedule[schedule.id] || [];
         
         const registeredParticipants = allParticipantsForSchedule
-          .filter(p => p.status === 'registered')
+          .filter(p => p.status === 'registered' || p.status === 'attended')
           .sort((a, b) => {
             const nameA = a.full_name || a.username || '';
             const nameB = b.full_name || b.username || '';

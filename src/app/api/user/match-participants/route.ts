@@ -56,34 +56,36 @@ export async function GET(request: NextRequest) {
 
   const allowedScheduleIds = (schedules || []).map((schedule) => schedule.id);
   if (allowedScheduleIds.length === 0) {
-    return NextResponse.json({ profiles: [] });
+    return NextResponse.json({ profiles: [], participants: [] });
   }
 
   const { data: participants, error: participantsError } = await adminSupabase
     .from('match_participants')
-    .select('user_id')
-    .in('match_schedule_id', allowedScheduleIds)
-    .in('status', ['registered', 'waitlisted']);
+    .select('id, user_id, status, registered_at, match_schedule_id')
+    .in('match_schedule_id', allowedScheduleIds);
 
   if (participantsError) {
     console.error('참가자 조회 오류:', participantsError);
     return NextResponse.json({ error: '참가자 정보를 조회하지 못했습니다.' }, { status: 500 });
   }
 
-  const participantIds = Array.from(new Set((participants || []).map((participant) => participant.user_id)));
+  const participantIds = Array.from(new Set((participants || []).map((participant) => participant.user_id).filter(Boolean)));
   if (participantIds.length === 0) {
-    return NextResponse.json({ profiles: [] });
+    return NextResponse.json({ profiles: [], participants: participants || [] });
   }
 
-  const { data: profiles, error: profilesError } = await adminSupabase
-    .from('profiles')
-    .select('id, user_id, username, full_name, skill_level')
-    .in('id', participantIds);
+  const [profilesByUserId, profilesById] = await Promise.all([
+    adminSupabase.from('profiles').select('id, user_id, username, full_name, skill_level').in('user_id', participantIds),
+    adminSupabase.from('profiles').select('id, user_id, username, full_name, skill_level').in('id', participantIds),
+  ]);
+  const profilesError = profilesByUserId.error || profilesById.error;
+  const profiles = [...(profilesByUserId.data || []), ...(profilesById.data || [])]
+    .filter((profile, index, all) => all.findIndex((item) => item.id === profile.id) === index);
 
   if (profilesError) {
     console.error('참가자 프로필 조회 오류:', profilesError);
     return NextResponse.json({ error: '참가자 이름을 조회하지 못했습니다.' }, { status: 500 });
   }
 
-  return NextResponse.json({ profiles: profiles || [] });
+  return NextResponse.json({ profiles, participants: participants || [] });
 }

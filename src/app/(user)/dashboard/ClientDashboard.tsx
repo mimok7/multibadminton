@@ -151,12 +151,10 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
         if (cancelled) return;
 
         // 클럽 정보 처리
-        let resolvedClubId: string | undefined;
         if (clubRes?.ok) {
           const clubData = await clubRes.json();
           if (clubData.club) {
             setActiveClub(clubData.club);
-            resolvedClubId = clubData.club.id;
           }
           if (clubData.member) {
             setClubMemberInfo(clubData.member);
@@ -175,20 +173,10 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
 
         if (cancelled) return;
 
-        // 2. 출석 상태 + 오늘 일정을 동시에 조회
-        let schedulesQuery = supabase
-          .from('match_schedules')
-          .select('id, match_date, max_participants, current_participants')
-          .eq('match_date', today)
-          .eq('status', 'scheduled')
-          .is('generated_match_id', null);
-        if (resolvedClubId) {
-          schedulesQuery = schedulesQuery.eq('club_id', resolvedClubId);
-        }
-
-        const [attendanceRes, schedulesResult] = await Promise.all([
+        // 2. 출석 상태 + 현재 클럽의 오늘 일정 조회
+        const [attendanceRes, schedulesResponse] = await Promise.all([
           fetch(`/api/attendance/status?date=${today}`),
-          schedulesQuery.maybeSingle(),
+          fetch(`/api/user/match-schedules?date=${today}`, { cache: 'no-store' }),
         ]);
 
         if (cancelled) return;
@@ -201,23 +189,32 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
           setMyAttendanceStatus(null);
         }
 
-        // 오늘 일정 처리
-        // NOTE: match_schedules는 하루에 하나만 있다고 가정 (maybeSingle)
-        const schedule = schedulesResult?.data ?? null;
-        const schedulesList = schedule ? [schedule] : [];
+        // 오늘 일정 처리: 여러 코트/일정이 있어도 누락하지 않는다.
+        const schedulesPayload = schedulesResponse.ok
+          ? await schedulesResponse.json().catch(() => null)
+          : null;
+        const schedulesList = Array.isArray(schedulesPayload?.schedules)
+          ? schedulesPayload.schedules
+          : [];
         setTodaySchedules(schedulesList);
 
         // 3. 참가 신청 상태 조회
         const userProfileId = profile?.id || userId;
-        if (schedule && userProfileId) {
-          const { data: participations } = await supabase
-            .from('match_participants')
-            .select('id, status, match_schedule_id')
-            .eq('match_schedule_id', schedule.id)
-            .in('user_id', [userId, profile?.id].filter(Boolean) as string[])
-            .in('status', ['registered', 'waitlisted']);
+        if (schedulesList.length > 0 && userProfileId) {
+          const params = new URLSearchParams();
+          schedulesList.forEach((item: any) => params.append('scheduleId', item.id));
+          const participantsResponse = await fetch(`/api/user/match-participants?${params.toString()}`, {
+            cache: 'no-store',
+          });
+          const participantsPayload = participantsResponse.ok
+            ? await participantsResponse.json().catch(() => null)
+            : null;
+          const participantKeys = [userId, profile?.id].filter(Boolean);
+          const participations = (participantsPayload?.participants || []).filter(
+            (item: any) => participantKeys.includes(item.user_id) && ['registered', 'waitlisted', 'attended'].includes(item.status)
+          );
 
-          if (participations && participations.length > 0) {
+          if (participations.length > 0) {
             setIsRegisteredToday(true);
             setTodayRegistration(participations[0]);
           } else {
@@ -254,30 +251,35 @@ export default function ClientDashboard({ userId, email }: { userId: string; ema
       const payload = await response.json().catch(() => null);
       setMyAttendanceStatus(response.ok ? normalizeAttendanceStatus(payload?.status) : null);
 
-      // 2. 오늘 일정 (클럽 필터 없이 전체 조회)
-      const { data: schedulesData } = await supabase
-        .from('match_schedules')
-        .select('id, match_date, max_participants, current_participants')
-        .eq('match_date', today)
-        .eq('status', 'scheduled')
-        .is('generated_match_id', null)
-        .maybeSingle();
-
-      const schedule = schedulesData ?? null;
-      const schedulesList = schedule ? [schedule] : [];
+      // 2. 오늘 일정: 활성 클럽 기준으로 서버에서 조회
+      const schedulesResponse = await fetch(`/api/user/match-schedules?date=${today}`, {
+        cache: 'no-store',
+      });
+      const schedulesPayload = schedulesResponse.ok
+        ? await schedulesResponse.json().catch(() => null)
+        : null;
+      const schedulesList = Array.isArray(schedulesPayload?.schedules)
+        ? schedulesPayload.schedules
+        : [];
       setTodaySchedules(schedulesList);
 
       // 3. 참가 신청
       const userProfileId = profile?.id || userId;
-      if (schedule && userProfileId) {
-        const { data: participations } = await supabase
-          .from('match_participants')
-          .select('id, status, match_schedule_id')
-          .eq('match_schedule_id', schedule.id)
-          .in('user_id', [userId, profile?.id].filter(Boolean) as string[])
-          .in('status', ['registered', 'waitlisted']);
+      if (schedulesList.length > 0 && userProfileId) {
+        const params = new URLSearchParams();
+        schedulesList.forEach((item: any) => params.append('scheduleId', item.id));
+        const participantsResponse = await fetch(`/api/user/match-participants?${params.toString()}`, {
+          cache: 'no-store',
+        });
+        const participantsPayload = participantsResponse.ok
+          ? await participantsResponse.json().catch(() => null)
+          : null;
+        const participantKeys = [userId, profile?.id].filter(Boolean);
+        const participations = (participantsPayload?.participants || []).filter(
+          (item: any) => participantKeys.includes(item.user_id) && ['registered', 'waitlisted', 'attended'].includes(item.status)
+        );
 
-        if (participations && participations.length > 0) {
+        if (participations.length > 0) {
           setIsRegisteredToday(true);
           setTodayRegistration(participations[0]);
         } else {
