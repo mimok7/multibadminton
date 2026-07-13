@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowRight, CalendarDays, MapPin, Users, ArrowLeft } from 'lucide-react';
 
@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
-import { getKoreaDate } from '@/lib/date';
 import { formatKST, formatKSTDateTime, formatTimeHHmm } from '@/lib/date';
 import { getLevelNameFromCode } from '@/lib/level-info';
 import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
@@ -76,6 +75,7 @@ export default function MatchRegistrationPage() {
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState<string | null>(null);
   const [showParticipants, setShowParticipants] = useState<string | null>(null);
+  const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchSchedulesAndParticipation = useCallback(async () => {
     if (clubLoading || userLoading) {
@@ -94,72 +94,22 @@ export default function MatchRegistrationPage() {
         return;
       }
 
-      const todayStr = getKoreaDate();
-      let schedulesList: MatchSchedule[] = [];
-
-      const schedulesResponse = await fetch('/api/user/match-schedules', {
+      const summaryResponse = await fetch('/api/user/match-registration-summary', {
         method: 'GET',
         cache: 'no-store',
         credentials: 'include',
       });
 
-      if (!schedulesResponse.ok) {
-        const payload = await schedulesResponse.json().catch(() => null);
-        console.error('경기 일정 조회 오류:', payload);
+      if (!summaryResponse.ok) {
+        const payload = await summaryResponse.json().catch(() => null);
+        console.error('참가 신청 데이터 조회 오류:', payload);
         setSchedules([]);
         setUserMatches([]);
         return;
       }
 
-      const schedulesPayload = (await schedulesResponse.json()) as {
+      const summaryPayload = (await summaryResponse.json()) as {
         schedules?: MatchSchedule[];
-        clubId?: string | null;
-      };
-      const filteredSchedules: MatchSchedule[] = schedulesPayload.schedules || [];
-        
-      let recurringCount = 0;
-      schedulesList = filteredSchedules.filter((schedule) => {
-        if (!schedule.match_date || schedule.match_date < todayStr) {
-          return false;
-        }
-
-        const source = inferScheduleSource(schedule as any);
-
-        if (source === 'recurring') {
-          if (recurringCount < 10) {
-            recurringCount++;
-            return true; // 정기 모임은 오늘 이후 10개 표시
-          }
-        }
-
-        // 대회 일정도 오늘 이후 일정만 표시한다.
-        if (source === 'tournament') {
-          return true;
-        }
-
-        return false;
-      });
-
-      setSchedules(schedulesList);
-
-      if (schedulesList.length === 0) {
-        setUserMatches([]);
-        return;
-      }
-
-      const scheduleIds = schedulesList.map((schedule) => schedule.id);
-
-      const params = new URLSearchParams();
-      scheduleIds.forEach((scheduleId) => params.append('scheduleId', scheduleId));
-      const profilesResponse = await fetch(`/api/user/match-participants?${params.toString()}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!profilesResponse.ok) {
-        throw new Error('참가자 정보를 조회하지 못했습니다.');
-      }
-
-      const participantsPayload = await profilesResponse.json() as {
         profiles?: Array<{ id: string; user_id: string | null; username: string | null; full_name: string | null; skill_level: string | null }>;
         participants?: Array<{
           id: string;
@@ -169,9 +119,18 @@ export default function MatchRegistrationPage() {
           match_schedule_id: string;
         }>;
       };
-      const participationsData = (participantsPayload.participants || [])
+      const schedulesList = summaryPayload.schedules || [];
+
+      setSchedules(schedulesList);
+
+      if (schedulesList.length === 0) {
+        setUserMatches([]);
+        return;
+      }
+
+      const participationsData = (summaryPayload.participants || [])
         .filter((participant) => participantKeys.includes(participant.user_id)) as MatchParticipant[];
-      const participantsAll = (participantsPayload.participants || []).filter((participant) =>
+      const participantsAll = (summaryPayload.participants || []).filter((participant) =>
         ['registered', 'attended', 'waitlisted'].includes(participant.status)
       ) as Array<{
         id: string;
@@ -185,7 +144,7 @@ export default function MatchRegistrationPage() {
       let profilesById: Record<string, { username?: string; full_name?: string; skill_level?: string | null }> = {};
 
       if (uniqueUserIds.length > 0) {
-        const profilesData = participantsPayload.profiles || [];
+        const profilesData = summaryPayload.profiles || [];
         profilesById = profilesData.reduce((acc: Record<string, any>, row: any) => {
           const info = {
             username: row.username,
@@ -488,20 +447,35 @@ export default function MatchRegistrationPage() {
   }, [fetchSchedulesAndParticipation]);
 
   useEffect(() => {
+    if (!clubId) return;
+
+    // 여러 참가자 변경이 연달아 들어와도 목록은 한 번만 다시 읽습니다.
+    const queueRefresh = () => {
+      if (realtimeRefreshTimeoutRef.current) clearTimeout(realtimeRefreshTimeoutRef.current);
+      realtimeRefreshTimeoutRef.current = setTimeout(() => {
+        realtimeRefreshTimeoutRef.current = null;
+        void fetchSchedulesAndParticipation();
+      }, 250);
+    };
+
     const channel = supabase
       .channel('realtime-match-registration')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_participants' }, fetchSchedulesAndParticipation)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_schedules' }, fetchSchedulesAndParticipation)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_participants', filter: `club_id=eq.${clubId}` }, queueRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_schedules', filter: `club_id=eq.${clubId}` }, queueRefresh)
       .subscribe();
 
     return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
       try {
         supabase.removeChannel(channel);
       } catch {
         // noop
       }
     };
-  }, [fetchSchedulesAndParticipation, supabase]);
+  }, [clubId, fetchSchedulesAndParticipation, supabase]);
 
   const myMatches = userMatches.filter((match) => match.isRegistered || match.isWaitlisted);
 
