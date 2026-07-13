@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import { createSuperadminMembersByNames, updateSuperadminClubMemberRole, type ClubMemberRole } from './actions';
+import { createSuperadminMembersByNames, resetSuperadminMemberPassword, updateSuperadminClubMemberRole, type ClubMemberRole } from './actions';
 
 type Club = { id: string; name: string; code: string | null };
 type Membership = { id: string; club_id: string; user_id: string; role: string | null; status: string | null; username: string; full_name: string; email: string; skill_level: string };
@@ -72,6 +72,20 @@ export default function SuperadminMembersClient({ clubs, memberships, profiles }
     });
   };
 
+  const handlePasswordReset = (member: Membership) => {
+    const name = member.full_name || member.username || '이 회원';
+    if (!window.confirm(`${name}님의 비밀번호를 bad123!로 초기화할까요?\n다음 로그인 시 비밀번호 변경이 필요합니다.`)) return;
+
+    startTransition(async () => {
+      const result = await resetSuperadminMemberPassword(member.user_id);
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      alert(`${name}님의 비밀번호를 ${result.initialPassword}로 초기화했습니다.`);
+    });
+  };
+
   const handleSort = (nextKey: SortKey) => {
     if (sortKey === nextKey) {
       setSortAscending((current) => !current);
@@ -112,16 +126,17 @@ export default function SuperadminMembersClient({ clubs, memberships, profiles }
           <h2 className="font-bold text-slate-900">{selectedClub?.name || '선택한 클럽'} 권한 설정</h2>
           <p className="mt-1 text-xs text-slate-500">클럽별 회원 권한만 변경됩니다.</p>
         </div>
-        <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(6rem,0.7fr)_7rem] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-500 md:grid">
+        <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(6rem,0.7fr)_7rem_7.5rem] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-500 md:grid">
           {([['name', '회원명'], ['email', '이메일'], ['skill_level', '급수'], ['role', '권한']] as Array<[SortKey, string]>).map(([key, label]) => (
             <button key={key} type="button" onClick={() => handleSort(key)} className="text-left transition hover:text-indigo-600">
               {label}{sortIndicator(key)}
             </button>
           ))}
+          <span>비밀번호</span>
         </div>
         <div className="divide-y divide-slate-100">
           {sortedClubMembers.map((member) => (
-            <div key={member.id} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(6rem,0.7fr)_7rem] md:items-center">
+            <div key={member.id} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(6rem,0.7fr)_7rem_7.5rem] md:items-center">
               <button type="button" onClick={() => handleSort('name')} className="text-left font-semibold text-slate-900 hover:text-indigo-600">
                 {member.full_name || member.username || '이름 없음'}{sortIndicator('name')}
               </button>
@@ -139,6 +154,14 @@ export default function SuperadminMembersClient({ clubs, memberships, profiles }
               >
                 {roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
               </select>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handlePasswordReset(member)}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                비번 초기화
+              </button>
             </div>
           ))}
         </div>

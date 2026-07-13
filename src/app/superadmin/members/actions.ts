@@ -5,6 +5,39 @@ import { requireSuperadmin } from '@/lib/superadmin';
 
 export type ClubMemberRole = 'owner' | 'admin' | 'manager' | 'member';
 
+const INITIAL_PASSWORD = 'bad123!';
+
+export async function resetSuperadminMemberPassword(memberId: string) {
+  try {
+    const { supabaseAdmin } = await requireSuperadmin();
+    if (!memberId) return { error: '회원 정보가 없습니다.' };
+
+    // club_members.user_id is a profile ID in this project. Resolve it to the
+    // Supabase Auth user before calling the admin-only password API.
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, user_id')
+      .or(`id.eq.${memberId},user_id.eq.${memberId}`)
+      .limit(1)
+      .maybeSingle();
+    if (profileError) return { error: profileError.message };
+    if (!profile?.user_id) return { error: '이 회원은 로그인 계정이 연결되어 있지 않습니다.' };
+
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      profile.user_id,
+      {
+        password: INITIAL_PASSWORD,
+        user_metadata: { must_change_password: true },
+      }
+    );
+    if (authError) return { error: authError.message };
+
+    return { success: true, initialPassword: INITIAL_PASSWORD };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : '비밀번호 초기화 중 오류가 발생했습니다.' };
+  }
+}
+
 export async function updateSuperadminClubMemberRole(clubId: string, userId: string, role: ClubMemberRole) {
   try {
     const { supabaseAdmin } = await requireSuperadmin();
