@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   decorateDescriptionForScheduleSource,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/match-schedule-source';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
+import { useClub } from '@/hooks/useClub';
 import { Button } from '@/components/ui/button';
 import { formatKSTDateKorean, formatTimeHHmm } from '@/lib/date';
 
@@ -127,7 +128,9 @@ export default function MatchSchedulePage() {
     }
   };
   const { user } = useUser();
+  const { clubId } = useClub();
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [schedules, setSchedules] = useState<ScheduleWithParticipants[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -238,20 +241,30 @@ export default function MatchSchedulePage() {
 
   // 참가자 변화 실시간 반영: Realtime 구독으로 자동 새로고침
   useEffect(() => {
+    if (!clubId) return;
+
+    const queueRefresh = () => {
+      if (realtimeRefreshTimeoutRef.current) clearTimeout(realtimeRefreshTimeoutRef.current);
+      realtimeRefreshTimeoutRef.current = setTimeout(() => {
+        realtimeRefreshTimeoutRef.current = null;
+        void fetchSchedules();
+      }, 250);
+    };
+
     const channel = supabase
       .channel('match_participants_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_participants' }, () => {
-        fetchSchedules();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_schedules' }, () => {
-        fetchSchedules();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_participants', filter: `club_id=eq.${clubId}` }, queueRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_schedules', filter: `club_id=eq.${clubId}` }, queueRefresh)
       .subscribe();
 
     return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [fetchSchedules, supabase]);
+  }, [clubId, fetchSchedules, supabase]);
 
   // 주말(토, 일)을 제외한 경기 5일 자동 생성
   const handleAutoGenerateSchedules = async () => {

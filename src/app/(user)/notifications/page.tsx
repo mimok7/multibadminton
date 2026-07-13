@@ -127,23 +127,32 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<FilterMode>("unread");
   const [activeTab, setActiveTab] = useState<'notice' | 'notification'>('notice');
   const [submittingSurveyId, setSubmittingSurveyId] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (append = false) => {
     if (!user) return;
-    setFetching(true);
+    if (append) setLoadingMore(true);
+    else setFetching(true);
     setError(null);
     try {
-      const res = await fetch("/api/user/notifications");
+      const params = new URLSearchParams({ limit: '50' });
+      if (append && nextCursor) params.set('before', nextCursor);
+      const res = await fetch(`/api/user/notifications?${params.toString()}`);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `서버 오류 (${res.status})`);
       }
-      const { notifications: data } = await res.json();
-      setNotifications(data || []);
+      const { notifications: data, hasMore: more, nextCursor: cursor } = await res.json();
+      setNotifications((previous) => append ? [...previous, ...(data || [])] : (data || []));
+      setHasMore(Boolean(more));
+      setNextCursor(cursor || null);
     } catch (e: any) {
       setError(e.message || "알림을 불러오는 데 실패했습니다.");
     } finally {
-      setFetching(false);
+      if (append) setLoadingMore(false);
+      else setFetching(false);
     }
   };
 
@@ -234,7 +243,7 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!user || !clubId) return;
-    fetchNotifications();
+    fetchNotifications(false);
 
     const channel = supabase
       .channel("user-notifications-page")
@@ -249,7 +258,7 @@ export default function NotificationsPage() {
         (payload: any) => {
           // Only refresh if the notification belongs to the active club
           if (payload.new?.club_id && payload.new.club_id !== clubId) return;
-          fetchNotifications();
+          fetchNotifications(false);
         }
       )
       .subscribe();
@@ -327,7 +336,7 @@ export default function NotificationsPage() {
                   </button>
                 )}
                 <button
-                  onClick={fetchNotifications}
+                  onClick={() => fetchNotifications(false)}
                   disabled={fetching}
                   className="flex items-center gap-1 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-white transition disabled:opacity-50"
                 >
@@ -621,6 +630,16 @@ export default function NotificationsPage() {
                   </div>
                 );
               })}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => fetchNotifications(true)}
+                  disabled={loadingMore}
+                  className="mt-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingMore ? '더 불러오는 중...' : '이전 알림 더 보기'}
+                </button>
+              )}
             </div>
           )}
         </section>

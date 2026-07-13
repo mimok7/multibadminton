@@ -4,7 +4,11 @@ import { getActiveClubId } from '@/lib/club';
 
 export async function GET(request: Request) {
   try {
-    const isSummaryRequest = new URL(request.url).searchParams.get('summary') === '1';
+    const searchParams = new URL(request.url).searchParams;
+    const isSummaryRequest = searchParams.get('summary') === '1';
+    const requestedLimit = Number(searchParams.get('limit') || '50');
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100) : 50;
+    const before = searchParams.get('before');
     const serverSupabase = await getSupabaseServerClient();
     const {
       data: { user },
@@ -32,13 +36,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ unreadCount: count ?? 0 });
     }
 
-    const { data: notifications, error } = await adminSupabase
+    let notificationsQuery = adminSupabase
       .from('notifications')
       .select('id, title, message, type, is_read, created_at, read_at, survey_id, surveys(id, question, description, options, is_active, max_responses, option_limits)')
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit + 1);
+    if (before) notificationsQuery = notificationsQuery.lt('created_at', before);
+
+    const { data: notificationRows, error } = await notificationsQuery;
 
     if (error) throw error;
+    const hasMore = (notificationRows?.length || 0) > limit;
+    const notifications = (notificationRows || []).slice(0, limit);
 
     // Fetch user's responses to these surveys to show their selection and option counts
     const surveyNotifications = notifications?.filter((n: any) => n.survey_id) || [];
@@ -78,7 +88,11 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ notifications: notifications || [] });
+    return NextResponse.json({
+      notifications,
+      hasMore,
+      nextCursor: hasMore ? notifications.at(-1)?.created_at ?? null : null,
+    });
   } catch (err: any) {
     console.error('알림 조회 실패:', err);
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });

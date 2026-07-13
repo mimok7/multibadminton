@@ -11,7 +11,15 @@ import { cookies } from 'next/headers';
 const scheduleSelect =
   'id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants';
 
+function responseHeaders(startedAt: number) {
+  return {
+    'Cache-Control': 'private, no-store',
+    'Server-Timing': `app;dur=${(performance.now() - startedAt).toFixed(1)}`,
+  };
+}
+
 export async function GET() {
+  const startedAt = performance.now();
   try {
     const sessionClient = await getUnfilteredSupabaseServerClient();
     const { data: { user } } = await sessionClient.auth.getUser();
@@ -132,7 +140,7 @@ export async function GET() {
       attendanceStatus: attendanceResult.data?.status ?? null,
       schedules,
       registration,
-    }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }, { headers: responseHeaders(startedAt) });
   } catch (error) {
     console.error('Dashboard summary error:', error);
     return NextResponse.json({ error: 'Failed to load dashboard summary' }, { status: 500 });

@@ -186,9 +186,8 @@ function romanizeSyllable(char: string): string {
 }
 
 function buildAutoEmail(fullName: string): string {
-    const name = fullName.trim();
-    if (!name) return `member-${Date.now()}@badminton.local`;
-    return `user_${Date.now()}_${Math.floor(Math.random()*1000)}@badminton.local`;
+    const prefix = fullName.trim() ? 'user' : 'member';
+    return `${prefix}_${crypto.randomUUID()}@badminton.local`;
 }
 
 export type CreateMemberPayload = {
@@ -200,7 +199,7 @@ export type CreateMemberPayload = {
     role?: 'manager' | 'member' | 'user' | null;
 };
 
-export async function createMember(payload: CreateMemberPayload) {
+export async function createMember(payload: CreateMemberPayload, options: { revalidate?: boolean } = {}) {
     const supabaseAdmin = await getFilteredAdminClient();
     const ctx = await getManagerContext();
     if (!ctx) return { error: '추가 권한이 없습니다.' };
@@ -248,7 +247,7 @@ export async function createMember(payload: CreateMemberPayload) {
         status: 'active'
     }, { onConflict: 'club_id,user_id' });
 
-    revalidatePath('/manager/members');
+    if (options.revalidate !== false) revalidatePath('/manager/members');
     return { success: true };
 }
 
@@ -259,25 +258,27 @@ export async function createMembersBulk(payload: { full_names: string; skill_lev
     const names = payload.full_names.split(/[,\n]/).map(n => n.trim()).filter(Boolean);
     if (names.length === 0) return { error: '추가할 회원 이름을 입력해 주세요.' };
 
-    const results = [];
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const name of names) {
-        const result = await createMember({
-            full_name: name,
-            skill_level: payload.skill_level,
-            role: payload.role,
-        });
-
-        if (result.error) {
-            failCount++;
-            results.push({ name, error: result.error });
-        } else {
-            successCount++;
-            results.push({ name, success: true });
+    // Auth 계정 생성은 네트워크 작업이므로 한 명씩 처리하지 않고, 과도한
+    // 동시 요청을 피하는 작은 동시성 풀로 처리합니다.
+    const results: Array<{ name: string; success?: true; error?: string }> = new Array(names.length);
+    let nextIndex = 0;
+    const worker = async () => {
+        while (true) {
+            const index = nextIndex++;
+            if (index >= names.length) return;
+            const name = names[index];
+            const result = await createMember({
+                full_name: name,
+                skill_level: payload.skill_level,
+                role: payload.role,
+            }, { revalidate: false });
+            results[index] = result.error ? { name, error: result.error } : { name, success: true };
         }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, names.length) }, worker));
+
+    const successCount = results.filter((result) => result.success).length;
+    const failCount = results.length - successCount;
 
     revalidatePath('/manager/members');
     return { success: true, successCount, failCount, results };

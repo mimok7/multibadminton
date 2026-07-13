@@ -19,7 +19,7 @@ export async function GET() {
   // 상품 데이터 조회
   const { data: products, error: productsError } = await adminSupabase
     .from('products')
-    .select('*')
+    .select('id, name, coin_price, description, image_svg, is_active, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (productsError) {

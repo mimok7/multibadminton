@@ -70,7 +70,7 @@ function ScheduleManagePage() {
     try {
       const { data, error } = await supabase
         .from('match_sessions')
-        .select('*')
+        .select('id, session_name, session_date, status, total_matches, assigned_matches')
         .order('session_date', { ascending: false })
         .limit(10);
 

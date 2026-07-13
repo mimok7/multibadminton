@@ -15,7 +15,7 @@ export async function GET() {
   const adminSupabase = await getFilteredAdminClient() as any;
   const { data: products, error } = await adminSupabase
     .from('products')
-    .select('*')
+    .select('id, name, coin_price, description, image_svg, is_active, created_at, updated_at')
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 

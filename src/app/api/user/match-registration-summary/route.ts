@@ -10,7 +10,15 @@ const scheduleSelect =
   'id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants';
 const activeParticipantStatuses = ['registered', 'attended', 'waitlisted'];
 
+function responseHeaders(startedAt: number) {
+  return {
+    'Cache-Control': 'private, no-store',
+    'Server-Timing': `app;dur=${(performance.now() - startedAt).toFixed(1)}`,
+  };
+}
+
 export async function GET() {
+  const startedAt = performance.now();
   try {
     const sessionClient = await getUnfilteredSupabaseServerClient();
     const { data: { user } } = await sessionClient.auth.getUser();
@@ -67,7 +75,7 @@ export async function GET() {
     });
     const scheduleIds = schedules.map((schedule: any) => schedule.id);
     if (scheduleIds.length === 0) {
-      return NextResponse.json({ schedules, participants: [], profiles: [] }, { headers: { 'Cache-Control': 'private, no-store' } });
+      return NextResponse.json({ schedules, participants: [], profiles: [] }, { headers: responseHeaders(startedAt) });
     }
 
     const { data: participants, error: participantsError } = await admin
@@ -89,9 +97,7 @@ export async function GET() {
     const profiles = [...(profilesByUserId.data || []), ...(profilesById.data || [])]
       .filter((profile, index, all) => all.findIndex((item) => item.id === profile.id) === index);
 
-    return NextResponse.json({ schedules, participants: participants || [], profiles }, {
-      headers: { 'Cache-Control': 'private, no-store' },
-    });
+    return NextResponse.json({ schedules, participants: participants || [], profiles }, { headers: responseHeaders(startedAt) });
   } catch (error) {
     console.error('Match registration summary error:', error);
     return NextResponse.json({ error: '참가 신청 데이터를 불러오지 못했습니다.' }, { status: 500 });
