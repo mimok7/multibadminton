@@ -127,22 +127,6 @@ export default function ManagerDashboardPage() {
           )}
 
           <Link
-            href="/manager/admin"
-            className="rounded-lg border border-blue-200 bg-white px-3 py-3 transition-colors hover:border-rose-400 hover:bg-rose-50 sm:p-4 shadow-sm"
-          >
-            <h3 className="text-sm font-medium text-gray-900 sm:text-base">🏢 전체 클럽 관리</h3>
-            <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">시스템에 등록된 전체 클럽을 관리하세요</p>
-          </Link>
-
-          <Link
-            href="/manager/admin/members"
-            className="rounded-lg border border-blue-200 bg-white px-3 py-3 transition-colors hover:border-fuchsia-400 hover:bg-fuchsia-50 sm:p-4 shadow-sm"
-          >
-            <h3 className="text-sm font-medium text-gray-900 sm:text-base">👥 전체 사용자 관리</h3>
-            <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">시스템에 등록된 전체 사용자의 권한과 정보를 관리하세요</p>
-          </Link>
-
-          <Link
             href="/manager/manual"
             className="rounded-lg border border-blue-200 bg-white px-3 py-3 transition-colors hover:border-sky-400 hover:bg-sky-50 sm:p-4 shadow-sm"
           >

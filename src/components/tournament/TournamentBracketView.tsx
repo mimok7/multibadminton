@@ -293,7 +293,7 @@ function getBracketStageName(match: Match, matches: Match[]) {
 }
 
 function formatBracketTeam(team: string[], match?: Match, matches: Match[] = [], isPairTournament = false) {
-  if (team.length > 0) return team.join(' / ');
+  if (team.length > 0) return team.join('\n');
   if (!isPairTournament || !match || matches.length === 0) return '대진 대기';
   return `${getBracketStageName(match, matches)} 진출팀`;
 }
@@ -702,7 +702,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
   const [teamAssignmentsByTournament, setTeamAssignmentsByTournament] = useState<TeamAssignmentMap>({});
-  const [viewMode, setViewMode] = useState<'round' | 'court' | 'time'>('court');
+  const [viewMode, setViewMode] = useState<'round' | 'court' | 'time'>('time');
   const [layoutMode, setLayoutMode] = useState<'card' | 'table'>('card');
   const [allTournamentsMatches, setAllTournamentsMatches] = useState<Match[]>([]);
   const [selectedCourtFilter, setSelectedCourtFilter] = useState<string>('all');
@@ -2794,7 +2794,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                                                 )}
                                               </td>
                                             )}
-                                            <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
+                                            <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-pre-line">
                                               {formatBracketTeam(match.team1, match, section.matches, isPairCustomTournament)}
                                             </td>
                                             <td className="px-4 py-3 text-center">
@@ -2848,7 +2848,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                                                 </button>
                                               </div>
                                             </td>
-                                            <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
+                                            <td className="px-4 py-3 font-bold text-slate-800 whitespace-pre-line">
                                               {formatBracketTeam(match.team2, match, section.matches, isPairCustomTournament)}
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
@@ -3660,7 +3660,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                                               {formatCourtLabel(match.court)}
                                             </td>
                                           )}
-                                          <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-nowrap">
+                                          <td className="px-4 py-3 text-right font-bold text-slate-800 whitespace-pre-line">
                                             {formatBracketTeam(match.team1, match, section.matches, isPairCustomTournament)}
                                           </td>
                                           <td className="px-4 py-3 text-center">
@@ -3670,7 +3670,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                                               {isCompleted ? `${match.score_team1 ?? 0} : ${match.score_team2 ?? 0}` : 'VS'}
                                             </span>
                                           </td>
-                                          <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
+                                          <td className="px-4 py-3 font-bold text-slate-800 whitespace-pre-line">
                                             {formatBracketTeam(match.team2, match, section.matches, isPairCustomTournament)}
                                           </td>
                                           <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
@@ -3839,7 +3839,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                         ))}
                       </div>
                     ) : (
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         {teamMemberGroups.map((group, index) => (
                           <article
                             key={group.label}
