@@ -1024,8 +1024,8 @@ export default function MatchSchedulePage() {
       return;
     }
 
-    const selectedProfiles = participantModalProfiles.filter(
-      (profile) => selectedModalParticipantIds.includes(profile.id) && profile.user_id
+    const selectedProfiles = participantModalProfiles.filter((profile) =>
+      selectedModalParticipantIds.includes(profile.id)
     );
 
     if (selectedProfiles.length === 0) {
@@ -1033,7 +1033,9 @@ export default function MatchSchedulePage() {
       return;
     }
 
-    let targetUserIds = selectedProfiles.map((p) => p.user_id).filter(Boolean) as string[];
+    // match_participants.user_id references profiles.id.  Using the auth user_id
+    // here causes a foreign-key failure for administrators adding other members.
+    let targetUserIds = selectedProfiles.map((profile) => profile.id);
 
     if (targetUserIds.length > availableSpots) {
       if (
@@ -1150,7 +1152,8 @@ export default function MatchSchedulePage() {
         return allProfiles.find(p => p.full_name === name || p.username === name);
       }).filter(Boolean) as ParticipantSearchProfile[];
 
-      const matchedUserIds = matchedProfiles.map(p => p.user_id).filter(Boolean) as string[];
+      // Keep the participant identifier consistent with match_participants.user_id.
+      const matchedUserIds = matchedProfiles.map((profile) => profile.id);
 
       if (matchedUserIds.length === 0) {
         alert('입력된 이름과 일치하는 회원을 찾을 수 없습니다.');
@@ -1215,7 +1218,7 @@ export default function MatchSchedulePage() {
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error || '참가자 추가 중 오류가 발생했습니다.');
+        throw new Error(payload?.detail || payload?.error || '참가자 추가 중 오류가 발생했습니다.');
       }
 
       const payload = await response.json();

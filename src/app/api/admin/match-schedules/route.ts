@@ -58,7 +58,7 @@ async function requireScheduleManager() {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return { supabase, adminSupabase, user };
+  return { supabase, adminSupabase, user, activeClubId };
 }
 
 export async function GET(request: Request) {
@@ -364,7 +364,7 @@ export async function POST(request: Request) {
       return adminContext.error;
     }
 
-    const { adminSupabase, user } = adminContext;
+    const { adminSupabase, user, activeClubId } = adminContext;
     const body = await request.json().catch(() => null);
     const action = typeof body?.action === 'string' ? body.action : '';
 
@@ -477,31 +477,38 @@ export async function POST(request: Request) {
     }
 
     if (action === 'add_participants') {
-      const targetUserIds = Array.isArray(body?.targetUserIds) ? body.targetUserIds : [];
-      if (targetUserIds.length === 0) {
+      const rawTargetUserIds: unknown[] = Array.isArray(body?.targetUserIds) ? body.targetUserIds : [];
+      const requestedUserIds: string[] = Array.from(
+        new Set(rawTargetUserIds.filter((value): value is string => typeof value === 'string' && value.length > 0))
+      );
+      if (requestedUserIds.length === 0) {
         return NextResponse.json({ error: 'No target users specified' }, { status: 400 });
       }
 
-      const upsertData = targetUserIds.map((userId: string) => ({
-        match_schedule_id: scheduleId,
-        user_id: userId,
-        status: 'registered',
-        registered_at: new Date().toISOString(),
-      }));
+      // Superadmins use an unfiltered service client, so club_id is not injected
+      // by withClubFilter. Participants must always inherit their schedule's club.
+      const { data: schedule, error: scheduleError } = await getUnfilteredGlobalAdminClient()
+        .from('match_schedules')
+        .select('id, club_id')
+        .eq('id', scheduleId)
+        .maybeSingle();
 
-      const { data: upsertedParticipants, error: upsertError } = await adminSupabase
-        .from('match_participants')
-        .upsert(upsertData, { onConflict: 'match_schedule_id,user_id' })
-        .select('id, match_schedule_id, user_id, registered_at, status');
+      if (scheduleError) {
+        console.error('Admin batch schedule lookup error:', scheduleError);
+        return NextResponse.json({ error: 'Failed to validate match schedule' }, { status: 500 });
+      }
 
-      if (upsertError) {
-        console.error('Admin match participants batch upsert error:', upsertError);
-        return NextResponse.json({ error: 'Failed to add participants' }, { status: 500 });
+      if (!schedule?.club_id) {
+        return NextResponse.json({ error: 'Match schedule has no club assigned' }, { status: 400 });
+      }
+
+      if (activeClubId && schedule.club_id !== activeClubId) {
+        return NextResponse.json({ error: 'Match schedule is outside the active club' }, { status: 403 });
       }
 
       const [byUserId, byId] = await Promise.all([
-        adminSupabase.from('profiles').select('id, user_id, username, full_name').in('user_id', targetUserIds),
-        adminSupabase.from('profiles').select('id, user_id, username, full_name').in('id', targetUserIds)
+        adminSupabase.from('profiles').select('id, user_id, username, full_name').in('user_id', requestedUserIds),
+        adminSupabase.from('profiles').select('id, user_id, username, full_name').in('id', requestedUserIds)
       ]);
 
       const profilesError = byUserId.error || byId.error;
@@ -511,7 +518,73 @@ export async function POST(request: Request) {
       ].filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
 
       if (profilesError) {
-        console.warn('Admin batch profiles query error:', profilesError);
+        console.error('Admin batch profiles query error:', profilesError);
+        return NextResponse.json({ error: 'Failed to validate participants' }, { status: 500 });
+      }
+
+      // Some older callers send auth.users IDs while match_participants stores
+      // profiles.id. Resolve both forms to profiles.id before writing.
+      const targetUserIds = Array.from(
+        new Set(profilesData.map((profile) => profile.id).filter((id): id is string => typeof id === 'string' && id.length > 0))
+      );
+      if (targetUserIds.length === 0) {
+        return NextResponse.json({ error: 'No matching member profiles found' }, { status: 400 });
+      }
+
+      const { data: existingParticipants, error: existingParticipantsError } = await adminSupabase
+        .from('match_participants')
+        .select('id, user_id')
+        .eq('match_schedule_id', scheduleId)
+        .in('user_id', targetUserIds);
+
+      if (existingParticipantsError) {
+        console.error('Admin batch participant lookup error:', existingParticipantsError);
+        return NextResponse.json({ error: 'Failed to check existing participants' }, { status: 500 });
+      }
+
+      const existingUserIds = new Set((existingParticipants || []).map((participant) => participant.user_id));
+      const newUserIds = targetUserIds.filter((userId) => !existingUserIds.has(userId));
+      const registeredAt = new Date().toISOString();
+
+      if (existingUserIds.size > 0) {
+        const { error: restoreError } = await adminSupabase
+          .from('match_participants')
+          .update({ status: 'registered', registered_at: registeredAt })
+          .eq('match_schedule_id', scheduleId)
+          .in('user_id', Array.from(existingUserIds));
+
+        if (restoreError) {
+          console.error('Admin batch participant restore error:', restoreError);
+          return NextResponse.json({ error: 'Failed to restore participants' }, { status: 500 });
+        }
+      }
+
+      let insertedParticipants: Array<{ id: string; match_schedule_id: string; user_id: string; registered_at: string; status: string }> = [];
+      if (newUserIds.length > 0) {
+        const { data, error: insertError } = await adminSupabase
+          .from('match_participants')
+          .insert(newUserIds.map((userId) => ({
+            match_schedule_id: scheduleId,
+            user_id: userId,
+            club_id: schedule.club_id,
+            status: 'registered',
+            registered_at: registeredAt,
+          })))
+          .select('id, match_schedule_id, user_id, registered_at, status');
+
+        if (insertError) {
+          console.error('Admin match participants batch insert error:', insertError);
+          return NextResponse.json(
+            {
+              error: 'Failed to add participants',
+              detail: insertError.message,
+              code: insertError.code,
+            },
+            { status: 500 }
+          );
+        }
+
+        insertedParticipants = data || [];
       }
 
       const profilesMap = (profilesData || []).reduce<Record<string, any>>((acc, profile) => {
@@ -540,7 +613,14 @@ export async function POST(request: Request) {
         .update({ current_participants: count || 0 })
         .eq('id', scheduleId);
 
-      const participantsWithProfiles = (upsertedParticipants || []).map((participant) => ({
+      const restoredParticipants = (existingParticipants || []).map((participant) => ({
+        ...participant,
+        match_schedule_id: scheduleId,
+        registered_at: registeredAt,
+        status: 'registered',
+      }));
+
+      const participantsWithProfiles = [...restoredParticipants, ...insertedParticipants].map((participant) => ({
         ...participant,
         profiles: profilesMap[participant.user_id] || profilesMap[participant.id] || undefined,
       }));

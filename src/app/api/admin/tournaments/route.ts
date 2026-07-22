@@ -22,6 +22,7 @@ type TeamAssignmentRow = {
 
 type TournamentRow = {
   id: string;
+  club_id?: string | null;
   match_type: string | null;
   matches_per_player: number | null;
   team_assignment_id: string;
@@ -297,6 +298,12 @@ async function recoverTournamentMatches(
     return { recovered: false, error: 'Recovered match list is empty' };
   }
 
+  if (!tournament.club_id) {
+    return { recovered: false, error: 'Tournament has no club assigned' };
+  }
+
+  matchesToInsert = matchesToInsert.map((match) => ({ ...match, club_id: tournament.club_id }));
+
   const { error: insertError } = await adminSupabase
     .from('tournament_matches')
     .insert(matchesToInsert);
@@ -525,6 +532,9 @@ export async function POST(request: Request) {
     }
 
     const tournamentToInsert = {
+      // Superadmins use an unfiltered service client, so club_id must be
+      // persisted explicitly instead of relying on withClubFilter.
+      club_id: adminContext.clubId,
       title: typeof tournament.title === 'string' ? tournament.title : '',
       tournament_date: typeof tournament.tournament_date === 'string' ? tournament.tournament_date : '',
       round_number: typeof tournament.round_number === 'number' ? tournament.round_number : 1,
@@ -561,6 +571,7 @@ export async function POST(request: Request) {
     if (matches.length > 0) {
       const matchesToSave = matches.map((match: any) => ({
         tournament_id: createdTournament.id,
+        club_id: adminContext.clubId,
         round: typeof match?.round === 'number' ? match.round : 1,
         match_number: typeof match?.match_number === 'number' ? match.match_number : 0,
         team1: Array.isArray(match?.team1) ? match.team1.filter((value: unknown): value is string => typeof value === 'string') : [],

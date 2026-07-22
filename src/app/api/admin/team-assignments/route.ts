@@ -62,7 +62,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
-    const assignmentToInsert = payload as any;
+    // getFilteredAdminClient adds a club filter for ordinary managers, but a
+    // global administrator uses an unfiltered client. Persist the club id
+    // explicitly so both authorization paths satisfy the NOT NULL constraint.
+    const assignmentToInsert = {
+      ...(payload as Record<string, unknown>),
+      club_id: adminContext.clubId,
+    } as any;
 
     const { error } = await adminContext.adminSupabase
       .from('team_assignments')
