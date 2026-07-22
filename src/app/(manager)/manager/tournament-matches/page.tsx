@@ -2359,7 +2359,7 @@ export default function TournamentMatchesPage() {
   // 경기 관리 - 대진표 페이지로 이동
   const handleManageMatches = async (tournament: Tournament) => {
     // 대진표 페이지로 이동하면서 tournament ID를 전달
-    router.push(`/admin/tournament-bracket?tournament=${tournament.id}`);
+    router.push(`/manager/tournament-bracket?tournament=${tournament.id}`);
   };
 
   // 경기 삭제

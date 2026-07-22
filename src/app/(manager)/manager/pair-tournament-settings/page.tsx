@@ -1260,7 +1260,7 @@ function PairTournamentSettingsContent() {
   };
 
   const handleManageMatches = (tournament: Tournament) => {
-    router.push(`/admin/tournament-bracket?tournament=${tournament.id}`);
+    router.push(`/manager/tournament-bracket?tournament=${tournament.id}`);
   };
 
   return (

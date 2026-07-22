@@ -75,7 +75,7 @@ export default function ScoreboardPage() {
 
   const handleGoBack = useCallback(() => {
     const tournamentId = match?.tournament_id;
-    const destPath = isAdmin ? '/admin/tournament-bracket' : '/tournament-bracket';
+    const destPath = isAdmin ? '/manager/tournament-bracket' : '/tournament-bracket';
     const destination = tournamentId ? `${destPath}?tournament=${tournamentId}` : destPath;
     
     if (typeof window !== 'undefined' && window.history.length > 1 && document.referrer) {
