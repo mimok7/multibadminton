@@ -2129,6 +2129,37 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
     ? selectedTournament.match_type.startsWith('pairs_')
     : false;
   const isKnockoutTournament = selectedTournament?.match_type === 'pairs_knockout';
+  const isTeamTournament = Boolean(
+    selectedTournamentAssignment &&
+      ['2teams', '3teams', '4teams'].includes(selectedTournamentAssignment.team_type)
+  );
+  const isPairTournament = selectedTournamentAssignment?.team_type === 'pairs';
+  const canShowMembers = isTeamTournament || isPairTournament;
+  const teamMemberGroups = useMemo(
+    () => (selectedTournamentAssignment && isTeamTournament ? getAssignmentTeamGroups(selectedTournamentAssignment) : []),
+    [selectedTournamentAssignment, isTeamTournament]
+  );
+  const pairMemberGroups = useMemo(() => {
+    if (!selectedTournamentAssignment || !isPairTournament) return [];
+
+    const pairs = selectedTournamentAssignment.pairs_data || {};
+    const configuredGroups = selectedTournamentAssignment.pair_groups || [];
+    if (configuredGroups.length > 0) {
+      return configuredGroups
+        .map((group) => ({
+          label: group.groupName,
+          pairs: group.pairNames
+            .map((pairName) => ({ name: pairName, players: pairs[pairName] || [] }))
+            .filter((pair) => pair.players.length > 0),
+        }))
+        .filter((group) => group.pairs.length > 0);
+    }
+
+    return [{
+      label: '페어',
+      pairs: Object.entries(pairs).map(([name, players]) => ({ name, players })),
+    }].filter((group) => group.pairs.length > 0);
+  }, [selectedTournamentAssignment, isPairTournament]);
 
   const currentMatchesForView = useMemo(() => {
     if (!selectedTournament) return [];
@@ -2189,6 +2220,9 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
   const userTabs = useMemo(() => {
     const tabs = [{ key: 'bracket', label: '대진표' }];
     if (selectedTournament) {
+      if (canShowMembers) {
+        tabs.push({ key: 'members', label: isPairTournament ? '페어 구성원' : '팀 구성원' });
+      }
       if (isPairCustomTournament) {
         tabs.push({ key: 'results', label: '종합 순위' });
         pairGroupsList.forEach((group) => {
@@ -2201,7 +2235,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
       tabs.push({ key: 'results', label: '경기결과' });
     }
     return tabs;
-  }, [selectedTournament, isPairCustomTournament, pairGroupsList]);
+  }, [selectedTournament, canShowMembers, isPairTournament, isPairCustomTournament, pairGroupsList]);
 
 
 
@@ -3766,6 +3800,67 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                               </div>
                             )}
                           </section>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {userActiveTab === 'members' && canShowMembers && (
+                  <section className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5">
+                    <div className="mb-5">
+                      <h3 className="text-lg font-semibold text-slate-900">{isPairTournament ? '페어 구성원' : '팀 구성원'}</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {isPairTournament ? '그룹별 페어와 각 파트너를 확인할 수 있습니다.' : '이번 대회에 배정된 팀별 구성원입니다.'}
+                      </p>
+                    </div>
+
+                    {isPairTournament ? pairMemberGroups.length === 0 : teamMemberGroups.length === 0 ? (
+                      <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                        등록된 {isPairTournament ? '페어' : '팀 구성원'} 정보가 없습니다.
+                      </div>
+                    ) : isPairTournament ? (
+                      <div className="space-y-4">
+                        {pairMemberGroups.map((group, groupIndex) => (
+                          <article key={group.label} className="overflow-hidden rounded-[20px] border border-violet-200 bg-gradient-to-br from-violet-50 to-white shadow-sm">
+                            <div className="bg-violet-600 px-4 py-3 text-sm font-bold text-white">
+                              {group.label}
+                              <span className="ml-2 text-xs font-medium opacity-85">{group.pairs.length}개 페어</span>
+                            </div>
+                            <div className="grid gap-2 p-3 sm:grid-cols-2">
+                              {group.pairs.map((pair, pairIndex) => (
+                                <div key={`${group.label}-${pair.name}-${pairIndex}`} className="rounded-xl border border-violet-100 bg-white px-3 py-3">
+                                  <p className="text-xs font-bold text-violet-700">{pair.name}</p>
+                                  <p className="mt-1 text-sm font-semibold text-slate-800">{pair.players.join(' · ')}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {teamMemberGroups.map((group, index) => (
+                          <article
+                            key={group.label}
+                            className={`overflow-hidden rounded-[20px] border shadow-sm ${
+                              index % 2 === 0
+                                ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-white'
+                                : 'border-rose-200 bg-gradient-to-br from-rose-50 to-white'
+                            }`}
+                          >
+                            <div className={`px-4 py-3 text-sm font-bold ${index % 2 === 0 ? 'bg-blue-600 text-white' : 'bg-rose-600 text-white'}`}>
+                              {group.label}
+                              <span className="ml-2 text-xs font-medium opacity-85">{group.players.length}명</span>
+                            </div>
+                            <ul className="divide-y divide-slate-200/70 px-4">
+                              {group.players.map((player, playerIndex) => (
+                                <li key={`${group.label}-${player}-${playerIndex}`} className="py-2.5 text-sm font-medium text-slate-700">
+                                  {player}
+                                </li>
+                              ))}
+                            </ul>
+                          </article>
                         ))}
                       </div>
                     )}
