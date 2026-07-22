@@ -12,7 +12,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { Button } from '@/components/ui/button';
-import { formatKSTDateKorean, formatTimeHHmm } from '@/lib/date';
+import { formatKSTDateKorean, formatKSTDateKoreanWithWeekday, formatTimeHHmm } from '@/lib/date';
 
 interface MatchSchedule {
   id: string;
@@ -1620,7 +1620,7 @@ export default function MatchSchedulePage() {
                       <div className="mb-3 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <h3 className="text-base font-bold text-gray-900 sm:text-lg">
-                            {formatKSTDateKorean(group.matchDate)}
+                            {formatKSTDateKoreanWithWeekday(group.matchDate)}
                           </h3>
                           <p className="mt-1 text-sm text-gray-600">
                             총 {group.schedules.length}경기 · 참가자 {group.participants.length}명 · 출석 처리{' '}
@@ -2114,7 +2114,7 @@ export default function MatchSchedulePage() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">일자별 참가자 출석 처리</h2>
                   <p className="mt-1 text-sm text-gray-500">
-                {formatKSTDateKorean(attendanceModalDate)} 참가자를 해당 날짜의 출석으로 변경합니다.
+                {formatKSTDateKoreanWithWeekday(attendanceModalDate)} 참가자를 해당 날짜의 출석으로 변경합니다.
                   </p>
                 </div>
                 <button

@@ -55,6 +55,19 @@ export function formatKSTDateKorean(value: Date | string | number | null | undef
   return `${dateParts.year}년 ${dateParts.month}월 ${dateParts.day}일`;
 }
 
+export function formatKSTDateKoreanWithWeekday(value: Date | string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+
+  const weekday = new Intl.DateTimeFormat('ko-KR', {
+    weekday: 'short',
+    timeZone: KOREA_TIME_ZONE,
+  })
+    .formatToParts(asDate(value))
+    .find((part) => part.type === 'weekday')?.value;
+
+  return `${formatKSTDateKorean(value)}${weekday ? ` (${weekday})` : ''}`;
+}
+
 export function formatTimeHHmm(value: string | null | undefined): string {
   if (!value) return '';
 
