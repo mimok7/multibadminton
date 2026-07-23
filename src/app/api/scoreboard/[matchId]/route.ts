@@ -16,6 +16,7 @@ async function getMatchRefereeInfo(
   adminSupabase: any,
   match: MatchRow,
   currentProfileId: string | null,
+  currentUserId: string | null,
   currentUserName: string | null,
   clubId: string
 ) {
@@ -31,9 +32,12 @@ async function getMatchRefereeInfo(
       .replace(/\([^)]*\)$/, '')
       .trim()
       .toLowerCase();
-    isReferee =
-      currentProfileId != null &&
-      (refereeId === currentProfileId || cleanRefereeNames.includes(cleanCurrentUserName));
+    const isAssignedReferee =
+      refereeId != null &&
+      (refereeId === currentProfileId || refereeId === currentUserId);
+    const isNamedReferee =
+      Boolean(cleanCurrentUserName) && cleanRefereeNames.includes(cleanCurrentUserName);
+    isReferee = isAssignedReferee || isNamedReferee;
   } else {
     const tournamentId = typeof match.tournament_id === 'string' ? match.tournament_id : '';
     const dayMatches = tournamentId
@@ -100,6 +104,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     // 현재 로그인 사용자 확인
     let currentProfileId: string | null = null;
+    let currentUserId: string | null = null;
     let currentUserRole: string | null = null;
     let currentUserName: string | null = null;
 
@@ -108,6 +113,7 @@ export async function GET(_request: Request, context: RouteContext) {
       const { data: { user } } = await serverSupabase.auth.getUser();
 
       if (user) {
+        currentUserId = user.id;
         currentUserRole = await getUserRole(serverSupabase, user);
 
         const profile = await getProfileByUserId(serverSupabase, user.id);
@@ -124,6 +130,7 @@ export async function GET(_request: Request, context: RouteContext) {
       adminSupabase,
       match,
       currentProfileId,
+      currentUserId,
       currentUserName,
       clubId
     );
@@ -207,6 +214,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         adminSupabase,
         match,
         currentProfileId,
+        user.id,
         currentUserName,
         clubId
       );
@@ -313,6 +321,7 @@ export async function POST(request: Request, context: RouteContext) {
         adminSupabase,
         match,
         currentProfileId,
+        user.id,
         currentUserName,
         clubId
       );

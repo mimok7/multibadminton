@@ -3598,7 +3598,12 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
           </div>
         ) : (
           <div className="space-y-4">
-            {selectedTournament ? (
+            {loading ? (
+              <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-16 text-center shadow-sm text-slate-400">
+                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+                <p className="text-sm font-medium">대진표 데이터를 불러오는 중입니다...</p>
+              </div>
+            ) : selectedTournament ? (
               <div className="space-y-6">
                 <section className="rounded-[24px] border border-slate-200 bg-white px-3 py-3 sm:px-5 sm:py-5 shadow-sm">
                   <div className="flex flex-wrap gap-2">
@@ -4309,7 +4314,6 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                   <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400 animate-ping opacity-75" />
                   <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400" />
                 </div>
-                <h4 className="text-base font-semibold text-slate-800">아직 경기 대진표가 생성되지 않았습니다!</h4>
                 <p className="mt-2 max-w-sm text-sm text-slate-500 leading-relaxed">
                   대진표가 구성되면 이곳에서 경기 대진과 코트 배정, 실시간 스코어 및 경기 결과를 한눈에 확인하실 수 있습니다. 잠시만 기다려주세요!
                 </p>

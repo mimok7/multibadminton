@@ -365,6 +365,11 @@ function PlayersPage() {
   };
 
   const handleManualAssign = () => {
+    if (matches.length > 0) {
+      // 자동 생성된 배정 결과를 유지한 채 수동 편집만 활성화합니다.
+      setIsManualMode(true);
+      return;
+    }
     const presentPlayers = (todayPlayers || []).filter((player) => player.status === 'present');
     if (presentPlayers.length < 4) {
       alert('수동 배정을 하려면 출석 선수가 최소 4명 필요합니다.');

@@ -158,18 +158,23 @@ export default function ScoreboardPage() {
       setSaving(true);
 
       try {
-        await fetch(`/api/scoreboard/${matchId}`, {
+        const response = await fetch(`/api/scoreboard/${matchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ score_team1: s1, score_team2: s2 }),
         });
-      } catch {
-        // silent fail - will retry on next score change
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || '점수를 저장하지 못했습니다.');
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : '점수를 저장하지 못했습니다.');
+        void fetchMatch();
       } finally {
         setSaving(false);
       }
     },
-    [matchId, canEdit]
+    [matchId, canEdit, fetchMatch]
   );
 
   const debouncedSave = useCallback(

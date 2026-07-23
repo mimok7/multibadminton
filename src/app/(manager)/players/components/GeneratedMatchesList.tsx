@@ -101,9 +101,13 @@ export default function GeneratedMatchesList({
     ? Math.max(...matchScoreDiffs.map((item) => item.diff))
     : 0;
 
-  const averageScoreDiff = matchScoreDiffs.length > 0
-    ? matchScoreDiffs.reduce((sum, item) => sum + item.diff, 0) / matchScoreDiffs.length
-    : 0;
+  const scoreDiffCounts = matchScoreDiffs.reduce<Record<number, number>>((counts, item) => {
+    counts[item.diff] = (counts[item.diff] || 0) + 1;
+    return counts;
+  }, {});
+  const scoreDiffSummary = Object.entries(scoreDiffCounts)
+    .map(([diff, count]) => ({ diff: Number(diff), count }))
+    .sort((left, right) => left.diff - right.diff);
   const playerCountEntries = Object.entries(playerGameCounts);
   const averageGameCount = playerCountEntries.length > 0
     ? Object.values(playerGameCounts).reduce((sum, count) => sum + count, 0) / playerCountEntries.length
@@ -153,10 +157,7 @@ export default function GeneratedMatchesList({
       </h3>
       <div className="mb-4 flex flex-wrap gap-2 text-sm">
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-blue-800">
-          평균 차이: <span className="font-bold">{averageScoreDiff.toFixed(0)}점</span>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-          최대 차이: <span className="font-bold">{maxScoreDiff.toFixed(0)}점</span>
+          점수차이: <span className="font-bold">{scoreDiffSummary.map(({ diff, count }) => `${diff}점: ${count}`).join(', ')}</span>
         </div>
       </div>
       
