@@ -5,6 +5,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { fetchLevelInfoMap, type LevelInfoMap } from '@/lib/level-info';
 
 let cachedLevelInfoMap: LevelInfoMap | null = null;
+let pendingLevelInfoMap: Promise<LevelInfoMap> | null = null;
 
 export function useLevelInfoMap() {
   const supabase = useMemo(() => getSupabaseClient(), []);
@@ -20,7 +21,12 @@ export function useLevelInfoMap() {
       }
 
       try {
-        const nextMap = await fetchLevelInfoMap(supabase);
+        if (!pendingLevelInfoMap) {
+          pendingLevelInfoMap = fetchLevelInfoMap(supabase).finally(() => {
+            pendingLevelInfoMap = null;
+          });
+        }
+        const nextMap = await pendingLevelInfoMap;
         cachedLevelInfoMap = nextMap;
 
         if (active) {

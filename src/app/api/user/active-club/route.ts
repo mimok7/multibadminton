@@ -1,56 +1,64 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient, getUnfilteredSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 import { isAdminRole } from '@/lib/auth';
 
 export async function GET() {
+  const startedAt = performance.now();
+  const responseOptions = () => ({
+    headers: {
+      'Cache-Control': 'private, no-store',
+      'Server-Timing': `app;dur=${(performance.now() - startedAt).toFixed(1)}`,
+    },
+  });
+
   try {
-    const supabase = await getSupabaseServerClient();
+    const supabase = await getUnfilteredSupabaseServerClient();
     
     // 유저 인증 확인
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ club: null });
+      return NextResponse.json({ club: null }, responseOptions());
     }
 
     const adminSupabase = getUnfilteredGlobalAdminClient();
-    
-    // profiles 테이블에서 user_id 또는 id가 user.id인 profile 조회
-    const { data: profile } = await adminSupabase
-      .from('profiles')
-      .select('id, role')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .limit(1)
-      .maybeSingle();
+    const [{ data: profile }, initialClubId] = await Promise.all([
+      adminSupabase
+        .from('profiles')
+        .select('id, role')
+        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+        .limit(1)
+        .maybeSingle(),
+      getActiveClubId(),
+    ]);
 
     if (!profile) {
-      return NextResponse.json({ club: null, clubRole: null, member: null });
+      return NextResponse.json({ club: null, clubRole: null, member: null }, responseOptions());
     }
 
     const profileId = profile.id;
-    let clubId = await getActiveClubId();
+    let clubId = initialClubId;
     let isClubValid = false;
     let memberData = null;
     let clubData = null;
 
     if (clubId) {
-      // 1. Check if the club exists
-      const { data: club } = await adminSupabase
-        .from('clubs')
-        .select('id, name, code')
-        .eq('id', clubId)
-        .single();
-      
-      if (club) {
-        clubData = club;
-        // 2. Check if the user is a member of this club
-        const { data: member } = await adminSupabase
+      const [{ data: club }, { data: member }] = await Promise.all([
+        adminSupabase
+          .from('clubs')
+          .select('id, name, code')
+          .eq('id', clubId)
+          .maybeSingle(),
+        adminSupabase
           .from('club_members')
           .select('role, coin_balance, coin_wins, coin_losses, status')
           .eq('club_id', clubId)
           .eq('user_id', profileId)
-          .single();
+          .maybeSingle(),
+      ]);
 
+      if (club) {
+        clubData = club;
         if (member && member.status === 'active') {
           isClubValid = true;
           memberData = member;
@@ -99,7 +107,7 @@ export async function GET() {
         }
       } else {
         // No active clubs found for this user at all
-        return NextResponse.json({ club: null, clubRole: null, member: null });
+        return NextResponse.json({ club: null, clubRole: null, member: null }, responseOptions());
       }
     }
 
@@ -107,10 +115,13 @@ export async function GET() {
       club: clubData, 
       clubRole: (memberData as any)?.role || null,
       member: memberData || null
-    });
+    }, responseOptions());
 
   } catch (error) {
     console.error('Error fetching active club:', error);
-    return NextResponse.json({ club: null, clubRole: null, member: null }, { status: 500 });
+    return NextResponse.json(
+      { club: null, clubRole: null, member: null },
+      { status: 500, ...responseOptions() }
+    );
   }
 }

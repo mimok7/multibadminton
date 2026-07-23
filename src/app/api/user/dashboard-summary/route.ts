@@ -28,18 +28,21 @@ export async function GET() {
     }
 
     const admin = getUnfilteredGlobalAdminClient();
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('id, role')
-      .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-      .limit(1)
-      .maybeSingle();
+    const [{ data: profile }, initialClubId] = await Promise.all([
+      admin
+        .from('profiles')
+        .select('id, role')
+        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+        .limit(1)
+        .maybeSingle(),
+      getActiveClubId(),
+    ]);
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    let clubId = await getActiveClubId();
+    let clubId = initialClubId;
     let club: { id: string; name: string } | null = null;
     let member: { role: string; coin_balance: number; coin_wins: number; coin_losses: number } | null = null;
 
@@ -126,6 +129,7 @@ export async function GET() {
         .select('id, user_id, status, registered_at, match_schedule_id')
         .in('match_schedule_id', scheduleIds)
         .or(`user_id.eq.${profile.id},user_id.eq.${user.id}`)
+        .in('status', ['registered', 'waitlisted', 'attended'])
       : { data: [], error: null };
     if (registrationsError) throw registrationsError;
 

@@ -16,21 +16,13 @@ export async function GET() {
 
   const { adminSupabase } = context;
 
-  // 상품 데이터 조회
-  const { data: products, error: productsError } = await adminSupabase
+  const productsPromise = adminSupabase
     .from('products')
     .select('id, name, coin_price, description, image_svg, is_active, created_at, updated_at')
     .order('created_at', { ascending: false });
 
-  if (productsError) {
-    return NextResponse.json({ error: productsError.message }, { status: 500 });
-  }
-
-  let purchases: any[] = [];
-  let purchasesError = null;
-
   // Try retrieving with status column
-  const firstTry = await adminSupabase
+  const purchasesPromise = adminSupabase
     .from('product_purchases')
     .select(`
       id,
@@ -44,6 +36,18 @@ export async function GET() {
     `)
     .order('created_at', { ascending: false })
     .limit(100);
+
+  const [{ data: products, error: productsError }, firstTry] = await Promise.all([
+    productsPromise,
+    purchasesPromise,
+  ]);
+
+  if (productsError) {
+    return NextResponse.json({ error: productsError.message }, { status: 500 });
+  }
+
+  let purchases: any[] = [];
+  let purchasesError = null;
 
   if (firstTry.error) {
     const errMsg = firstTry.error.message || '';

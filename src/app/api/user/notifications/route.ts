@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getClubScopedAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function GET(request: Request) {
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ notifications: [] });
     }
 
-    const adminSupabase = await getFilteredAdminClient() as any;
+    const adminSupabase = await getClubScopedAdminClient(clubId) as any;
     if (isSummaryRequest) {
       const { count, error } = await adminSupabase
         .from('notifications')
@@ -119,7 +119,7 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { ids, markAll } = body;
 
-    const adminSupabase = await getFilteredAdminClient() as any;
+    const adminSupabase = await getClubScopedAdminClient(clubId) as any;
 
     let query = adminSupabase
       .from('notifications')

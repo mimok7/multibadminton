@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getActiveClubId } from '@/lib/club';
 import { getKoreaDate } from '@/lib/date';
 import { inferScheduleSource } from '@/lib/match-schedule-source';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import { getClubScopedAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 
 const scheduleSelect =
   'id, generated_match_id, schedule_source, match_date, start_time, end_time, location, max_participants, status, description, current_participants';
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ schedules: [], clubId: null });
     }
 
-    const adminSupabase = await getFilteredAdminClient();
+    const adminSupabase = await getClubScopedAdminClient(clubId);
     const today = getKoreaDate();
     const requestedDate = new URL(request.url).searchParams.get('date');
 

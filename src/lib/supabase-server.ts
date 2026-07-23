@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/supabase';
 import { CLUB_SCOPED_TABLES, normalizeClubId } from '@/lib/club-scope';
-import { isSuperadminProfile } from '@/lib/auth';
+import { isSuperadminProfile, type AppProfile } from '@/lib/auth';
 
 type ServerSupabaseClient = ReturnType<typeof createServerClient<Database>>;
 type AdminSupabaseClient = ReturnType<typeof createClient<Database>>;
@@ -131,17 +131,36 @@ export function getUnfilteredGlobalAdminClient(): AdminSupabaseClient {
   return globalAdminClient;
 }
 
-export async function getFilteredAdminClient(): Promise<AdminSupabaseClient> {
-  const cookieStore = await cookies();
-  const activeClubId = normalizeClubId(cookieStore.get('active_club_id')?.value);
+export async function getClubScopedAdminClient(
+  activeClubId?: string | null
+): Promise<AdminSupabaseClient> {
+  const resolvedClubId = activeClubId === undefined
+    ? normalizeClubId((await cookies()).get('active_club_id')?.value)
+    : normalizeClubId(activeClubId);
+
+  return withClubFilter(createAdminClient(), resolvedClubId) as AdminSupabaseClient;
+}
+
+export async function getFilteredAdminClient(options?: {
+  activeClubId?: string | null;
+  profile?: Pick<AppProfile, 'role' | 'username'> | null;
+}): Promise<AdminSupabaseClient> {
+  const activeClubId = options?.activeClubId === undefined
+    ? normalizeClubId((await cookies()).get('active_club_id')?.value)
+    : normalizeClubId(options.activeClubId);
 
   // 슈퍼관리자는 특정 클럽의 필터를 적용하지 않고 전체 클럽을 관리한다.
   // 권한은 세션 사용자와 profiles의 시스템 역할을 함께 확인한다.
-  const sessionClient = await getUnfilteredSupabaseServerClient();
-  const { data: { user } } = await sessionClient.auth.getUser();
-  if (user) {
-    const globalAdmin = getUnfilteredGlobalAdminClient();
-    const { data: profileByUserId } = await globalAdmin
+  if (options?.profile && isSuperadminProfile(options.profile)) {
+    return createAdminClient();
+  }
+
+  if (options?.profile === undefined) {
+    const sessionClient = await getUnfilteredSupabaseServerClient();
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (user) {
+      const globalAdmin = getUnfilteredGlobalAdminClient();
+      const { data: profileByUserId } = await globalAdmin
       .from('profiles')
       .select('role, username')
       .eq('user_id', user.id)
@@ -154,8 +173,9 @@ export async function getFilteredAdminClient(): Promise<AdminSupabaseClient> {
       .limit(1)
       .maybeSingle()).data;
 
-    if (isSuperadminProfile(profile)) {
-      return createAdminClient();
+      if (isSuperadminProfile(profile)) {
+        return createAdminClient();
+      }
     }
   }
 

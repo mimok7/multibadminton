@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+  getClubScopedAdminClient,
+  getUnfilteredSupabaseServerClient,
+} from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 import { getKoreaDate } from '@/lib/date';
 import type { ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getLevelNameFromCode, type LevelInfoMap } from '@/lib/level-info';
@@ -57,8 +61,10 @@ function parseGeneratedDescriptionOrder(description?: string | null) {
 
 export async function GET(request: Request) {
   try {
-    const serverSupabase = await getSupabaseServerClient();
-    const adminSupabase = await getFilteredAdminClient();
+    const [serverSupabase, activeClubId] = await Promise.all([
+      getUnfilteredSupabaseServerClient(),
+      getActiveClubId(),
+    ]);
 
     const {
       data: { user },
@@ -73,19 +79,15 @@ export async function GET(request: Request) {
     const date = requestUrl.searchParams.get('date') || getKoreaDate();
     const userId = requestUrl.searchParams.get('userId') || '';
 
-    // 쿠키에서 active_club_id 추출
-    const cookieHeader = request.headers.get('cookie') || '';
-    const activeClubIdMatch = cookieHeader.match(/(?:^|;\s*)active_club_id=([^;]*)/);
-    const decodedClubId = activeClubIdMatch ? decodeURIComponent(activeClubIdMatch[1]).replace(/"/g, '') : null;
-
-    if (!decodedClubId) {
+    if (!activeClubId) {
       return NextResponse.json({ matches: [] });
     }
+    const adminSupabase = await getClubScopedAdminClient(activeClubId);
 
     const { data: schedules, error: schedulesError } = await adminSupabase
       .from('match_schedules')
       .select('id, generated_match_id, match_date, scheduled_date, scheduled_time, start_time, court_number, location, description, status, match_result')
-      .eq('club_id', decodedClubId)
+      .eq('club_id', activeClubId)
       .or(`match_date.eq.${date},scheduled_date.eq.${date}`)
       .order('scheduled_time', { ascending: true })
       .order('court_number', { ascending: true })
@@ -114,10 +116,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ matches: [] satisfies ScheduledMatchView[] });
     }
 
-    const { data: generatedMatches, error: generatedMatchesError } = await adminSupabase
-      .from('generated_matches')
-      .select('id, match_number, team1_player1_id, team1_player2_id, team2_player1_id, team2_player2_id')
-      .in('id', generatedMatchIds);
+    const [generatedMatchesResult, levelResult, courtsResult] = await Promise.all([
+      adminSupabase
+        .from('generated_matches')
+        .select('id, match_number, team1_player1_id, team1_player2_id, team2_player1_id, team2_player2_id')
+        .in('id', generatedMatchIds),
+      adminSupabase
+        .from('level_info')
+        .select('code, name, score'),
+      adminSupabase
+        .from('courts')
+        .select('name, location, order_index')
+        .eq('is_active', true)
+        .order('order_index', { ascending: true, nullsFirst: true })
+        .order('name', { ascending: true }),
+    ]);
+    const { data: generatedMatches, error: generatedMatchesError } = generatedMatchesResult;
 
     if (generatedMatchesError) {
       console.error('Scheduled matches generated matches error:', generatedMatchesError);
@@ -150,24 +164,12 @@ export async function GET(request: Request) {
 
     const targetPlayerIds = Array.from(playerIds);
 
-    // Run profiles, level_info, and courts queries in parallel
-    const [profilesResult, levelResult, courtsResult] = await Promise.all([
-      targetPlayerIds.length > 0
-        ? adminSupabase
-            .from('profiles')
-            .select('id, user_id, username, full_name, skill_level, gender, coin_balance')
-            .in('id', targetPlayerIds)
-        : Promise.resolve({ data: [] as ProfileRow[], error: null }),
-      adminSupabase
-        .from('level_info')
-        .select('code, name, score'),
-      adminSupabase
-        .from('courts')
-        .select('name, location, order_index')
-        .eq('is_active', true)
-        .order('order_index', { ascending: true, nullsFirst: true })
-        .order('name', { ascending: true }),
-    ]);
+    const profilesResult = targetPlayerIds.length > 0
+      ? await adminSupabase
+        .from('profiles')
+        .select('id, user_id, username, full_name, skill_level, gender, coin_balance')
+        .in('id', targetPlayerIds)
+      : { data: [] as ProfileRow[], error: null };
 
     if (profilesResult.error) {
       console.error('Scheduled matches profiles error:', profilesResult.error);

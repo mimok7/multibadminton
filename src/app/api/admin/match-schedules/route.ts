@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 import {
-  getFilteredAdminClient,
-  getUnfilteredSupabaseServerClient,
   getUnfilteredGlobalAdminClient,
 } from '@/lib/supabase-server';
-import { isSuperadminProfile, isUserAdmin } from '@/lib/auth';
-import { getClubRole } from '@/lib/club-auth';
-import { getActiveClubId } from '@/lib/club';
+import { getClubManagerContext } from '@/lib/manager-access';
 import { getKoreaDate } from '@/lib/date';
 import {
   decorateDescriptionForScheduleSource,
@@ -24,41 +20,17 @@ type ParticipantProfile = {
 };
 
 async function requireScheduleManager() {
-  const supabase = await getUnfilteredSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  const context = await getClubManagerContext({ allowSystemManager: true });
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: context.error }, { status }) };
   }
 
-  const globalAdmin = getUnfilteredGlobalAdminClient();
-  const { data: profile } = await globalAdmin
-    .from('profiles')
-    .select('role, username')
-    .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-    .limit(1)
-    .maybeSingle();
-  const isSuperadmin = isSuperadminProfile(profile as any);
-  const adminSupabase = isSuperadmin
-    ? globalAdmin
-    : await getFilteredAdminClient();
-
-  const isGlobalManager = await isUserAdmin(supabase, user);
-  const activeClubId = await getActiveClubId();
-  const clubRole = activeClubId
-    ? await getClubRole(getUnfilteredGlobalAdminClient(), user.id, activeClubId)
-    : null;
-  const canManageSchedules = isSuperadmin || isGlobalManager || ['owner', 'admin', 'manager'].includes(clubRole || '');
-
-  if (!canManageSchedules) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { supabase, adminSupabase, user, activeClubId };
+  return {
+    adminSupabase: context.adminSupabase,
+    user: context.user,
+    activeClubId: context.clubId,
+  };
 }
 
 export async function GET(request: Request) {
@@ -144,13 +116,10 @@ export async function GET(request: Request) {
     const buildSchedulesQuery = (includeScheduleSourceFilter: boolean) => {
       let query = adminSupabase
         .from('match_schedules')
-        .select('*')
+        .select('id, club_id, generated_match_id, schedule_source, match_date, scheduled_date, scheduled_time, start_time, end_time, court_number, location, max_participants, current_participants, status, description, created_at, created_by')
         .order('match_date', { ascending: true })
-        .order('start_time', { ascending: true });
-
-      const cookieHeader = request.headers.get('cookie') || '';
-      const activeClubIdMatch = cookieHeader.match(/(?:^|;\s*)active_club_id=([^;]*)/);
-      const activeClubId = activeClubIdMatch ? decodeURIComponent(activeClubIdMatch[1]) : null;
+        .order('start_time', { ascending: true })
+        .limit(500);
 
       if (activeClubId) {
         query = query.eq('club_id', activeClubId);

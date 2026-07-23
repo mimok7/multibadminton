@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { setActiveClubAction } from '@/app/actions/club';
+import { invalidateClubCache } from '@/hooks/useClub';
 
 type Club = {
   club_id: string;
@@ -39,6 +40,7 @@ export default function ClubSelectorClient({
         setLoading(null);
         return;
       }
+      invalidateClubCache();
       router.push(redirectTo);
     } catch (error) {
       console.error('Failed to set club:', error);

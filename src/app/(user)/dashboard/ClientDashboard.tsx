@@ -146,8 +146,6 @@ export default function ClientDashboard({
     const loadDashboardData = async () => {
       try {
         setLoadingAttendance(true);
-        const today = getKoreaDate();
-
         const response = await fetch('/api/user/dashboard-summary', { cache: 'no-store' });
         const payload = response.ok ? await response.json().catch(() => null) : null;
         if (cancelled) return;
@@ -181,52 +179,22 @@ export default function ClientDashboard({
     if (!userId) return;
     try {
       setLoadingAttendance(true);
-      const today = getKoreaDate();
-
-      // 1. 출석 상태
-      const response = await fetch(`/api/attendance/status?date=${today}`);
-      const payload = await response.json().catch(() => null);
-      setMyAttendanceStatus(response.ok ? normalizeAttendanceStatus(payload?.status) : null);
-
-      // 2. 오늘 일정: 활성 클럽 기준으로 서버에서 조회
-      const schedulesResponse = await fetch(`/api/user/match-schedules?date=${today}`, {
-        cache: 'no-store',
-      });
-      const schedulesPayload = schedulesResponse.ok
-        ? await schedulesResponse.json().catch(() => null)
-        : null;
-      const schedulesList = Array.isArray(schedulesPayload?.schedules)
-        ? schedulesPayload.schedules
-        : [];
-      setTodaySchedules(schedulesList);
-
-      // 3. 참가 신청
-      const userProfileId = profile?.id || userId;
-      if (schedulesList.length > 0 && userProfileId) {
-        const params = new URLSearchParams();
-        schedulesList.forEach((item: any) => params.append('scheduleId', item.id));
-        const participantsResponse = await fetch(`/api/user/match-participants?${params.toString()}`, {
-          cache: 'no-store',
-        });
-        const participantsPayload = participantsResponse.ok
-          ? await participantsResponse.json().catch(() => null)
-          : null;
-        const participantKeys = [userId, profile?.id].filter(Boolean);
-        const participations = (participantsPayload?.participants || []).filter(
-          (item: any) => participantKeys.includes(item.user_id) && ['registered', 'waitlisted', 'attended'].includes(item.status)
-        );
-
-        if (participations.length > 0) {
-          setIsRegisteredToday(true);
-          setTodayRegistration(participations[0]);
-        } else {
-          setIsRegisteredToday(false);
-          setTodayRegistration(null);
-        }
-      } else {
-        setIsRegisteredToday(false);
-        setTodayRegistration(null);
+      const response = await fetch('/api/user/dashboard-summary', { cache: 'no-store' });
+      const payload = response.ok ? await response.json().catch(() => null) : null;
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error || '대시보드 상태를 불러오지 못했습니다.');
       }
+
+      const schedulesList = Array.isArray(payload.schedules) ? payload.schedules : [];
+      const registration = payload.registration ?? null;
+      setActiveClub(payload.club ?? null);
+      setClubMemberInfo(payload.member ?? null);
+      setIsCoinEnabled(payload.isCoinEnabled !== false);
+      setIsClubManager(['owner', 'admin', 'manager'].includes(payload.member?.role));
+      setMyAttendanceStatus(normalizeAttendanceStatus(payload.attendanceStatus));
+      setTodaySchedules(schedulesList);
+      setIsRegisteredToday(Boolean(registration));
+      setTodayRegistration(registration);
     } catch (error) {
       console.error('대시보드 상태 조회 오류:', error);
     } finally {

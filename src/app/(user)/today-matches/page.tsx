@@ -9,6 +9,7 @@ import { formatNameWithCoins } from '@/lib/player-display';
 import { fetchScheduledMatchesForDate, type ScheduledMatchView } from '@/lib/scheduled-matches';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getFriendlyErrorMessage } from '@/lib/utils';
+import { useClub } from '@/hooks/useClub';
 
 function getMatchStatusMeta(status?: string | null) {
   if (status === 'completed') {
@@ -68,12 +69,14 @@ function getDisplayMatchLabel(match: ScheduledMatchView, fallbackOrder: number) 
 
 export default function TodayMatches() {
   const { user, profile, loading: userLoading, isAdmin } = useUser();
+  const { clubRole } = useClub();
   const [matches, setMatches] = useState<ScheduledMatchView[]>([]);
   const [loading, setLoading] = useState(true);
   const [startSaving, setStartSaving] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [canManageActiveClub, setCanManageActiveClub] = useState(false);
+  const canManageActiveClub = ['owner', 'admin', 'manager', '관리자', '매니저', '운영자']
+    .includes(String(clubRole || '').trim().toLowerCase());
   const [activeTab, setActiveTab] = useState<'schedule' | 'ranking'>('schedule');
   const [watchModalUrl, setWatchModalUrl] = useState<string | null>(null);
   const router = useRouter();
@@ -122,31 +125,6 @@ export default function TodayMatches() {
 
     fetchTodayMatches();
   }, [userLoading, user?.id, supabase]);
-
-  useEffect(() => {
-    if (userLoading || !user) {
-      setCanManageActiveClub(false);
-      return;
-    }
-
-    let cancelled = false;
-    const loadClubRole = async () => {
-      try {
-        const response = await fetch('/api/user/active-club', { credentials: 'include' });
-        const payload = await response.json().catch(() => null);
-        const clubRole = String(payload?.clubRole || '').trim().toLowerCase();
-        const canManage = ['owner', 'admin', 'manager', '관리자', '매니저', '운영자'].includes(clubRole);
-        if (!cancelled) setCanManageActiveClub(canManage);
-      } catch {
-        if (!cancelled) setCanManageActiveClub(false);
-      }
-    };
-
-    void loadClubRole();
-    return () => {
-      cancelled = true;
-    };
-  }, [userLoading, user?.id]);
 
   const rankings = useMemo(() => {
     interface PlayerStats {

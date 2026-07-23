@@ -112,104 +112,82 @@ export default function ProfilePage() {
 
   const loadRatingData = async (currentUserId: string, targetClubId: string | null) => {
     setLoadingData(true);
-    let resolvedMembers: any[] = [];
-    
     try {
-      const myProf = await getProfileByUserId(supabase, currentUserId);
-      if (myProf) {
-        setMyLatestProfile(myProf);
-      }
-    } catch (err) {
-      console.error('Error loading latest profile:', err);
-    }
+      const membersPromise = targetClubId
+        ? fetch('/api/user/club-members').then(async (response) => {
+          if (!response.ok) throw new Error(await response.text());
+          const payload = await response.json();
+          return payload.members || [];
+        })
+        : Promise.resolve([]);
 
-    try {
-      let profilesData: any[] = [];
-      if (targetClubId) {
-        const res = await fetch('/api/user/club-members');
-        if (res.ok) {
-          const json = await res.json();
-          profilesData = json.members || [];
-        } else {
-          console.error('Error fetching club members API:', await res.text());
-        }
-      } else {
-        profilesData = [];
+      let settingsQuery = (supabase as any)
+        .from('member_rating_settings')
+        .select('start_date, end_date');
+      settingsQuery = targetClubId
+        ? settingsQuery.eq('club_id', targetClubId)
+        : settingsQuery.eq('id', 1);
+
+      let votesQuery = (supabase as any)
+        .from('member_level_votes')
+        .select('voter_id, subject_id, skill_level')
+        .eq('voter_id', currentUserId);
+      if (targetClubId) votesQuery = votesQuery.eq('club_id', targetClubId);
+
+      const [profileResult, membersResult, levelsResult, settingsResult, votesResult] =
+        await Promise.allSettled([
+          getProfileByUserId(supabase, currentUserId),
+          membersPromise,
+          supabase
+            .from('level_info')
+            .select('code, name, score, description')
+            .order('score', { ascending: false, nullsFirst: false }),
+          settingsQuery.maybeSingle(),
+          votesQuery,
+        ]);
+
+      if (profileResult.status === 'fulfilled' && profileResult.value) {
+        setMyLatestProfile(profileResult.value);
+      }
+
+      const profilesData = membersResult.status === 'fulfilled' ? membersResult.value : [];
+      if (membersResult.status === 'rejected') {
+        console.error('Error loading members:', membersResult.reason);
       }
       const collator = new Intl.Collator('ko');
-      resolvedMembers = (profilesData || []).slice().sort((a: any, b: any) => {
+      const resolvedMembers = (profilesData || []).slice().sort((a: any, b: any) => {
         const aName = a.full_name || a.username || a.email || '';
         const bName = b.full_name || b.username || b.email || '';
         return collator.compare(aName, bName);
       });
       setMembers(resolvedMembers);
+
+      if (levelsResult.status === 'fulfilled' && levelsResult.value.data) {
+        setAllLevels(levelsResult.value.data);
+      }
+
+      const settingsResponse = settingsResult.status === 'fulfilled' ? settingsResult.value : null;
+      if (settingsResponse?.error) {
+        console.warn('API Error loading rating settings (Fallback applied):', settingsResponse.error.message);
+      }
+      setRatingSettings(settingsResponse?.data || { start_date: null, end_date: null });
+
+      const votesData = votesResult.status === 'fulfilled' ? votesResult.value.data || [] : [];
+      const userVotesMap: Record<string, string> = {};
+      votesData.forEach((vote: any) => {
+        if (vote.voter_id === currentUserId) {
+          userVotesMap[vote.subject_id] = vote.skill_level;
+        }
+      });
+      setMyVotes(userVotesMap);
+      setDraftVotes(Object.fromEntries(
+        resolvedMembers.map((member: any) => [
+          member.id,
+          userVotesMap[member.id] || member.skill_level || '',
+        ])
+      ));
     } catch (err) {
-      console.error('Error loading members:', err);
-    }
-
-    try {
-      const { data: levelsData } = await supabase
-        .from('level_info')
-        .select('code, name, score, description')
-        .order('score', { ascending: false, nullsFirst: false });
-      if (levelsData) {
-        setAllLevels(levelsData);
-      }
-    } catch (err) {
-      console.error('Error loading level info:', err);
-    }
-
-    try {
-      let settingsQuery = (supabase as any)
-        .from('member_rating_settings')
-        .select('start_date, end_date');
-      if (targetClubId) {
-        settingsQuery = settingsQuery.eq('club_id', targetClubId);
-      } else {
-        settingsQuery = settingsQuery.eq('id', 1);
-      }
-      
-      const { data: settingsData, error: settingsError } = await settingsQuery.maybeSingle();
-      
-      if (settingsError) {
-        console.warn('API Error loading rating settings (Fallback applied):', settingsError.message);
-        setRatingSettings({ start_date: null, end_date: null });
-      } else if (settingsData) {
-        setRatingSettings(settingsData);
-      } else {
-        setRatingSettings({ start_date: null, end_date: null });
-      }
-    } catch (err) {
-      console.error('Unhandled exception loading rating settings:', err);
-      setRatingSettings({ start_date: null, end_date: null });
-    }
-
-    try {
-      let votesQuery = (supabase as any)
-        .from('member_level_votes')
-        .select('voter_id, subject_id, skill_level');
-      if (targetClubId) {
-        votesQuery = votesQuery.eq('club_id', targetClubId);
-      }
-      const { data: votesData } = await votesQuery;
-
-      if (votesData) {
-        const userVotesMap: Record<string, string> = {};
-        votesData.forEach((vote: any) => {
-          if (vote.voter_id === currentUserId) {
-            userVotesMap[vote.subject_id] = vote.skill_level;
-          }
-        });
-        setMyVotes(userVotesMap);
-
-        const initialDrafts: Record<string, string> = {};
-        resolvedMembers.forEach((m: any) => {
-          initialDrafts[m.id] = userVotesMap[m.id] || m.skill_level || '';
-        });
-        setDraftVotes(initialDrafts);
-      }
-    } catch (err) {
-      console.error('Error loading rating votes:', err);
+      console.error('Error loading rating data:', err);
     } finally {
       setLoadingData(false);
     }

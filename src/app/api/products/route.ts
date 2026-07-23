@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getClubScopedAdminClient } from '@/lib/supabase-server';
+import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
   const serverSupabase = await getSupabaseServerClient();
@@ -12,7 +13,12 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const adminSupabase = await getFilteredAdminClient() as any;
+  const clubId = await getActiveClubId();
+  if (!clubId) {
+    return NextResponse.json({ products: [] });
+  }
+
+  const adminSupabase = await getClubScopedAdminClient(clubId) as any;
   const { data: products, error } = await adminSupabase
     .from('products')
     .select('id, name, coin_price, description, image_svg, is_active, created_at, updated_at')

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { getProfileByUserId } from '@/lib/auth';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+  getClubScopedAdminClient,
+  getUnfilteredGlobalAdminClient,
+  getUnfilteredSupabaseServerClient,
+} from '@/lib/supabase-server';
 import { readCoinSettings } from '@/lib/coin-settings';
 import { getActiveClubId } from '@/lib/club';
 
@@ -20,9 +24,9 @@ function isAttendanceStatus(value: unknown): value is AttendanceStatus {
 }
 
 async function resolveProfileId() {
-  const [serverSupabase, adminSupabase] = await Promise.all([
-    getSupabaseServerClient(),
-    Promise.resolve(await getFilteredAdminClient()),
+  const [serverSupabase, clubId] = await Promise.all([
+    getUnfilteredSupabaseServerClient(),
+    getActiveClubId(),
   ]);
 
   const {
@@ -34,7 +38,7 @@ async function resolveProfileId() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const profile = await getProfileByUserId(adminSupabase, user.id);
+  const profile = await getProfileByUserId(getUnfilteredGlobalAdminClient(), user.id);
 
   if (!profile?.id) {
     return { error: NextResponse.json({ error: 'Profile not found' }, { status: 404 }) };
@@ -44,7 +48,9 @@ async function resolveProfileId() {
     user,
     profileId: profile.id,
     authUserId: user.id,
-    adminSupabase,
+    isGuest: profile.is_guest === true,
+    clubId,
+    adminSupabase: clubId ? await getClubScopedAdminClient(clubId) : null,
   };
 }
 
@@ -58,12 +64,12 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const attendedAt = searchParams.get('date') || getTodayLocal();
-    const clubId = await getActiveClubId();
-    if (!clubId) {
+    const { clubId, adminSupabase } = resolved;
+    if (!clubId || !adminSupabase) {
       return NextResponse.json({ status: null, attendedAt });
     }
 
-    const query = resolved.adminSupabase
+    const query = adminSupabase
       .from('attendances')
       .select('status')
       .eq('user_id', resolved.profileId)
@@ -91,8 +97,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     const status = body?.status;
     const attendedAt = typeof body?.attendedAt === 'string' && body.attendedAt ? body.attendedAt : getTodayLocal();
-    const clubId = await getActiveClubId();
-    if (!clubId) {
+    const { clubId, adminSupabase } = resolved;
+    if (!clubId || !adminSupabase) {
       return NextResponse.json({ error: 'Club not selected' }, { status: 400 });
     }
 
@@ -101,7 +107,7 @@ export async function POST(request: Request) {
     }
 
     // 1. 기존 출석 상태 조회
-    const lookupQuery = resolved.adminSupabase
+    const lookupQuery = adminSupabase
       .from('attendances')
       .select('status')
       .eq('user_id', resolved.profileId)
@@ -117,7 +123,7 @@ export async function POST(request: Request) {
     const prevStatus = prevAttendance?.status || null;
 
     // 2. 출석 상태 업데이트 (upsert)
-    const { error } = await resolved.adminSupabase
+    const { error } = await adminSupabase
       .from('attendances')
       .upsert(
         {
@@ -138,29 +144,23 @@ export async function POST(request: Request) {
     const isNowPresent = status === 'present' || status === 'lesson';
 
     if (wasPresent !== isNowPresent) {
-      const coinSettings = await readCoinSettings();
-      const reward = coinSettings.attendanceReward ?? 10;
-
-      if (coinSettings.isCoinEnabled && reward > 0) {
-        // profiles 에서 guest 여부 파악
-        const { data: profile } = await resolved.adminSupabase
-          .from('profiles')
-          .select('is_guest')
-          .eq('id', resolved.profileId)
-          .single();
-
-        if (profile && clubId) {
-          // club_members 에서 해당 클럽 코인 잔액 조회
-        const { data: memberInfo } = await resolved.adminSupabase
+      const [coinSettings, memberResult] = await Promise.all([
+        readCoinSettings(),
+        adminSupabase
           .from('club_members')
           .select('coin_balance')
           .eq('club_id', clubId)
           .eq('user_id', resolved.profileId)
-          .single();
+          .maybeSingle(),
+      ]);
+      const reward = coinSettings.attendanceReward ?? 10;
 
+      if (coinSettings.isCoinEnabled && reward > 0) {
+        const memberInfo = memberResult.data;
+        if (memberInfo) {
           const currentBalance = memberInfo?.coin_balance ?? 0;
           let nextBalance = currentBalance;
-          const profileReward = profile.is_guest 
+          const profileReward = resolved.isGuest
             ? (coinSettings.guestAttendanceReward ?? 5) 
             : reward;
 
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
           }
 
           // club_members 테이블의 코인 잔액 업데이트
-          await resolved.adminSupabase
+          await adminSupabase
             .from('club_members')
             .update({
               coin_balance: nextBalance,

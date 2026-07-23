@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServerClient, getFilteredAdminClient } from '@/lib/supabase-server';
+import { getSupabaseServerClient, getClubScopedAdminClient } from '@/lib/supabase-server';
 import { getActiveClubId } from '@/lib/club';
 
 export async function GET() {
   try {
     const supabase = await getSupabaseServerClient();
-    const adminSupabase = await getFilteredAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -16,6 +15,7 @@ export async function GET() {
     if (!clubId) {
       return NextResponse.json({ members: [] });
     }
+    const adminSupabase = await getClubScopedAdminClient(clubId);
 
     // RLS 우회를 위해 adminSupabase 사용
     const { data: memberRows, error: memberError } = await adminSupabase

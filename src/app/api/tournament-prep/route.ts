@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
+import {
+  getClubScopedAdminClient,
+  getUnfilteredGlobalAdminClient,
+  getUnfilteredSupabaseServerClient,
+} from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 import { getActiveClubId } from '@/lib/club';
 
 async function resolveProfileId() {
-  const [serverSupabase, adminSupabase] = await Promise.all([
-    getSupabaseServerClient(),
-    Promise.resolve(await getFilteredAdminClient()),
+  const [serverSupabase, clubId] = await Promise.all([
+    getUnfilteredSupabaseServerClient(),
+    getActiveClubId(),
   ]);
 
   const {
@@ -18,10 +22,11 @@ async function resolveProfileId() {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const { data: profile, error: profileError } = await adminSupabase
+  const globalAdmin = getUnfilteredGlobalAdminClient();
+  const { data: profile, error: profileError } = await globalAdmin
     .from('profiles')
     .select('id, user_id')
-    .eq('user_id', user.id)
+    .or(`user_id.eq.${user.id},id.eq.${user.id}`)
     .limit(1)
     .maybeSingle();
 
@@ -33,7 +38,8 @@ async function resolveProfileId() {
     user,
     profileId: profile.id,
     authUserId: user.id,
-    adminSupabase,
+    clubId,
+    adminSupabase: clubId ? await getClubScopedAdminClient(clubId) : null,
   };
 }
 
@@ -42,19 +48,26 @@ export async function GET() {
     const resolved = await resolveProfileId();
     if ('error' in resolved) return resolved.error;
 
-    const clubId = await getActiveClubId();
-    if (!clubId) {
+    const { clubId, adminSupabase } = resolved;
+    if (!clubId || !adminSupabase) {
       return NextResponse.json({ isRegistered: false, partner: null, availablePartners: [] });
     }
 
     const today = getKoreaDate();
 
-    // 1. 오늘 출석부 조회 (status가 present, lesson인 사용자 수집)
-    const { data: attendancesData } = await resolved.adminSupabase
-      .from('attendances')
-      .select('user_id, status, partner_user_id')
-      .eq('attended_at', today)
-      .eq('club_id', clubId);
+    // 출석부와 오늘 일정은 서로 독립적이므로 동시에 조회합니다.
+    const [{ data: attendancesData }, { data: schedules }] = await Promise.all([
+      adminSupabase
+        .from('attendances')
+        .select('user_id, status, partner_user_id')
+        .eq('attended_at', today)
+        .eq('club_id', clubId),
+      adminSupabase
+        .from('match_schedules')
+        .select('id')
+        .eq('match_date', today)
+        .eq('club_id', clubId),
+    ]);
 
     const activeUserIds = new Set<string>();
     let myAttendance = null;
@@ -72,17 +85,10 @@ export async function GET() {
       }
     }
 
-    // 2. 오늘 경기 일정 및 참가자(registered) 조회
-    const { data: schedules } = await resolved.adminSupabase
-      .from('match_schedules')
-      .select('id')
-      .eq('match_date', today)
-      .eq('club_id', clubId);
-
     let matchParticipant = null;
     if (schedules && schedules.length > 0) {
       const scheduleIds = schedules.map(s => s.id);
-      const { data: participantsData } = await resolved.adminSupabase
+      const { data: participantsData } = await adminSupabase
         .from('match_participants')
         .select('user_id, status, partner_user_id')
         .in('match_schedule_id', scheduleIds);
@@ -101,16 +107,21 @@ export async function GET() {
       }
     }
 
+    const partnerId = matchParticipant?.partner_user_id || myAttendance?.partner_user_id || null;
+    if (partnerId) {
+      activeUserIds.add(partnerId);
+    }
+
     // 3. 오늘 출석/등록된 선수들의 프로필 조회 (현재 사용자 제외, 게스트 포함)
     let availablePartners: Array<{ id: string; name: string; skill_level: string; gender: string }> = [];
     if (activeUserIds.size > 0) {
       const idList = Array.from(activeUserIds);
       const [profilesById, profilesByUserId] = await Promise.all([
-        resolved.adminSupabase
+        adminSupabase
           .from('profiles')
           .select('id, username, full_name, skill_level, gender, is_guest, user_id')
           .in('id', idList),
-        resolved.adminSupabase
+        adminSupabase
           .from('profiles')
           .select('id, username, full_name, skill_level, gender, is_guest, user_id')
           .in('user_id', idList),
@@ -131,7 +142,6 @@ export async function GET() {
         .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     }
 
-    const partnerId = matchParticipant?.partner_user_id || myAttendance?.partner_user_id || null;
     const isRegistered =
       matchParticipant?.status === 'registered' ||
       myAttendance?.status === 'present' ||
@@ -140,24 +150,6 @@ export async function GET() {
     let partnerProfile = null;
     if (partnerId) {
       partnerProfile = availablePartners.find(p => p.id === partnerId) || null;
-      if (!partnerProfile) {
-        const { data: pData } = await resolved.adminSupabase
-          .from('profiles')
-          .select('id, username, full_name, skill_level, gender')
-          .eq('id', partnerId)
-          .maybeSingle();
-        if (pData) {
-          partnerProfile = {
-            id: pData.id,
-            name: pData.full_name || pData.username || '선수',
-            skill_level: pData.skill_level || 'E2',
-            gender: pData.gender || '',
-          };
-          if (!availablePartners.some(p => p.id === partnerProfile!.id)) {
-            availablePartners.push(partnerProfile);
-          }
-        }
-      }
     }
 
     return NextResponse.json({
@@ -176,8 +168,8 @@ export async function POST(request: Request) {
     const resolved = await resolveProfileId();
     if ('error' in resolved) return resolved.error;
 
-    const clubId = await getActiveClubId();
-    if (!clubId) {
+    const { clubId, adminSupabase } = resolved;
+    if (!clubId || !adminSupabase) {
       return NextResponse.json({ error: '선택된 클럽이 없습니다.' }, { status: 400 });
     }
 
@@ -190,67 +182,61 @@ export async function POST(request: Request) {
 
     const today = getKoreaDate();
 
-    // 1. 출석부 업데이트 (없거나 absent인 경우 present로 등록하면서 파트너 지정)
-    const { data: prevAttendance } = await resolved.adminSupabase
-      .from('attendances')
-      .select('status')
-      .eq('user_id', resolved.profileId)
-      .eq('attended_at', today)
-      .maybeSingle();
+    const [{ data: prevAttendance }, { data: schedules }] = await Promise.all([
+      adminSupabase
+        .from('attendances')
+        .select('status')
+        .eq('user_id', resolved.profileId)
+        .eq('attended_at', today)
+        .eq('club_id', clubId)
+        .maybeSingle(),
+      adminSupabase
+        .from('match_schedules')
+        .select('id, club_id')
+        .eq('match_date', today)
+        .eq('club_id', clubId),
+    ]);
 
     const newStatus = prevAttendance && prevAttendance.status !== 'absent' ? prevAttendance.status : 'present';
 
-    const { error: attendanceError } = await resolved.adminSupabase
-      .from('attendances')
-      .upsert(
-        {
-          user_id: resolved.profileId,
-          attended_at: today,
-          status: newStatus,
-          partner_user_id: partnerId,
-          club_id: clubId,
-        },
-        { onConflict: 'user_id,attended_at' }
-      );
+    const participantRows = (schedules || []).map((schedule) => ({
+      match_schedule_id: schedule.id,
+      user_id: resolved.profileId,
+      status: 'registered',
+      partner_user_id: partnerId,
+      club_id: schedule.club_id,
+    }));
+
+    const [attendanceResult, participantsResult] = await Promise.all([
+      adminSupabase
+        .from('attendances')
+        .upsert(
+          {
+            user_id: resolved.profileId,
+            attended_at: today,
+            status: newStatus,
+            partner_user_id: partnerId,
+            club_id: clubId,
+          },
+          { onConflict: 'club_id,user_id,attended_at' }
+        ),
+      participantRows.length > 0
+        ? adminSupabase
+          .from('match_participants')
+          .upsert(participantRows, { onConflict: 'match_schedule_id,user_id' })
+        : Promise.resolve({ error: null }),
+    ]);
+
+    const attendanceError = attendanceResult.error;
 
     if (attendanceError) {
       console.error('❌ 출석부 파트너 업데이트 실패:', attendanceError);
       return NextResponse.json({ error: '출석부 업데이트 중 오류가 발생했습니다.' }, { status: 500 });
     }
 
-    // 2. 오늘의 경기 일정에 대한 참가자 정보도 함께 업데이트 / 등록
-    const { data: schedules } = await resolved.adminSupabase
-      .from('match_schedules')
-      .select('id, club_id')
-      .eq('match_date', today)
-      .eq('club_id', clubId);
-
-    if (schedules && schedules.length > 0) {
-      for (const sched of schedules) {
-        const { data: existingPart } = await resolved.adminSupabase
-          .from('match_participants')
-          .select('id, status')
-          .eq('match_schedule_id', sched.id)
-          .eq('user_id', resolved.profileId)
-          .maybeSingle();
-
-        if (existingPart) {
-          await resolved.adminSupabase
-            .from('match_participants')
-            .update({ partner_user_id: partnerId, status: 'registered' })
-            .eq('id', existingPart.id);
-        } else {
-          await resolved.adminSupabase
-            .from('match_participants')
-            .insert({
-              match_schedule_id: sched.id,
-              user_id: resolved.profileId,
-              status: 'registered',
-              partner_user_id: partnerId,
-              club_id: sched.club_id,
-            });
-        }
-      }
+    if (participantsResult.error) {
+      console.error('❌ 참가자 파트너 업데이트 실패:', participantsResult.error);
+      return NextResponse.json({ error: '참가자 업데이트 중 오류가 발생했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, partnerId });

@@ -114,13 +114,36 @@ export default function MatchNotifications() {
       }
     };
 
-    // 초기 확인
-    checkForNewMatches();
+    void checkForNewMatches();
 
-    // 30초마다 새 경기 확인
-    const interval = setInterval(checkForNewMatches, 30000);
+    // 30초 폴링 대신 실제 일정 변경 시에만 다시 확인합니다.
+    const channel = supabase
+      .channel(`match-assignments-${clubId}-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'match_schedules',
+          filter: `club_id=eq.${clubId}`,
+        },
+        () => {
+          void checkForNewMatches();
+        }
+      )
+      .subscribe();
 
-    return () => clearInterval(interval);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void checkForNewMatches();
+      }
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      void supabase.removeChannel(channel);
+    };
   }, [user, profile, clubId, supabase]);
 
   const markAsRead = (notificationId: string) => {

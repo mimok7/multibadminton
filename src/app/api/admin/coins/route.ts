@@ -1,41 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getProfileByUserId, getUserRole, isAdminRole } from '@/lib/auth';
-import { getClubRole } from '@/lib/club-auth';
 import { DEFAULT_COIN_SETTINGS, INITIAL_COIN_BALANCE, type CoinSettlementMode } from '@/lib/coins';
 import { readCoinSettings, writeCoinSettings } from '@/lib/coin-settings';
-import { getActiveClubId } from '@/lib/club';
-import { getFilteredAdminClient, getSupabaseServerClient, getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
+import { getClubAdminContext } from '@/lib/manager-access';
 
 async function requireAdmin() {
-  const clubId = await getActiveClubId();
-  if (!clubId) {
-    return { error: NextResponse.json({ error: 'Club not selected' }, { status: 400 }) };
+  const context = await getClubAdminContext();
+  if ('error' in context) {
+    const status = context.error === 'unauthorized' ? 401 : context.error === 'club_not_selected' ? 400 : 403;
+    return { error: NextResponse.json({ error: context.error }, { status }) };
   }
 
-  const serverSupabase = await getSupabaseServerClient();
-  const adminSupabase = await getFilteredAdminClient();
-  const roleLookupClient = getUnfilteredGlobalAdminClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await serverSupabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-
-  const [currentProfile, globalRole, clubRole] = await Promise.all([
-    getProfileByUserId(roleLookupClient, user.id),
-    getUserRole(roleLookupClient, user),
-    getClubRole(roleLookupClient, user.id, clubId),
-  ]);
-  const canManageClub = isAdminRole(globalRole) || ['owner', 'admin'].includes(clubRole || '');
-
-  if (!currentProfile || !canManageClub) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { adminSupabase, currentProfile, clubId };
+  return {
+    adminSupabase: context.adminSupabase,
+    currentProfile: context.profile,
+    clubId: context.clubId,
+  };
 }
 
 export async function GET() {
@@ -43,28 +22,29 @@ export async function GET() {
   if ('error' in context) return context.error;
 
   const { adminSupabase, currentProfile, clubId } = context;
-  const coinSettings = await readCoinSettings();
-
-  const { data: members, error: membersError } = await adminSupabase
-    .from('club_members')
-    .select('user_id, role, coin_balance, coin_wins, coin_losses')
-    .eq('club_id', clubId)
-    .eq('status', 'active');
-
-  const profileIds = (members || []).map((member) => member.user_id).filter(Boolean);
-  const [{ data: profileRows, error: profilesError }, { data: transactions, error: transactionsError }] = await Promise.all([
-    profileIds.length > 0
-      ? adminSupabase
-        .from('profiles')
-        .select('id, user_id, username, full_name, email, role, coin_updated_at')
-        .in('id', profileIds)
-      : Promise.resolve({ data: [], error: null }),
+  const [coinSettings, membersResult, transactionsResult] = await Promise.all([
+    readCoinSettings(),
+    adminSupabase
+      .from('club_members')
+      .select('user_id, role, coin_balance, coin_wins, coin_losses')
+      .eq('club_id', clubId)
+      .eq('status', 'active'),
     adminSupabase
       .from('profile_coin_transactions')
       .select('id, profile_id, match_id, transaction_type, delta, wager_amount, team_side, team1_score, team2_score, created_at')
       .order('created_at', { ascending: false })
       .limit(50),
   ]);
+  const { data: members, error: membersError } = membersResult;
+  const { data: transactions, error: transactionsError } = transactionsResult;
+
+  const profileIds = (members || []).map((member) => member.user_id).filter(Boolean);
+  const { data: profileRows, error: profilesError } = profileIds.length > 0
+    ? await adminSupabase
+      .from('profiles')
+      .select('id, user_id, username, full_name, email, role, coin_updated_at')
+      .in('id', profileIds)
+    : { data: [], error: null };
 
   if (membersError || profilesError || transactionsError) {
     return NextResponse.json(

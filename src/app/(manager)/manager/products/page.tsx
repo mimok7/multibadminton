@@ -163,9 +163,14 @@ export default function AdminProductsPage() {
       setLoading(true);
       setDbMissing(false);
 
-      // 1. 상품 및 구매 이력 가져오기
-      const response = await fetch('/api/admin/products', { credentials: 'include' });
-      const payload = await response.json().catch(() => null);
+      const [response, userResponse] = await Promise.all([
+        fetch('/api/admin/products', { credentials: 'include' }),
+        fetch('/api/admin/coins', { credentials: 'include' }),
+      ]);
+      const [payload, userPayload] = await Promise.all([
+        response.json().catch(() => null),
+        userResponse.json().catch(() => null),
+      ]);
 
       if (!response.ok) {
         const errMsg = payload?.error || '';
@@ -177,10 +182,6 @@ export default function AdminProductsPage() {
 
       setProducts(payload?.products || []);
       setPurchases(payload?.purchases || []);
-
-      // 2. 지급 대상을 위한 사용자 목록 가져오기
-      const userResponse = await fetch('/api/admin/coins', { credentials: 'include' });
-      const userPayload = await userResponse.json().catch(() => null);
 
       if (userResponse.ok) {
         setUsers(userPayload?.profiles || []);

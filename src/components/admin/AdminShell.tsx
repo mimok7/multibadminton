@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { getSupabaseClient } from '@/lib/supabase';
+import { useClub } from '@/hooks/useClub';
 import { isAdminRole, isManagerRole } from '@/lib/auth';
 import { SECTIONS } from './menuConfig';
 
@@ -41,7 +42,7 @@ function getGroupColors(color: string) {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { profile } = useUser();
-  const [activeClubRole, setActiveClubRole] = useState<string | null>(null);
+  const { clubName: activeClubName, clubRole: activeClubRole } = useClub();
   const isGlobalAdmin = isAdminRole(profile?.role);
   const hasClubAdminAccess = ['owner', 'admin'].includes(activeClubRole || '');
   const isManagerMode = !isGlobalAdmin && ['owner', 'admin', 'manager'].includes(activeClubRole || '');
@@ -56,24 +57,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   };
   const [isDesktopSidebarVisible, setIsDesktopSidebarVisible] = useState(true);
   const [isMobileView, setIsMobileView] = useState(false);
-  const [activeClubName, setActiveClubName] = useState<string>('');
-
   useEffect(() => {
-    async function fetchActiveClub() {
-      try {
-        const res = await fetch('/api/user/active-club');
-        const data = await res.json();
-        if (data.club?.name) {
-          setActiveClubName(data.club.name);
-          document.title = `${data.club.name} - 매니저 대시보드`;
-        }
-        setActiveClubRole(data.clubRole || null);
-      } catch (err) {
-        console.error('Failed to fetch active club name:', err);
-      }
+    if (activeClubName) {
+      document.title = `${activeClubName} - 매니저 대시보드`;
     }
-    fetchActiveClub();
-  }, []);
+  }, [activeClubName]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {

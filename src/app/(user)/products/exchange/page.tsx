@@ -39,9 +39,14 @@ export default function UserProductsExchangePage() {
       setLoading(true);
       setDbMissing(false);
 
-      // 1. 활성 상품 목록 패치
-      const response = await fetch('/api/products');
-      const payload = await response.json().catch(() => null);
+      const [response, purchasesResponse] = await Promise.all([
+        fetch('/api/products'),
+        fetch('/api/products/purchases'),
+      ]);
+      const [payload, purchasesPayload] = await Promise.all([
+        response.json().catch(() => null),
+        purchasesResponse.json().catch(() => null),
+      ]);
 
       if (!response.ok) {
         const errMsg = payload?.error || '';
@@ -52,10 +57,6 @@ export default function UserProductsExchangePage() {
       }
 
       setProducts(payload?.products || []);
-
-      // 2. 본인 구매 이력 패치
-      const purchasesResponse = await fetch('/api/products/purchases');
-      const purchasesPayload = await purchasesResponse.json().catch(() => null);
 
       if (purchasesResponse.ok) {
         setPurchases(purchasesPayload?.purchases || []);
