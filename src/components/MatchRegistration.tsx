@@ -383,11 +383,7 @@ export default function MatchRegistration({
                       participant.profile?.coin_balance,
                     )}
                   </span>
-                  {participant.profile?.skill_level && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {participant.profile.skill_level.toUpperCase()}
-                    </span>
-                  )}
+
                 </div>
                 <div className="text-xs text-gray-500">
                   {formatKSTDate(participant.registered_at)}

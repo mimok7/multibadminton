@@ -6,9 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, CalendarDays, Gift, LogOut, Shield, Swords, Target, Trophy, UserCircle2, Zap, Bell, BookOpen, MessageSquarePlus } from 'lucide-react';
 
 import MatchNotifications from '@/components/MatchNotifications';
-import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import type { AppProfile } from '@/lib/auth';
-import { getLevelNameFromCode } from '@/lib/level-info';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getKoreaDate } from '@/lib/date';
 
@@ -123,7 +121,6 @@ export default function ClientDashboard({
 }) {
   const router = useRouter();
   const supabase = getSupabaseClient();
-  const levelInfoMap = useLevelInfoMap();
 
   const [loadingAttendance, setLoadingAttendance] = useState(true);
   const [myAttendanceStatus, setMyAttendanceStatus] = useState<AttendanceStatus>(null);
@@ -407,7 +404,6 @@ export default function ClientDashboard({
 
   const rawDisplayName = profile?.full_name || profile?.username || email.split('@')[0];
   const displayName = rawDisplayName;
-  const levelLabel = profile?.skill_level_name || getLevelNameFromCode(levelInfoMap, profile?.skill_level, profile?.skill_level || '미지정');
  
   const visibleQuickLinks = useMemo(() => {
     let filtered = quickLinks;
@@ -457,7 +453,6 @@ export default function ClientDashboard({
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-100">레벨 {levelLabel}</span>
                 {isCoinEnabled && (
                   <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-100">
                     코인 {clubMemberInfo?.coin_balance ?? 0}

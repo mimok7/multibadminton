@@ -85,13 +85,12 @@ function getResponseBadgeClass(status?: string | null) {
 
 function formatChallengePlayer(
   name: string,
-  skillLevel: string | null | undefined,
+  _skillLevel: string | null | undefined,
   coinBalance: number | null | undefined,
   showCoins = true,
 ) {
-  const skill = skillLevel?.trim() || '급수 미지정';
   const coins = showCoins && typeof coinBalance === 'number' ? String(coinBalance) : '-';
-  return `${name} (${skill}, ${coins})`;
+  return `${name} (${coins})`;
 }
 
 export default function ChallengePage() {
@@ -520,7 +519,7 @@ export default function ChallengePage() {
                           <div className="flex items-center gap-2">
                             <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500/15 px-3 py-1.5 text-sm font-extrabold text-amber-700 border border-amber-500/30">
                               <Award className="w-4 h-4 text-amber-600" />
-                              {prepPayload.partner.name} ({prepPayload.partner.skill_level})
+                              {prepPayload.partner.name}
                             </span>
                             <Button
                               variant="outline"

@@ -159,6 +159,10 @@ const formatScheduledTime = (timeStr: string | undefined | null) => {
   return '';
 };
 
+function hidePlayerLevelSuffix(name: string) {
+  return name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 function normalizeScheduledPlayerName(name: string) {
   return name
     .replace(/\s*\([^)]*\)\s*/g, '')
@@ -592,7 +596,7 @@ function getBracketStageName(match: Match, matches: Match[]) {
 }
 
 function formatBracketTeam(team: string[], match?: Match, matches: Match[] = [], isPairTournament = false) {
-  if (team.length > 0) return team.join('\n');
+  if (team.length > 0) return team.map(hidePlayerLevelSuffix).join('\n');
   if (!isPairTournament || !match || matches.length === 0) return '대진 대기';
   return `${getBracketStageName(match, matches)} 진출팀`;
 }
@@ -3532,7 +3536,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                       <div className="flex flex-wrap items-center gap-1.5">
-                                        <p className="text-base font-semibold text-slate-900">{player}</p>
+                                        <p className="text-base font-semibold text-slate-900">{hidePlayerLevelSuffix(player)}</p>
                                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 shadow-sm">
                                           {stats.teamLabel}
                                         </span>
@@ -4087,7 +4091,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                             <ul className="divide-y divide-slate-200/70 px-4">
                               {group.players.map((player, playerIndex) => (
                                 <li key={`${group.label}-${player}-${playerIndex}`} className="py-2.5 text-sm font-medium text-slate-700">
-                                  {player}
+                                  {hidePlayerLevelSuffix(player)}
                                 </li>
                               ))}
                             </ul>
@@ -4256,7 +4260,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-1.5">
-                                          <p className="text-base font-semibold text-slate-900">{player}</p>
+                                          <p className="text-base font-semibold text-slate-900">{hidePlayerLevelSuffix(player)}</p>
                                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                                             {stats.teamLabel}
                                           </span>

@@ -195,6 +195,8 @@ export async function fetchMyTournamentMatches(
       const tournament = tournamentMap.get(match.tournament_id);
       return {
         ...match,
+        team1: (match.team1 || []).map((name) => String(name).replace(/\s*\([^)]*\)\s*$/, '').trim()),
+        team2: (match.team2 || []).map((name) => String(name).replace(/\s*\([^)]*\)\s*$/, '').trim()),
         winner: (match.winner as MyTournamentMatchView['winner']) ?? null,
         tournament_title: tournament?.title || '대회',
         tournament_date: tournament?.tournament_date || null,

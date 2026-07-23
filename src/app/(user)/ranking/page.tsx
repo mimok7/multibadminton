@@ -7,8 +7,6 @@ import { ArrowLeft, Trophy, Medal, Award, TrendingUp } from 'lucide-react';
 import { RequireAuth } from '@/components/AuthGuard';
 import { useClub } from '@/hooks/useClub';
 import { getSupabaseClient } from '@/lib/supabase';
-import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
-import { getLevelNameFromCode } from '@/lib/level-info';
 
 interface RankingUser {
   user_id: string;
@@ -26,7 +24,6 @@ interface RankingUser {
 export default function RankingPage() {
   const { clubId, loading: clubLoading } = useClub();
   const supabase = getSupabaseClient();
-  const levelInfoMap = useLevelInfoMap();
 
   const [users, setUsers] = useState<RankingUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,7 +130,6 @@ export default function RankingPage() {
                   const profile = user.profiles;
                   const displayName = profile?.full_name || profile?.username || '알 수 없음';
                   const levelCode = profile?.skill_level || '';
-                  const levelName = getLevelNameFromCode(levelInfoMap, levelCode);
                   const totalMatches = user.coin_wins + user.coin_losses;
                   const winRate = totalMatches > 0 ? Math.round((user.coin_wins / totalMatches) * 100) : 0;
                   
@@ -156,11 +152,6 @@ export default function RankingPage() {
                           <span className="font-bold text-slate-900 truncate text-sm">
                             {displayName}
                           </span>
-                          {levelName && (
-                            <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">
-                              {levelName}
-                            </span>
-                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
                           <span>{user.coin_wins}승 {user.coin_losses}패</span>

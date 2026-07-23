@@ -443,10 +443,10 @@ function ScheduleManagePage() {
                         {match.match_number}
                       </td>
                       <td className="border border-gray-300 px-3 py-2 text-sm text-blue-600">
-                        {match.team1_player1.name}({match.team1_player1.skill_level}), {match.team1_player2.name}({match.team1_player2.skill_level})
+                        {match.team1_player1.name}, {match.team1_player2.name}
                       </td>
                       <td className="border border-gray-300 px-3 py-2 text-sm text-red-600">
-                        {match.team2_player1.name}({match.team2_player1.skill_level}), {match.team2_player2.name}({match.team2_player2.skill_level})
+                        {match.team2_player1.name}, {match.team2_player2.name}
                       </td>
                       <td className="border border-gray-300 px-3 py-2 text-center">
                         <span className={`px-2 py-1 text-xs rounded ${match.is_scheduled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>

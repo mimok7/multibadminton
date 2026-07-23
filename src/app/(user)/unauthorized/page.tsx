@@ -3,15 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useUser } from '@/hooks/useUser';
-import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
-import { getLevelNameFromCode } from '@/lib/level-info';
 import { isSuperadminProfile } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 
 export default function UnauthorizedPage() {
   const { user, profile, isAdmin } = useUser();
-  const levelInfoMap = useLevelInfoMap();
   const [clubRole, setClubRole] = useState<string | null>(null);
   const isSuperadmin = isSuperadminProfile(profile);
 
@@ -61,7 +58,6 @@ export default function UnauthorizedPage() {
                   ? '매니저'
                   : '일반 사용자'}
               </p>
-              <p><span className="font-medium text-slate-400">레벨:</span> {profile.skill_level_name || getLevelNameFromCode(levelInfoMap, profile.skill_level, profile.skill_level || '미지정')}</p>
             </div>
           </div>
         )}

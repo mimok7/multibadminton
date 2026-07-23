@@ -10,8 +10,6 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Search, Camera, User, X, ArrowLeft } from 'lucide-react';
 import { AvatarCropModal } from '@/components/profile/AvatarCropModal';
-import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
-import { getLevelNameFromCode } from '@/lib/level-info';
 
 export default function ProfilePage() {
   const { user, profile, loading: userLoading } = useUser();
@@ -100,9 +98,6 @@ export default function ProfilePage() {
       setAvatarFile(null);
     }
   };
-  const levelInfoMap = useLevelInfoMap();
-  const targetProfile = myLatestProfile || profile;
-  const levelLabel = targetProfile?.skill_level_name || getLevelNameFromCode(levelInfoMap, targetProfile?.skill_level, targetProfile?.skill_level || '미지정');
   const roleLabel = clubMemberInfo?.role === 'owner' ? '소유자' :
                     clubMemberInfo?.role === 'admin' ? '관리자' :
                     clubMemberInfo?.role === 'manager' ? '매니저' : '일반 회원';
@@ -371,10 +366,6 @@ export default function ProfilePage() {
     return name.includes(searchQuery.toLowerCase());
   });
 
-  const getFullLevelLabel = (code: string) => {
-    const lvl = allLevels.find(l => l.code.toLowerCase() === code.toLowerCase());
-    return lvl?.description || lvl?.name || code;
-  };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -509,7 +500,6 @@ export default function ProfilePage() {
                   📢 서로의 얼굴 익히기 위해서 필요하니 꼭 등록해 주세요.
                 </p>
                 <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 text-xs">
-                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-100">레벨 {levelLabel}</span>
                   <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-100">{roleLabel}</span>
                   {isCoinEnabled && (
                     <span className="rounded-full bg-amber-400/20 px-2.5 py-1 text-amber-100">코인 {clubMemberInfo?.coin_balance ?? 0}</span>
@@ -646,7 +636,7 @@ export default function ProfilePage() {
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 font-semibold text-xs border-b border-slate-100">
                           <th className="px-4 py-3">회원</th>
-                          <th className="px-4 py-3">급수</th>
+                          <th className={`px-4 py-3 ${isRatingPeriodActive() ? "" : "hidden"}`}>평가</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -688,12 +678,8 @@ export default function ProfilePage() {
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-3">
-                                {!isRatingPeriodActive() ? (
-                                  <span className="text-sm font-semibold text-slate-700">
-                                    {getFullLevelLabel(m.skill_level)}
-                                  </span>
-                                ) : isSelf ? (
+                              <td className={`px-4 py-3 ${isRatingPeriodActive() ? "" : "hidden"}`}>
+                                {isSelf ? (
                                   <span className="text-xs text-slate-400 italic">본인 평가는 불가능합니다</span>
                                 ) : (
                                   <div className="flex items-center gap-2 flex-wrap">

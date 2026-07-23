@@ -2011,9 +2011,6 @@ export default function MySchedulePage() {
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-200">
               {formatCurrentUserNameWithCoins(profile?.full_name || profile?.username || '회원', profile?.coin_balance)}
             </span>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-200">
-              레벨 {profile?.skill_level_name || getLevelNameFromCode(levelInfoMap, profile?.skill_level, profile?.skill_level || '미지정')}
-            </span>
             {summaryItems.map((item) => (
               <span
                 key={item.label}
@@ -2449,9 +2446,6 @@ export default function MySchedulePage() {
                                   <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">
                                     배팅 {getPlayerBet(selectedMatch.generated_match.team1_player1)}
                                   </span>
-                                  <span className="text-blue-600">
-                                    {getLevelName(selectedMatch.generated_match.team1_player1)}
-                                  </span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
@@ -2459,9 +2453,6 @@ export default function MySchedulePage() {
                                 <div className="flex items-center gap-2 text-xs">
                                   <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">
                                     배팅 {getPlayerBet(selectedMatch.generated_match.team1_player2)}
-                                  </span>
-                                  <span className="text-blue-600">
-                                    {getLevelName(selectedMatch.generated_match.team1_player2)}
                                   </span>
                                 </div>
                               </div>
@@ -2477,9 +2468,6 @@ export default function MySchedulePage() {
                                   <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">
                                     배팅 {getPlayerBet(selectedMatch.generated_match.team2_player1)}
                                   </span>
-                                  <span className="text-rose-600">
-                                    {getLevelName(selectedMatch.generated_match.team2_player1)}
-                                  </span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
@@ -2487,9 +2475,6 @@ export default function MySchedulePage() {
                                 <div className="flex items-center gap-2 text-xs">
                                   <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">
                                     배팅 {getPlayerBet(selectedMatch.generated_match.team2_player2)}
-                                  </span>
-                                  <span className="text-rose-600">
-                                    {getLevelName(selectedMatch.generated_match.team2_player2)}
                                   </span>
                                 </div>
                               </div>

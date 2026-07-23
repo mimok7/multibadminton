@@ -6,11 +6,9 @@ import { ArrowRight, CalendarDays, MapPin, Users, ArrowLeft } from 'lucide-react
 
 import { RequireAuth } from '@/components/AuthGuard';
 import { Button } from '@/components/ui/button';
-import { useLevelInfoMap } from '@/hooks/useLevelInfoMap';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
 import { formatKST, formatKSTDateTime, formatTimeHHmm } from '@/lib/date';
-import { getLevelNameFromCode } from '@/lib/level-info';
 import { formatCurrentUserNameWithCoins } from '@/lib/player-display';
 import { getSupabaseClient } from '@/lib/supabase';
 import { inferScheduleSource } from '@/lib/match-schedule-source';
@@ -64,7 +62,6 @@ export default function MatchRegistrationPage() {
   const { clubId, loading: clubLoading } = useClub();
   const supabase = getSupabaseClient();
   const participantProfileId = profile?.id ?? null;
-  const levelInfoMap = useLevelInfoMap();
   const participantKeys = useMemo(
     () => Array.from(new Set([user?.id, participantProfileId].filter((value): value is string => Boolean(value)))),
     [user?.id, participantProfileId]
@@ -502,9 +499,7 @@ export default function MatchRegistrationPage() {
               <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-100">
                 {formatCurrentUserNameWithCoins(profile?.full_name || profile?.username || '회원', profile?.coin_balance)}님
               </span>
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-100">
-                레벨 {profile?.skill_level_name || getLevelNameFromCode(levelInfoMap, profile?.skill_level, profile?.skill_level || '미지정')}
-              </span>
+
             </div>
           </section>
 

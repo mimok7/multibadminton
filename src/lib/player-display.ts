@@ -1,15 +1,21 @@
+function hideLevelSuffix(name: string) {
+  return String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 export function formatNameWithCoins(name: string, coinBalance?: number | null) {
+  const displayName = hideLevelSuffix(name);
   if (typeof coinBalance !== 'number') {
-    return name;
+    return displayName;
   }
 
-  return `${name} (${coinBalance})`;
+  return `${displayName} (${coinBalance})`;
 }
 
 export function formatCurrentUserNameWithCoins(name: string, coinBalance?: number | null) {
+  const displayName = hideLevelSuffix(name);
   if (typeof coinBalance !== 'number') {
-    return name;
+    return displayName;
   }
 
-  return `${name} (${coinBalance}코인)`;
+  return `${displayName} (${coinBalance}코인)`;
 }
