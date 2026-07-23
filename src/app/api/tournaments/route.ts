@@ -3,6 +3,9 @@ import { cookies } from 'next/headers';
 import { getFilteredAdminClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type TeamAssignmentRow = {
   id: string;
   assignment_date: string;

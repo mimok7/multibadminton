@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { useClub } from '@/hooks/useClub';
@@ -435,7 +435,7 @@ function AssignedMatchCard({
   return (
     <div key={match.id} className="rounded-[20px] bg-slate-50 p-4">
       {waitingMessage && (
-        <div className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 text-center">
+        <div className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-left text-xs font-semibold text-blue-700">
           {waitingMessage}
         </div>
       )}
@@ -678,6 +678,7 @@ export default function MySchedulePage() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [activeTab, setActiveTab] = useState<MatchCenterTab>('upcoming');
   const [tournamentMatches, setTournamentMatches] = useState<MyTournamentMatchView[]>([]);
+  const [allTournamentMatches, setAllTournamentMatches] = useState<MyTournamentMatchView[]>([]);
   const [allTournamentMatchCount, setAllTournamentMatchCount] = useState(0);
   const [stats, setStats] = useState<MyScheduleStats>({ 
     totalMatches: 0, 
@@ -817,9 +818,9 @@ export default function MySchedulePage() {
 
   useEffect(() => {
     if (user && profile) {
-      fetchTournamentMatches();
+      void fetchTournamentMatches();
     }
-  }, [user, profile]);
+  }, [user?.id, profile?.id]);
 
   // 경기 목록이 변경될 때마다 결과 상태 업데이트
   useEffect(() => {
@@ -1198,17 +1199,73 @@ export default function MySchedulePage() {
     }
   };
 
-  const fetchTournamentMatches = async () => {
+  const fetchTournamentMatches = useCallback(async () => {
     try {
       const result = await fetchMyTournamentMatches(supabase, profile);
       setTournamentMatches(result.matches);
+      setAllTournamentMatches(result.allMatches);
       setAllTournamentMatchCount(result.allTournamentMatchCount);
     } catch (error) {
       console.error('대회 경기 조회 실패:', error);
       setTournamentMatches([]);
+      setAllTournamentMatches([]);
       setAllTournamentMatchCount(0);
     }
-  };
+  }, [profile, supabase]);
+
+  useEffect(() => {
+    if (!user?.id || !profile || activeTab !== 'tournaments') {
+      return;
+    }
+
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      refreshTimer = setTimeout(() => {
+        void fetchTournamentMatches();
+      }, 250);
+    };
+
+    const channel = supabase
+      .channel(`my-tournament-schedule-${user.id}`)
+      .on(
+        'postgres_changes' as any,
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tournament_matches',
+        },
+        (payload: any) => {
+          const changedClubId = payload.new?.club_id || payload.old?.club_id;
+          if (clubId && changedClubId && changedClubId !== clubId) {
+            return;
+          }
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleRefresh();
+      }
+    };
+
+    window.addEventListener('focus', scheduleRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    scheduleRefresh();
+
+    return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      window.removeEventListener('focus', scheduleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      supabase.removeChannel(channel);
+    };
+  }, [activeTab, clubId, fetchTournamentMatches, profile, supabase, user?.id]);
 
   const prioritizedAssignedMatches = [...todayAssignedMatches].sort((left, right) => {
     const timeL = left.match_time || '23:59';
@@ -1435,6 +1492,40 @@ export default function MySchedulePage() {
 
   const getTeamScoreText = (score?: number | null) =>
     typeof score === 'number' ? String(score) : '-';
+
+  const getTournamentMatchOrder = (match: MyTournamentMatchView) => {
+    const matchDate = match.scheduled_time?.slice(0, 10) || match.tournament_date || '';
+    const orderedMatches = allTournamentMatches
+      .filter((item) => (item.scheduled_time?.slice(0, 10) || item.tournament_date || '') === matchDate)
+      .sort((left, right) => {
+        const leftTime = left.scheduled_time || `${left.tournament_date || ''}T23:59:59`;
+        const rightTime = right.scheduled_time || `${right.tournament_date || ''}T23:59:59`;
+        if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+
+        const courtDiff = String(left.court || '').localeCompare(String(right.court || ''), 'ko', { numeric: true });
+        if (courtDiff !== 0) return courtDiff;
+
+        if (left.round !== right.round) return left.round - right.round;
+        return left.match_number - right.match_number;
+      });
+    const matchIndex = orderedMatches.findIndex((item) => item.id === match.id);
+    const activeIndex = orderedMatches.findIndex((item) => item.status === 'in_progress');
+    const scheduledIndex = orderedMatches.findIndex((item) => item.status === 'pending');
+
+    return {
+      total: orderedMatches.length,
+      position: matchIndex + 1,
+      currentPosition: activeIndex >= 0 ? activeIndex + 1 : scheduledIndex >= 0 ? scheduledIndex + 1 : 0,
+    };
+  };
+
+  const getTournamentWaitingMessage = (match: MyTournamentMatchView) => {
+    const { total, position } = getTournamentMatchOrder(match);
+    if (total > 0 && position > 0) {
+      return `전체 ${total}경기 중 ${position}번째 경기`;
+    }
+    return total > 0 ? `전체 ${total}경기 중 ${position}번째 경기` : '';
+  };
 
   const isTournamentTab = activeTab === 'tournaments';
 
@@ -2118,9 +2209,19 @@ export default function MySchedulePage() {
 
         {activeTab === 'tournaments' && (
           <div className="rounded-[24px] bg-white shadow-sm">
-            <div className="border-b border-slate-200/80 p-4">
-              <h2 className="text-lg font-semibold text-slate-900">대회 경기</h2>
-              <p className="mt-1 text-sm text-slate-500">참가 중인 대회 경기만 모아봅니다.</p>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">대회 경기</h2>
+                <p className="mt-1 text-sm text-slate-500">참가 중인 대회 경기만 모아봅니다.</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 text-xs font-semibold">
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                  전체 게임: {tournamentStats.total}
+                </span>
+                <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">
+                  완료 게임: {tournamentStats.completed}
+                </span>
+              </div>
             </div>
 
             {tournamentMatches.length === 0 ? (
@@ -2135,6 +2236,7 @@ export default function MySchedulePage() {
               <div className="space-y-3 p-4">
                 {tournamentMatches.map((match) => {
                   const myTeam = getMyTournamentTeam(match);
+                  const waitingMessage = getTournamentWaitingMessage(match);
                   const didIWin = Boolean(match.status === 'completed' && match.winner === myTeam);
                   const didILose = Boolean(
                     match.status === 'completed' &&
@@ -2156,6 +2258,11 @@ export default function MySchedulePage() {
                           : 'border-slate-200 bg-slate-50/80'
                       }`}
                     >
+                      {waitingMessage && (
+                        <div className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-left text-xs font-semibold text-blue-700">
+                          {waitingMessage}
+                        </div>
+                      )}
                       <span
                         className={`absolute right-3 top-2.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                           match.status === 'completed'
@@ -2174,7 +2281,8 @@ export default function MySchedulePage() {
 
                       <div className="mb-2.5 pr-16">
                         <div className="text-sm font-semibold text-slate-800">
-                          {match.match_number}. {cleanAndFormatTournamentTitle(match.tournament_title, match.court)}
+                          {match.match_number}. {formatCompactDate(match.scheduled_time || match.tournament_date)}
+                          {match.scheduled_time ? ` ${formatTimeHHmm(match.scheduled_time)}` : ''} {cleanAndFormatTournamentTitle(match.tournament_title, match.court)}
                         </div>
                       </div>
 

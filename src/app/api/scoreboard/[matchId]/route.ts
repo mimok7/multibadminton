@@ -3,6 +3,7 @@ import { getFilteredAdminClient, getSupabaseServerClient } from '@/lib/supabase-
 import { getUserRole, getProfileByUserId } from '@/lib/auth';
 import { getActiveClubId } from '@/lib/club';
 import { advanceBracketWinner, advanceLeagueFinalists, ensureBracketResultCanChange, type BracketMatch } from '@/lib/tournament-bracket';
+import { fetchTournamentDayMatches, getAutomaticRefereeName } from '@/lib/tournament-referee';
 
 type RouteContext = { params: Promise<{ matchId: string }> };
 
@@ -15,7 +16,8 @@ async function getMatchRefereeInfo(
   adminSupabase: any,
   match: MatchRow,
   currentProfileId: string | null,
-  currentUserName: string | null
+  currentUserName: string | null,
+  clubId: string
 ) {
   const refereeId = match.referee_id as string | null;
   let refereeName = match.referee_name as string | null;
@@ -33,67 +35,31 @@ async function getMatchRefereeInfo(
       currentProfileId != null &&
       (refereeId === currentProfileId || cleanRefereeNames.includes(cleanCurrentUserName));
   } else {
-    // Fallback referee logic
-    const currentRound = (match.round as number) || 1;
-    const currentMatchNum = (match.match_number as number) || 0;
-    const courtName = (match.court as string) || '';
+    const tournamentId = typeof match.tournament_id === 'string' ? match.tournament_id : '';
+    const dayMatches = tournamentId
+      ? await fetchTournamentDayMatches(adminSupabase, tournamentId, clubId)
+      : [];
+    refereeName = getAutomaticRefereeName(match, dayMatches);
 
-    if (courtName) {
-      const { data: courtMatches, error: precedingError } = await adminSupabase
-        .from('tournament_matches')
-        .select('*')
-        .eq('tournament_id', match.tournament_id)
-        .eq('court', courtName);
+    if (refereeName) {
+      const automaticRefereeNames = refereeName
+        .split(',')
+        .map((name) => name.replace(/\([^)]*\)$/, '').trim());
+      const cleanCurrentUserName = (currentUserName || '')
+        .replace(/\([^)]*\)$/, '')
+        .trim()
+        .toLowerCase();
+      isReferee = automaticRefereeNames.some(
+        (name) => name.toLowerCase() === cleanCurrentUserName
+      );
 
-      if (!precedingError && courtMatches && courtMatches.length > 0) {
-        const precedingMatches = courtMatches.filter((m: any) => {
-          const r = m.round || 1;
-          const num = m.match_number || 0;
-          return r < currentRound || (r === currentRound && num < currentMatchNum);
-        });
-
-        // Sort preceding matches descending (highest round, then highest match_number)
-        precedingMatches.sort((a: any, b: any) => {
-          const roundDiff = (b.round || 1) - (a.round || 1);
-          if (roundDiff !== 0) return roundDiff;
-          return (b.match_number || 0) - (a.match_number || 0);
-        });
-
-        if (precedingMatches.length > 0) {
-          const precedingMatch = precedingMatches[0];
-          const winner = precedingMatch.winner;
-          let winningPlayers: string[] = [];
-
-          if (winner === 'team1') {
-            winningPlayers = Array.isArray(precedingMatch.team1) ? precedingMatch.team1 : [];
-          } else if (winner === 'team2') {
-            winningPlayers = Array.isArray(precedingMatch.team2) ? precedingMatch.team2 : [];
-          }
-
-          if (winningPlayers.length > 0) {
-            const cleanWinningPlayers = winningPlayers.map((name) =>
-              name.replace(/\([^)]*\)$/, '').trim()
-            );
-
-            refereeName = cleanWinningPlayers.join(', ');
-
-            if (currentUserName) {
-              const cleanCurrentUserName = currentUserName.replace(/\([^)]*\)$/, '').trim().toLowerCase();
-              isReferee = cleanWinningPlayers.some(
-                (name) => name.toLowerCase() === cleanCurrentUserName
-              );
-            }
-
-            if (currentProfileId && !isReferee) {
-              const { data: winningProfiles } = await adminSupabase
-                .from('profiles')
-                .select('id')
-                .in('full_name', cleanWinningPlayers);
-              if (winningProfiles) {
-                isReferee = winningProfiles.some((p: any) => p.id === currentProfileId);
-              }
-            }
-          }
+      if (currentProfileId && !isReferee) {
+        const { data: winningProfiles } = await adminSupabase
+          .from('profiles')
+          .select('id')
+          .in('full_name', automaticRefereeNames);
+        if (winningProfiles) {
+          isReferee = winningProfiles.some((profile: { id: string }) => profile.id === currentProfileId);
         }
       }
     }
@@ -158,7 +124,8 @@ export async function GET(_request: Request, context: RouteContext) {
       adminSupabase,
       match,
       currentProfileId,
-      currentUserName
+      currentUserName,
+      clubId
     );
     const isAdmin = currentUserRole === 'admin' || currentUserRole === 'manager';
     const canEdit = isReferee || isAdmin;
@@ -240,7 +207,8 @@ export async function PATCH(request: Request, context: RouteContext) {
         adminSupabase,
         match,
         currentProfileId,
-        currentUserName
+        currentUserName,
+        clubId
       );
 
       if (!isReferee && !isAdmin) {
@@ -345,7 +313,8 @@ export async function POST(request: Request, context: RouteContext) {
         adminSupabase,
         match,
         currentProfileId,
-        currentUserName
+        currentUserName,
+        clubId
       );
 
       if (!isReferee && !isAdmin) {

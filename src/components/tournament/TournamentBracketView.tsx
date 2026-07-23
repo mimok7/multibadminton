@@ -9,6 +9,12 @@ import { useUser } from '@/hooks/useUser';
 
 import { getKoreaDate } from '@/lib/date';
 import { getSupabaseClient } from '@/lib/supabase';
+import {
+  getAutomaticRefereeName,
+  getMatchPlayerNames,
+  getRefereePlayerKey,
+  getSameTimePlayerKeys,
+} from '@/lib/tournament-referee';
 import type { Json } from '@/types/supabase';
 import { getFriendlyErrorMessage } from '@/lib/utils';
 
@@ -153,61 +159,267 @@ const formatScheduledTime = (timeStr: string | undefined | null) => {
   return '';
 };
 
-function avoidConsecutiveMatches(
+function normalizeScheduledPlayerName(name: string) {
+  return name
+    .replace(/\s*\([^)]*\)\s*/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function getScheduledMatchPlayers(match: Match) {
+  return new Set(
+    [...match.team1, ...match.team2]
+      .map(normalizeScheduledPlayerName)
+      .filter(Boolean)
+  );
+}
+
+function playerSetsOverlap(left: Set<string>, right: Set<string>) {
+  return Array.from(left).some((player) => right.has(player));
+}
+
+function selectMatchesForTimeSlot(matches: Match[], previousSlotPlayers: Set<string>, courtCount: number) {
+  const candidates = matches
+    .map((match) => ({
+      match,
+      players: getScheduledMatchPlayers(match),
+      restPenalty: Array.from(getScheduledMatchPlayers(match)).filter((player) => previousSlotPlayers.has(player)).length,
+      randomOrder: Math.random(),
+    }))
+    .sort((left, right) => left.restPenalty - right.restPenalty || left.randomOrder - right.randomOrder);
+  let bestSelection: typeof candidates = [];
+  let bestPenalty = Number.POSITIVE_INFINITY;
+  let visitedNodes = 0;
+  const maxSearchNodes = 25_000;
+
+  const search = (
+    startIndex: number,
+    selection: typeof candidates,
+    occupiedPlayers: Set<string>,
+    restPenalty: number
+  ) => {
+    visitedNodes += 1;
+    if (visitedNodes > maxSearchNodes) return;
+
+    if (
+      selection.length > bestSelection.length ||
+      (selection.length === bestSelection.length && restPenalty < bestPenalty)
+    ) {
+      bestSelection = [...selection];
+      bestPenalty = restPenalty;
+    }
+    if (selection.length >= courtCount || bestSelection.length === courtCount && bestPenalty === 0) return;
+    if (selection.length + (candidates.length - startIndex) < bestSelection.length) return;
+
+    for (let index = startIndex; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      if (playerSetsOverlap(candidate.players, occupiedPlayers)) continue;
+
+      const nextOccupiedPlayers = new Set(occupiedPlayers);
+      candidate.players.forEach((player) => nextOccupiedPlayers.add(player));
+      search(
+        index + 1,
+        [...selection, candidate],
+        nextOccupiedPlayers,
+        restPenalty + candidate.restPenalty
+      );
+
+      if (bestSelection.length === courtCount && bestPenalty === 0) return;
+    }
+  };
+
+  search(0, [], new Set<string>(), 0);
+  return bestSelection.map((candidate) => candidate.match);
+}
+
+type MatchSlotQuality = {
+  slotCount: number;
+  internalEmptyCourts: number;
+  consecutiveAssignments: number;
+  consecutivePlayers: number;
+};
+
+function getMatchSlotPlayers(slot: Match[]) {
+  const players = new Set<string>();
+  slot.forEach((match) => {
+    getScheduledMatchPlayers(match).forEach((player) => players.add(player));
+  });
+  return players;
+}
+
+function getMatchSlotQuality(slots: Match[][], courtCount: number): MatchSlotQuality {
+  const consecutivePlayerKeys = new Set<string>();
+  let consecutiveAssignments = 0;
+
+  for (let index = 1; index < slots.length; index += 1) {
+    const previousPlayers = getMatchSlotPlayers(slots[index - 1]);
+    getMatchSlotPlayers(slots[index]).forEach((player) => {
+      if (previousPlayers.has(player)) {
+        consecutiveAssignments += 1;
+        consecutivePlayerKeys.add(player);
+      }
+    });
+  }
+
+  return {
+    slotCount: slots.length,
+    internalEmptyCourts: slots
+      .slice(0, -1)
+      .reduce((total, slot) => total + Math.max(0, courtCount - slot.length), 0),
+    consecutiveAssignments,
+    consecutivePlayers: consecutivePlayerKeys.size,
+  };
+}
+
+function isBetterMatchSlotQuality(left: MatchSlotQuality, right: MatchSlotQuality) {
+  if (left.slotCount !== right.slotCount) return left.slotCount < right.slotCount;
+  if (left.internalEmptyCourts !== right.internalEmptyCourts) {
+    return left.internalEmptyCourts < right.internalEmptyCourts;
+  }
+  if (left.consecutiveAssignments !== right.consecutiveAssignments) {
+    return left.consecutiveAssignments < right.consecutiveAssignments;
+  }
+  return left.consecutivePlayers < right.consecutivePlayers;
+}
+
+function hasSameMatchSlotQuality(left: MatchSlotQuality, right: MatchSlotQuality) {
+  return left.slotCount === right.slotCount &&
+    left.internalEmptyCourts === right.internalEmptyCourts &&
+    left.consecutiveAssignments === right.consecutiveAssignments &&
+    left.consecutivePlayers === right.consecutivePlayers;
+}
+
+function buildMatchSlots(matches: Match[], courtCount: number) {
+  const remaining = [...matches];
+  const slots: Match[][] = [];
+  let previousSlotPlayers = new Set<string>();
+
+  while (remaining.length > 0) {
+    const slotMatches = selectMatchesForTimeSlot(remaining, previousSlotPlayers, courtCount);
+    if (slotMatches.length === 0) {
+      throw new Error('동시간대 선수 중복 없이 배정할 수 있는 경기를 찾지 못했습니다.');
+    }
+
+    slots.push(slotMatches);
+    previousSlotPlayers = getMatchSlotPlayers(slotMatches);
+    slotMatches.forEach((match) => {
+      const remainingIndex = remaining.indexOf(match);
+      if (remainingIndex >= 0) remaining.splice(remainingIndex, 1);
+    });
+  }
+
+  return slots;
+}
+
+function canPlaceMatchInSlot(match: Match, slot: Match[], excludedIndex: number) {
+  const matchPlayers = getScheduledMatchPlayers(match);
+  return slot.every((slotMatch, index) =>
+    index === excludedIndex || !playerSetsOverlap(matchPlayers, getScheduledMatchPlayers(slotMatch))
+  );
+}
+
+function optimizeMatchSlots(initialSlots: Match[][], courtCount: number) {
+  let currentSlots = initialSlots.map((slot) => [...slot]);
+  let currentQuality = getMatchSlotQuality(currentSlots, courtCount);
+  let bestSlots = currentSlots.map((slot) => [...slot]);
+  let bestQuality = currentQuality;
+  const matchCount = initialSlots.reduce((total, slot) => total + slot.length, 0);
+  const iterations = Math.min(12_000, Math.max(2_000, matchCount * 400));
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    if (currentSlots.length < 2 || bestQuality.consecutiveAssignments === 0) break;
+    const proposal = currentSlots.map((slot) => [...slot]);
+    const firstSlotIndex = Math.floor(Math.random() * proposal.length);
+    let secondSlotIndex = Math.floor(Math.random() * proposal.length);
+    if (secondSlotIndex === firstSlotIndex) {
+      secondSlotIndex = (secondSlotIndex + 1) % proposal.length;
+    }
+
+    if (Math.random() < 0.25 && proposal[firstSlotIndex].length === proposal[secondSlotIndex].length) {
+      [proposal[firstSlotIndex], proposal[secondSlotIndex]] = [
+        proposal[secondSlotIndex],
+        proposal[firstSlotIndex],
+      ];
+    } else {
+      const firstMatchIndex = Math.floor(Math.random() * proposal[firstSlotIndex].length);
+      const secondMatchIndex = Math.floor(Math.random() * proposal[secondSlotIndex].length);
+      const firstMatch = proposal[firstSlotIndex][firstMatchIndex];
+      const secondMatch = proposal[secondSlotIndex][secondMatchIndex];
+
+      if (
+        !canPlaceMatchInSlot(secondMatch, proposal[firstSlotIndex], firstMatchIndex) ||
+        !canPlaceMatchInSlot(firstMatch, proposal[secondSlotIndex], secondMatchIndex)
+      ) {
+        continue;
+      }
+
+      proposal[firstSlotIndex][firstMatchIndex] = secondMatch;
+      proposal[secondSlotIndex][secondMatchIndex] = firstMatch;
+    }
+
+    const proposalQuality = getMatchSlotQuality(proposal, courtCount);
+    const improvesCurrent = isBetterMatchSlotQuality(proposalQuality, currentQuality);
+    const exploresEquivalent = hasSameMatchSlotQuality(proposalQuality, currentQuality) && Math.random() < 0.15;
+    const currentPenalty = currentQuality.consecutiveAssignments + currentQuality.consecutivePlayers * 0.05;
+    const proposalPenalty = proposalQuality.consecutiveAssignments + proposalQuality.consecutivePlayers * 0.05;
+    const temperature = Math.max(0.05, 2 * (1 - iteration / iterations));
+    const exploresAlternative = Math.random() < Math.exp(-(proposalPenalty - currentPenalty) / temperature);
+    if (!improvesCurrent && !exploresEquivalent && !exploresAlternative) continue;
+
+    currentSlots = proposal;
+    currentQuality = proposalQuality;
+    if (isBetterMatchSlotQuality(proposalQuality, bestQuality)) {
+      bestSlots = proposal.map((slot) => [...slot]);
+      bestQuality = proposalQuality;
+    }
+  }
+
+  return bestSlots;
+}
+
+function scheduleMatchesWithPlayerRest(
   matches: Match[],
-  C: number,
+  courtCount: number,
   baseDate: string,
   startTime: string,
   timeInterval: number
 ): Match[] {
-  const result = [...matches];
-  const cleanName = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+  const safeCourtCount = Math.max(1, courtCount);
+  const safeInterval = Math.max(1, timeInterval);
+  const [startHour, startMin] = (startTime || '17:30').split(':').map(Number);
+  const attemptCount = Math.min(100, Math.max(30, matches.length * 4));
+  let bestSlots: Match[][] | null = null;
+  let bestQuality: MatchSlotQuality | null = null;
 
-  for (let i = 0; i < result.length; i++) {
-    const slotStart = Math.floor(i / C) * C;
-    const currentSlotPlayers = new Set<string>();
-    for (let j = slotStart; j < i; j++) {
-      [...result[j].team1, ...result[j].team2].map(cleanName).forEach(p => currentSlotPlayers.add(p));
+  for (let attempt = 0; attempt < attemptCount; attempt += 1) {
+    const candidateSlots = buildMatchSlots(matches, safeCourtCount);
+    const candidateQuality = getMatchSlotQuality(candidateSlots, safeCourtCount);
+    if (!bestQuality || isBetterMatchSlotQuality(candidateQuality, bestQuality)) {
+      bestSlots = candidateSlots;
+      bestQuality = candidateQuality;
     }
-
-    const matchPlayers = [...result[i].team1, ...result[i].team2].map(cleanName);
-    const hasOverlap = matchPlayers.some(p => currentSlotPlayers.has(p));
-
-    if (hasOverlap) {
-      let swapIdx = -1;
-      for (let k = i + 1; k < result.length; k++) {
-        const candidatePlayers = [...result[k].team1, ...result[k].team2].map(cleanName);
-        if (!candidatePlayers.some(p => currentSlotPlayers.has(p))) {
-          swapIdx = k;
-          break;
-        }
-      }
-      if (swapIdx !== -1) {
-        const temp = result[i];
-        result[i] = result[swapIdx];
-        result[swapIdx] = temp;
-      }
+    if (
+      candidateQuality.slotCount === Math.ceil(matches.length / safeCourtCount) &&
+      candidateQuality.internalEmptyCourts === 0 &&
+      candidateQuality.consecutiveAssignments === 0
+    ) {
+      break;
     }
   }
 
-  const [startHour, startMin] = (startTime || '17:30').split(':').map(Number);
+  const optimizedSlots = optimizeMatchSlots(bestSlots || buildMatchSlots(matches, safeCourtCount), safeCourtCount);
+  return optimizedSlots.flatMap((slotMatches, slotIndex) => {
+    const totalMinutes = startHour * 60 + startMin + slotIndex * safeInterval;
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = totalMinutes % 60;
+    const scheduledTime = `${baseDate || '2026-07-01'}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
 
-  return result.map((match, idx) => {
-    const slot = Math.floor(idx / C);
-    const courtNum = (idx % C) + 1;
-    
-    const totalMins = startHour * 60 + startMin + (slot * timeInterval);
-    const h = Math.floor(totalMins / 60);
-    const m = totalMins % 60;
-    const scheduledTime = `${baseDate || '2026-07-01'}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-
-    return {
-      ...match,
-      match_number: idx + 1,
-      court: `${courtNum}코트`,
-      round: 1,
-      scheduled_time: scheduledTime,
-    };
+    return slotMatches.map((match, courtIndex) => ({
+        ...match,
+        court: `${courtIndex + 1}코트`,
+        scheduled_time: scheduledTime,
+      }));
   });
 }
 
@@ -223,7 +435,9 @@ function scheduleMatchesWithBracketStages(
     .filter((match) => match.team1.length === 0 || match.team2.length === 0)
     .sort((left, right) => (left.round - right.round) || (left.match_number - right.match_number));
   const originalMatchData = new Map(matches.map((match) => [match.id, match]));
-  const scheduledPlayableMatches = avoidConsecutiveMatches(playableMatches, courtCount, baseDate, startTime, timeInterval)
+  const safeCourtCount = Math.max(1, courtCount);
+  const safeInterval = Math.max(1, timeInterval);
+  const scheduledPlayableMatches = scheduleMatchesWithPlayerRest(playableMatches, safeCourtCount, baseDate, startTime, safeInterval)
     .map((match) => {
       const originalMatch = originalMatchData.get(match.id);
       return originalMatch
@@ -232,21 +446,106 @@ function scheduleMatchesWithBracketStages(
     });
 
   const [startHour, startMinute] = (startTime || '17:30').split(':').map(Number);
-  const playableSlotCount = Math.ceil(scheduledPlayableMatches.length / courtCount);
-  const scheduledPendingBracketMatches = pendingBracketMatches.map((match, index) => {
-    const slot = playableSlotCount + Math.floor(index / courtCount);
-    const totalMinutes = startHour * 60 + startMinute + (slot * timeInterval);
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
+  const getScheduledSlot = (match: Match) => {
+    if (!match.scheduled_time) return -1;
+    const timePart = match.scheduled_time.split('T')[1] || '';
+    const [hour, minute] = timePart.split(':').map(Number);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return -1;
+    return Math.round((hour * 60 + minute - (startHour * 60 + startMinute)) / safeInterval);
+  };
+  const lastPlayableSlot = scheduledPlayableMatches.reduce(
+    (latest, match) => Math.max(latest, getScheduledSlot(match)),
+    -1
+  );
+  let nextRoundStartSlot = lastPlayableSlot >= 0 ? lastPlayableSlot + 1 : 0;
+  const scheduledPendingBracketMatches: Match[] = [];
+  const pendingRounds = Array.from(new Set(pendingBracketMatches.map((match) => match.round))).sort((a, b) => a - b);
 
-    return {
-      ...match,
-      court: `${(index % courtCount) + 1}코트`,
-      scheduled_time: `${baseDate || '2026-07-01'}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`,
-    };
+  pendingRounds.forEach((round) => {
+    const roundMatches = pendingBracketMatches.filter((match) => match.round === round);
+    roundMatches.forEach((match, index) => {
+      const slot = nextRoundStartSlot + Math.floor(index / safeCourtCount);
+      const totalMinutes = startHour * 60 + startMinute + slot * safeInterval;
+      const hour = Math.floor(totalMinutes / 60);
+      const minute = totalMinutes % 60;
+
+      scheduledPendingBracketMatches.push({
+        ...match,
+        court: `${(index % safeCourtCount) + 1}코트`,
+        scheduled_time: `${baseDate || '2026-07-01'}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`,
+      });
+    });
+
+    nextRoundStartSlot += Math.ceil(roundMatches.length / safeCourtCount);
   });
 
-  return [...scheduledPlayableMatches, ...scheduledPendingBracketMatches];
+  return [...scheduledPlayableMatches, ...scheduledPendingBracketMatches]
+    .sort((left, right) => {
+      const timeDifference = (left.scheduled_time || '').localeCompare(right.scheduled_time || '');
+      if (timeDifference !== 0) return timeDifference;
+      const leftCourt = Number(left.court.match(/\d+/)?.[0] || Number.MAX_SAFE_INTEGER);
+      const rightCourt = Number(right.court.match(/\d+/)?.[0] || Number.MAX_SAFE_INTEGER);
+      return leftCourt - rightCourt;
+    })
+    .map((match, index) => ({ ...match, match_number: index + 1 }));
+}
+
+function inspectScheduledPlayerAssignments(matches: Match[], timeInterval: number) {
+  const errors: string[] = [];
+  const matchesByTime = new Map<string, Match[]>();
+  const playerTimes = new Map<string, number[]>();
+  const playerDisplayNames = new Map<string, string>();
+  const safeIntervalMs = Math.max(1, timeInterval) * 60 * 1000;
+
+  matches.forEach((match) => {
+    if (!match.scheduled_time) return;
+    const current = matchesByTime.get(match.scheduled_time) || [];
+    current.push(match);
+    matchesByTime.set(match.scheduled_time, current);
+
+    const timestamp = new Date(match.scheduled_time).getTime();
+    if (!Number.isFinite(timestamp)) return;
+    [...match.team1, ...match.team2].forEach((name) => {
+      const player = normalizeScheduledPlayerName(name);
+      if (!player) return;
+      if (!playerDisplayNames.has(player)) {
+        playerDisplayNames.set(player, name.replace(/\s*\([^)]*\)\s*$/, '').trim());
+      }
+      const times = playerTimes.get(player) || [];
+      times.push(timestamp);
+      playerTimes.set(player, times);
+    });
+  });
+
+  matchesByTime.forEach((slotMatches, scheduledTime) => {
+    const occupiedPlayers = new Set<string>();
+    slotMatches.forEach((match) => {
+      getScheduledMatchPlayers(match).forEach((player) => {
+        if (occupiedPlayers.has(player)) {
+          errors.push(`${scheduledTime} 동시간대 선수 중복`);
+        }
+        occupiedPlayers.add(player);
+      });
+    });
+  });
+
+  const consecutivePlayerKeys: string[] = [];
+  playerTimes.forEach((times, player) => {
+    const sortedTimes = Array.from(new Set(times)).sort((a, b) => a - b);
+    for (let index = 1; index < sortedTimes.length; index += 1) {
+      if (sortedTimes[index] - sortedTimes[index - 1] < safeIntervalMs * 2) {
+        consecutivePlayerKeys.push(player);
+        break;
+      }
+    }
+  });
+
+  return {
+    errors: Array.from(new Set(errors)),
+    consecutivePlayers: Array.from(new Set(consecutivePlayerKeys))
+      .map((player) => playerDisplayNames.get(player) || player)
+      .sort((left, right) => left.localeCompare(right, 'ko-KR')),
+  };
 }
 
 function formatTournamentTitle(title: string) {
@@ -745,7 +1044,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
     'pointsDiff',
     'h2h',
   ]);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [, setProfiles] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name: string; role: string } | null>(null);
 
   useEffect(() => {
@@ -776,152 +1075,42 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
     void fetchUser();
   }, [supabase]);
 
-  const getDisplayRefereeName = (match: Match) => {
-    if (match.referee_name) {
-      return match.referee_name;
-    }
-
-    const currentRound = match.round || 1;
-    const currentMatchNum = match.match_number || 0;
-    const courtName = match.court || '';
-
-    const precedingMatches = matches.filter((m) => {
-      if (m.court !== courtName || m.id === match.id) return false;
-      return (
-        (m.round || 1) < currentRound ||
-        ((m.round || 1) === currentRound && (m.match_number || 0) < currentMatchNum)
-      );
-    });
-
-    if (precedingMatches.length === 0) {
-      return null;
-    }
-
-    precedingMatches.sort((a, b) => {
-      const roundDiff = (b.round || 1) - (a.round || 1);
-      if (roundDiff !== 0) return roundDiff;
-      return (b.match_number || 0) - (a.match_number || 0);
-    });
-
-    const precedingMatch = precedingMatches[0];
-    if (precedingMatch.status !== 'completed') {
-      return null;
-    }
-
-    const winner = precedingMatch.winner;
-    let winningPlayers: string[] = [];
-    if (winner === 'team1') {
-      winningPlayers = precedingMatch.team1 || [];
-    } else if (winner === 'team2') {
-      winningPlayers = precedingMatch.team2 || [];
-    }
-
-    if (winningPlayers.length > 0) {
-      return winningPlayers.map((name) => name.replace(/\([^)]*\)$/, '').trim()).join(', ');
-    }
-
-    return null;
+  const getRefereeDayMatches = () => {
+    if (!selectedTournament) return matches;
+    const sameDateTournamentIds = new Set(
+      tournaments
+        .filter((tournament) => tournament.tournament_date === selectedTournament.tournament_date)
+        .map((tournament) => tournament.id)
+    );
+    const dayMatches = allTournamentsMatches.filter(
+      (item) => item.tournament_id && sameDateTournamentIds.has(item.tournament_id)
+    );
+    return dayMatches.length > 0 ? dayMatches : matches;
   };
 
+  const getDisplayRefereeName = (match: Match) =>
+    getAutomaticRefereeName(match, getRefereeDayMatches());
+
   const getRefereeOptions = (match: Match) => {
-    const inProgressPlayers = new Set<string>();
-    const currentMatchPlayers = new Set<string>();
-    const nextMatchPlayers = new Set<string>();
+    const dayMatches = getRefereeDayMatches();
+    const sameTimePlayers = getSameTimePlayerKeys(match, dayMatches);
+    const participantNames = new Map<string, string>();
 
-    if (Array.isArray(match.team1)) {
-      match.team1.forEach((p) => currentMatchPlayers.add(p.replace(/\([^)]*\)$/, '').trim().toLowerCase()));
-    }
-    if (Array.isArray(match.team2)) {
-      match.team2.forEach((p) => currentMatchPlayers.add(p.replace(/\([^)]*\)$/, '').trim().toLowerCase()));
-    }
-
-    matches.forEach((m) => {
-      if (m.status === 'in_progress') {
-        if (Array.isArray(m.team1)) {
-          m.team1.forEach((p) => inProgressPlayers.add(p.replace(/\([^)]*\)$/, '').trim().toLowerCase()));
-        }
-        if (Array.isArray(m.team2)) {
-          m.team2.forEach((p) => inProgressPlayers.add(p.replace(/\([^)]*\)$/, '').trim().toLowerCase()));
-        }
-      }
-    });
-
-    const currentRound = match.round || 1;
-    const currentMatchNum = match.match_number || 0;
-    const courtName = match.court || '';
-
-    const futureCourtMatches = matches.filter((m) => {
-      if (m.court !== courtName || m.id === match.id) return false;
-      return (
-        (m.round || 1) > currentRound ||
-        ((m.round || 1) === currentRound && (m.match_number || 0) > currentMatchNum)
-      );
-    });
-
-    futureCourtMatches.sort((a, b) => {
-      const roundDiff = (a.round || 1) - (b.round || 1);
-      if (roundDiff !== 0) return roundDiff;
-      return (a.match_number || 0) - (b.match_number || 0);
-    });
-
-    if (futureCourtMatches.length > 0) {
-      const nextMatch = futureCourtMatches[0];
-      if (Array.isArray(nextMatch.team1)) {
-        nextMatch.team1.forEach((p) => nextMatchPlayers.add(p.replace(/\([^)]*\)$/, '').trim().toLowerCase()));
-      }
-      if (Array.isArray(nextMatch.team2)) {
-        nextMatch.team2.forEach((p) => nextMatchPlayers.add(p.replace(/\([^)]*\)$/, '').trim().toLowerCase()));
-      }
-    }
-
-    const excludedPlayers = new Set<string>([
-      ...inProgressPlayers,
-      ...currentMatchPlayers,
-      ...nextMatchPlayers,
-    ]);
-
-    const playerMatchesMap = new Map<string, number[]>();
-    matches.forEach((m) => {
-      const mNum = m.match_number;
-      const teamPlayers = [...(m.team1 || []), ...(m.team2 || [])];
-      teamPlayers.forEach((p) => {
-        const cleanName = p.replace(/\([^)]*\)$/, '').trim().toLowerCase();
-        if (cleanName) {
-          const nums = playerMatchesMap.get(cleanName) || [];
-          if (!nums.includes(mNum)) {
-            nums.push(mNum);
-          }
-          playerMatchesMap.set(cleanName, nums);
-        }
+    dayMatches.forEach((dayMatch) => {
+      getMatchPlayerNames(dayMatch).forEach((name) => {
+        const key = getRefereePlayerKey(name);
+        if (key && !participantNames.has(key)) participantNames.set(key, name);
       });
     });
 
-    const eligibleReferees = profiles.filter((p) => {
-      const name = p.full_name?.trim();
-      if (!name) return false;
-      const cleanNameLower = name.toLowerCase();
-      
-      // 경기에 참가한 선수만 드롭다운에 표시되도록 제한
-      if (!playerMatchesMap.has(cleanNameLower)) return false;
-      
-      return !excludedPlayers.has(cleanNameLower) || (match.referee_name && match.referee_name.toLowerCase().includes(cleanNameLower));
-    });
-
-    const sortedReferees = [...eligibleReferees].sort((a, b) => 
-      (a.full_name || '').localeCompare(b.full_name || '', 'ko-KR')
-    );
-
-    return sortedReferees.map((p) => {
-      const cleanNameLower = (p.full_name || '').trim().toLowerCase();
-      const playerMatchNums = playerMatchesMap.get(cleanNameLower) || [];
-      const matchSuffix = playerMatchNums.length > 0 ? ` (${playerMatchNums.sort((a, b) => a - b).join(', ')}경기)` : '';
-
-      return (
-        <option key={p.id} value={p.full_name || ''}>
-          {p.full_name}{matchSuffix}
+    return Array.from(participantNames.entries())
+      .filter(([key]) => !sameTimePlayers.has(key))
+      .sort((left, right) => left[1].localeCompare(right[1], 'ko-KR'))
+      .map(([key, name]) => (
+        <option key={key} value={name}>
+          {name}
         </option>
-      );
-    });
+      ));
   };
 
   useEffect(() => {
@@ -1223,15 +1412,19 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
       const sTime = batchStartTime || '17:30';
       const interval = batchInterval || 10;
 
-      // Keep bracket round and match numbers intact. Empty bracket slots are scheduled
-      // after playable matches in round order, so semifinals always precede the final.
       const optimized = scheduleMatchesWithBracketStages(targetMatches, C, baseDate, sTime, interval);
+      const assignmentInspection = inspectScheduledPlayerAssignments(optimized, interval);
+      if (assignmentInspection.errors.length > 0) {
+        throw new Error(`선수 배정 규칙을 충족하지 못했습니다. ${assignmentInspection.errors.join(', ')}`);
+      }
 
       // Batch update DB
       const matchesToUpdate = optimized.filter(m => m.id).map(m => ({
         id: m.id,
         court: m.court,
         scheduled_time: m.scheduled_time,
+        match_number: m.match_number,
+        reset_status: m.status !== 'completed',
       }));
 
       if (matchesToUpdate.length > 0) {
@@ -1247,7 +1440,10 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
         }
       }
 
-      alert(`코트와 시간 일괄 배정이 완료되었습니다. (${matchesToUpdate.length}경기)`);
+      const consecutiveNotice = assignmentInspection.consecutivePlayers.length > 0
+        ? `\n연속 배정: ${assignmentInspection.consecutivePlayers.join(', ')}`
+        : '\n연속 배정: 없음';
+      alert(`코트·시간·경기번호 재배정이 완료되었습니다. (${matchesToUpdate.length}경기)${consecutiveNotice}`);
       // Reload all tournaments to refresh the view
       await fetchMatches(selectedTournament.id);
     } catch (error: any) {
@@ -1538,13 +1734,26 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
       });
 
       if (!response.ok) {
-        throw new Error('심판 배정에 실패했습니다.');
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || '심판 배정에 실패했습니다.');
       }
 
-      // 로컬 상태 업데이트
+      const payload = await response.json().catch(() => null);
+      const updatedRefereeName = (payload?.match?.referee_name ?? refereeName) || null;
+      const updatedRefereeId = payload?.match?.referee_id ?? null;
+
       setMatches((prev) =>
         prev.map((m) =>
-          m.id === matchId ? { ...m, referee_name: refereeName || null } : m
+          m.id === matchId
+            ? { ...m, referee_name: updatedRefereeName, referee_id: updatedRefereeId }
+            : m
+        )
+      );
+      setAllTournamentsMatches((prev) =>
+        prev.map((m) =>
+          m.id === matchId
+            ? { ...m, referee_name: updatedRefereeName, referee_id: updatedRefereeId }
+            : m
         )
       );
     } catch (error) {
@@ -1683,7 +1892,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
       const baseDate = teamAssignment.assignment_date || '2026-07-01';
       const startTime = '17:30';
       const timeInterval = 10;
-      return avoidConsecutiveMatches(finalMatches, maxCourts, baseDate, startTime, timeInterval);
+      return scheduleMatchesWithPlayerRest(finalMatches, maxCourts, baseDate, startTime, timeInterval);
     }
 
     const playerList: string[] = [];
@@ -1793,7 +2002,7 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
     const baseDate = teamAssignment.assignment_date || '2026-07-01';
     const startTime = '17:30';
     const timeInterval = 10;
-    return avoidConsecutiveMatches(finalMatches, maxCourts, baseDate, startTime, timeInterval);
+    return scheduleMatchesWithPlayerRest(finalMatches, maxCourts, baseDate, startTime, timeInterval);
   };
 
   const createTournamentWithMatches = async (matchesPerPlayer: number, matchType: string) => {
@@ -2261,6 +2470,11 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
     return sameDateMatches.length > 0 ? sameDateMatches : matches;
   }, [sameDateMatches, matches]);
 
+  const consecutiveAssignedPlayers = useMemo(
+    () => inspectScheduledPlayerAssignments(targetStatsMatches, batchInterval).consecutivePlayers,
+    [targetStatsMatches, batchInterval]
+  );
+
   const courtCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     targetStatsMatches.forEach((match) => {
@@ -2617,11 +2831,23 @@ export default function TournamentBracketView({ adminMode = false, homeHref: hom
                         </div>
                       )}
                       <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-slate-900">
+                        <h3 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-slate-900">
                           대진표 ({currentMatchesForView.length}경기)
                           {viewMode === 'court' && selectedTournament && (
-                            <span className="ml-2 text-sm text-slate-500 font-normal">({selectedTournament.tournament_date} 전체)</span>
+                            <span className="text-sm text-slate-500 font-normal">({selectedTournament.tournament_date} 전체)</span>
                           )}
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              consecutiveAssignedPlayers.length > 0
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                            title={consecutiveAssignedPlayers.join(', ')}
+                          >
+                            연속 배정자: {consecutiveAssignedPlayers.length > 0
+                              ? consecutiveAssignedPlayers.join(', ')
+                              : '없음'}
+                          </span>
                         </h3>
                       </div>
                       {loading ? (

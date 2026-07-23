@@ -32,6 +32,14 @@ export async function PUT(request: Request) {
       if (m.scheduled_time !== undefined) updateData.scheduled_time = m.scheduled_time || null;
       if (m.match_number !== undefined) updateData.match_number = m.match_number;
       if (m.round !== undefined) updateData.round = m.round;
+      if (m.reset_status === true) {
+        updateData.status = 'pending';
+        updateData.score_team1 = null;
+        updateData.score_team2 = null;
+        updateData.winner = null;
+        updateData.referee_id = null;
+        updateData.referee_name = null;
+      }
 
       const { error } = await adminContext.adminSupabase
         .from('tournament_matches')

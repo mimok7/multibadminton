@@ -77,6 +77,7 @@ export async function fetchMyTournamentMatches(
   } | null
 ): Promise<{
   allTournamentMatchCount: number;
+  allMatches: MyTournamentMatchView[];
   matches: MyTournamentMatchView[];
 }> {
   const searchNames = [profile?.username, profile?.full_name]
@@ -86,12 +87,14 @@ export async function fetchMyTournamentMatches(
   if (searchNames.length === 0) {
     return {
       allTournamentMatchCount: 0,
+      allMatches: [],
       matches: [],
     };
   }
 
   const response = await fetch('/api/tournaments?include_matches=1', {
     credentials: 'include',
+    cache: 'no-store',
   });
   const payload = await response.json().catch(() => null);
 
@@ -149,6 +152,7 @@ export async function fetchMyTournamentMatches(
 
     const tournamentResponse = await fetch(`/api/tournaments?include_matches=1&tournament_id=${tournamentId}`, {
       credentials: 'include',
+      cache: 'no-store',
     });
     const tournamentPayload = await tournamentResponse.json().catch(() => null);
 
@@ -187,8 +191,7 @@ export async function fetchMyTournamentMatches(
     })
   );
 
-  const matches: MyTournamentMatchView[] = filteredMatches
-    .map((match) => {
+  const toTournamentMatchView = (match: TournamentMatchRow): MyTournamentMatchView => {
       const tournament = tournamentMap.get(match.tournament_id);
       return {
         ...match,
@@ -197,27 +200,39 @@ export async function fetchMyTournamentMatches(
         tournament_date: tournament?.tournament_date || null,
         match_type: tournament?.match_type || null,
       };
-    })
-    .sort((left, right) => {
-      if (left.round !== right.round) {
-        return left.round - right.round;
-      }
+  };
 
-      if (left.match_number !== right.match_number) {
-        return left.match_number - right.match_number;
-      }
+  const sortMatches = (left: MyTournamentMatchView, right: MyTournamentMatchView) => {
+    const leftDate = left.scheduled_time || left.tournament_date || '';
+    const rightDate = right.scheduled_time || right.tournament_date || '';
+    if (leftDate !== rightDate) {
+      return leftDate.localeCompare(rightDate, 'ko');
+    }
 
-      const leftDate = left.tournament_date || '';
-      const rightDate = right.tournament_date || '';
-      if (leftDate !== rightDate) {
-        return leftDate.localeCompare(rightDate, 'ko');
-      }
+    const courtDiff = String(left.court || '').localeCompare(String(right.court || ''), 'ko', { numeric: true });
+    if (courtDiff !== 0) {
+      return courtDiff;
+    }
 
-      return (left.tournament_title || '').localeCompare(right.tournament_title || '', 'ko');
-    });
+    if (left.round !== right.round) {
+      return left.round - right.round;
+    }
+
+    return left.match_number - right.match_number;
+  };
+
+  const allMatches = Array.from(allMatchesByTournament.values())
+    .flat()
+    .map(toTournamentMatchView)
+    .sort(sortMatches);
+
+  const matches: MyTournamentMatchView[] = filteredMatches
+    .map(toTournamentMatchView)
+    .sort(sortMatches);
 
   return {
     allTournamentMatchCount: initialAllMatches.length,
+    allMatches,
     matches,
   };
 }

@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { getClubManagerContext } from '@/lib/manager-access';
 import { advanceBracketWinner, advanceLeagueFinalists, ensureBracketResultCanChange, resolveKnockoutBye } from '@/lib/tournament-bracket';
 import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
+import {
+  fetchTournamentDayMatches,
+  getMatchPlayerNames,
+  getRefereePlayerKey,
+  getSameTimePlayerKeys,
+} from '@/lib/tournament-referee';
 import { createBalancedDoublesMatches, createMixedAndSameSexDoublesMatches, createRandomBalancedDoublesMatches } from '@/utils/match-utils';
 import type { Player } from '@/types';
 
@@ -748,14 +754,55 @@ export async function PATCH(request: Request) {
     const hasRefereeUpdate = 'referee_name' in (payload || {});
     const scoreTeam1 = typeof payload?.score_team1 === 'number' ? payload.score_team1 : null;
     const scoreTeam2 = typeof payload?.score_team2 === 'number' ? payload.score_team2 : null;
+    const scopedMatch = await findScopedTournamentMatch(adminContext, matchId);
+    if (!scopedMatch) {
+      return NextResponse.json({ error: 'Tournament match not found' }, { status: 404 });
+    }
+
+    const existingMatch = scopedMatch.match;
+    const mutationClient = scopedMatch.client;
 
     if (hasRefereeUpdate && scoreTeam1 == null && scoreTeam2 == null) {
-      // 심판 배정만 업데이트
-      const refereeName = typeof payload?.referee_name === 'string' ? payload.referee_name : null;
-      let refereeId = typeof payload?.referee_id === 'string' ? payload.referee_id : null;
+      const requestedRefereeName = typeof payload?.referee_name === 'string'
+        ? payload.referee_name.trim()
+        : '';
+      let refereeName: string | null = requestedRefereeName || null;
+      let refereeId: string | null = null;
+
+      if (refereeName) {
+        const dayMatches = await fetchTournamentDayMatches(
+          mutationClient,
+          existingMatch.tournament_id,
+          adminContext.clubId
+        );
+        const participantNames = new Map<string, string>();
+        dayMatches.forEach((dayMatch) => {
+          getMatchPlayerNames(dayMatch).forEach((name) => {
+            const key = getRefereePlayerKey(name);
+            if (key && !participantNames.has(key)) participantNames.set(key, name);
+          });
+        });
+
+        const refereeKey = getRefereePlayerKey(refereeName);
+        const canonicalName = participantNames.get(refereeKey);
+        if (!canonicalName) {
+          return NextResponse.json(
+            { error: '해당 날짜의 대회 참가 선수만 심판으로 배정할 수 있습니다.' },
+            { status: 400 }
+          );
+        }
+
+        if (getSameTimePlayerKeys(existingMatch, dayMatches).has(refereeKey)) {
+          return NextResponse.json(
+            { error: '같은 시간대에 경기가 있는 선수는 심판으로 배정할 수 없습니다.' },
+            { status: 409 }
+          );
+        }
+        refereeName = canonicalName;
+      }
 
       if (!refereeId && refereeName) {
-        const { data: profile } = await adminContext.adminSupabase
+        const { data: profile } = await mutationClient
           .from('profiles')
           .select('id')
           .eq('full_name', refereeName.trim())
@@ -770,8 +817,11 @@ export async function PATCH(request: Request) {
         referee_name: refereeName,
         referee_id: refereeId || null,
       };
+      if (scopedMatch.needsClubRepair) {
+        updateData.club_id = adminContext.clubId;
+      }
 
-      const { data, error } = await adminContext.adminSupabase
+      const { data, error } = await mutationClient
         .from('tournament_matches')
         .update(updateData)
         .eq('id', matchId)
@@ -798,14 +848,6 @@ export async function PATCH(request: Request) {
     if (scoreTeam1 == null || scoreTeam2 == null) {
       return NextResponse.json({ error: 'Invalid score payload' }, { status: 400 });
     }
-
-    const scopedMatch = await findScopedTournamentMatch(adminContext, matchId);
-    if (!scopedMatch) {
-      return NextResponse.json({ error: 'Tournament match not found' }, { status: 404 });
-    }
-
-    const existingMatch = scopedMatch.match;
-    const mutationClient = scopedMatch.client;
 
     if (!Array.isArray(existingMatch.team1) || !Array.isArray(existingMatch.team2) || existingMatch.team1.length === 0 || existingMatch.team2.length === 0) {
       return NextResponse.json({ error: '참가 팀이 확정된 뒤에 결과를 저장할 수 있습니다.' }, { status: 409 });
