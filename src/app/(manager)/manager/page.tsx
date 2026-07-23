@@ -116,6 +116,11 @@ export default function ManagerDashboardPage() {
             <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">클럽의 공지사항을 등록하고 관리하세요</p>
           </Link>
 
+          <Link href="/manager/guests" className="rounded-lg border border-blue-200 bg-white px-3 py-3 transition-colors hover:border-teal-400 hover:bg-teal-50 sm:p-4 shadow-sm">
+            <h3 className="text-sm font-medium text-gray-900 sm:text-base">🧑‍🤝‍🧑 게스트 추가</h3>
+            <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">현재 클럽의 게스트 회원을 추가하세요</p>
+          </Link>
+
           {canUseClubTools && (
             <Link
               href="/members"

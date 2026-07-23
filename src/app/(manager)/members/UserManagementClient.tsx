@@ -47,8 +47,11 @@ function findEtcLevelOption(levelOptions: LevelOption[]) {
 
 const UNASSIGNED_LEVEL_KEY = '__UNASSIGNED__';
 
-function normalizeEditableRole(value?: string | null): 'member' | 'manager' {
-    return String(value || '').trim().toLowerCase() === 'manager' ? 'manager' : 'member';
+function normalizeEditableRole(value?: string | null): 'member' | 'manager' | 'guest' {
+    const role = String(value || '').trim().toLowerCase();
+    if (role === 'manager') return 'manager';
+    if (role === 'guest') return 'guest';
+    return 'member';
 }
 
 export default function UserManagementClient({
@@ -89,7 +92,7 @@ export default function UserManagementClient({
     const [draftsByUserId, setDraftsByUserId] = useState<Record<string, UpdateUserPayload & { email?: string | null }>>({});
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState<TabKey>('overview');
-    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'manager' | 'member'>('all');
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'manager' | 'member' | 'guest'>('all');
     const [genderFilter, setGenderFilter] = useState<'all' | 'M' | 'F' | 'O' | 'unset'>('all');
     const [levelFilter, setLevelFilter] = useState<string>('all');
     const [sortKey, setSortKey] = useState<MemberSortKey>('member');
@@ -390,7 +393,7 @@ export default function UserManagementClient({
                 full_name: newMember.full_name,
                 skill_level: normalizeSkillLevel(newMember.skill_level),
                 gender: newMember.gender,
-                role: newMember.role as 'manager' | 'member',
+                role: newMember.role as 'manager' | 'member' | 'guest',
             });
 
             if (result?.error) {
@@ -825,11 +828,12 @@ export default function UserManagementClient({
                                         ) : (
                                             <select
                                                 value={normalizeEditableRole(draft.role)}
-                                                onChange={(e) => updateDraft(user.id, { role: e.target.value as 'member' | 'manager' })}
+                                                onChange={(e) => updateDraft(user.id, { role: e.target.value as 'member' | 'manager' | 'guest' })}
                                                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                             >
                                                 <option value="member">member</option>
                                                 <option value="manager">manager</option>
+                                                <option value="guest">guest</option>
                                             </select>
                                         )}
                                     </td>
@@ -988,11 +992,12 @@ export default function UserManagementClient({
                                     ) : (
                                         <select
                                             value={normalizeEditableRole(draft.role)}
-                                            onChange={(e) => updateDraft(user.id, { role: e.target.value as 'member' | 'manager' })}
+                                            onChange={(e) => updateDraft(user.id, { role: e.target.value as 'member' | 'manager' | 'guest' })}
                                             className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500"
                                         >
                                             <option value="member">일반회원 (member)</option>
                                             <option value="manager">매니저 (manager)</option>
+                                            <option value="guest">게스트 (guest)</option>
                                         </select>
                                     )}
                                 </div>
@@ -1191,6 +1196,7 @@ export default function UserManagementClient({
                             <option value="admin">admin</option>
                             <option value="manager">manager</option>
                             <option value="member">member</option>
+                            <option value="guest">guest</option>
                         </select>
                         <select
                             value={levelFilter}
@@ -1747,7 +1753,7 @@ export default function UserManagementClient({
                                 단일 회원의 이름, 급수, 성별, 권한을 지정하여 등록합니다.
                             </p>
                         </div>
-                        <div className="mt-3 grid gap-2 sm:mt-5 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="mt-3 grid gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 lg:grid-cols-5">
                             <input
                                 type="text"
                                 value={newMember.full_name}
@@ -1782,6 +1788,15 @@ export default function UserManagementClient({
                                 <option value="M">남성</option>
                                 <option value="F">여성</option>
                                 <option value="O">기타</option>
+                            </select>
+                            <select
+                                value={newMember.role}
+                                onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
+                                className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm"
+                            >
+                                <option value="member">일반회원 (member)</option>
+                                <option value="manager">매니저 (manager)</option>
+                                <option value="guest">게스트 (guest)</option>
                             </select>
                             <button
                                 type="button"

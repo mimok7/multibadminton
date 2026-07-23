@@ -17,7 +17,7 @@ export default function SuperadminMembersClient({ clubs, memberships, profiles }
   const selectedClub = clubs.find((club) => club.id === selectedClubId);
   const clubMembers = memberships.filter((member) => member.club_id === selectedClubId);
   const sortedClubMembers = useMemo(() => {
-    const roleOrder: Record<string, number> = { owner: 0, admin: 1, manager: 2, member: 3 };
+    const roleOrder: Record<string, number> = { owner: 0, admin: 1, manager: 2, member: 3, guest: 4 };
     return [...clubMembers].sort((left, right) => {
       const leftValue = sortKey === 'name'
         ? left.full_name || left.username || ''
@@ -40,6 +40,7 @@ export default function SuperadminMembersClient({ clubs, memberships, profiles }
     { value: 'admin', label: '관리자' },
     { value: 'manager', label: '매니저' },
     { value: 'member', label: '회원' },
+    { value: 'guest', label: '게스트' },
   ];
 
   const handleBulkAdd = () => {

@@ -80,13 +80,14 @@ async function getTargetClubMember(
 export type UpdateUserPayload = {
     username?: string | null;
     full_name?: string | null;
-    role?: 'owner' | 'admin' | 'manager' | 'member' | 'user' | null;
+    role?: 'owner' | 'admin' | 'manager' | 'member' | 'guest' | 'user' | null;
     skill_level?: string | null;
     gender?: 'M' | 'F' | 'O' | string | null;
 }
 
-function toClubMemberRole(role: UpdateUserPayload['role']): 'manager' | 'member' | null {
+function toClubMemberRole(role: UpdateUserPayload['role']): 'manager' | 'member' | 'guest' | null {
     if (role === 'manager') return 'manager';
+    if (role === 'guest') return 'guest';
     if (role === 'member' || role === 'user') return 'member';
     return null;
 }
@@ -195,7 +196,7 @@ function romanizeSyllable(char: string): string {
 
 function buildAutoEmail(fullName: string): string {
     const prefix = fullName.trim() ? 'user' : 'member';
-    return `${prefix}_${crypto.randomUUID()}@badminton.local`;
+    return `${prefix}_${crypto.randomUUID()}@badminton.com`;
 }
 
 export type CreateMemberPayload = {
@@ -204,7 +205,7 @@ export type CreateMemberPayload = {
     password?: string | null;
     skill_level?: string | null;
     gender?: 'M' | 'F' | 'O' | string | null;
-    role?: 'manager' | 'member' | 'user' | null;
+    role?: 'manager' | 'member' | 'guest' | 'user' | null;
 };
 
 export async function createMember(payload: CreateMemberPayload, options: { revalidate?: boolean } = {}) {
@@ -224,7 +225,7 @@ export async function createMember(payload: CreateMemberPayload, options: { reva
         email: email,
         password: password,
         email_confirm: true,
-        user_metadata: { full_name: fullName, club_id: ctx.clubId }
+        user_metadata: { full_name: fullName, club_id: ctx.clubId, is_guest: payload.role === 'guest' }
     });
 
     if (authError) return { error: `인증 계정 생성 실패: ${authError.message}` };
@@ -234,32 +235,48 @@ export async function createMember(payload: CreateMemberPayload, options: { reva
 
     // 2. 프로필 업데이트 (트리거가 생성했을 수도 있고 안 했을 수도 있음)
     const updatePayload = {
+        id: userId,
+        user_id: userId,
+        email,
         username: fullName,
         full_name: fullName,
+        // profiles.role is a global role and only accepts canonical values.
+        // Guest status is represented by is_guest and club_members.role.
+        role: 'member',
         skill_level: payload.skill_level || 'E2',
         gender: payload.gender || null,
+        is_guest: payload.role === 'guest',
     };
     
     // Upsert to ensure profile exists
-    await supabaseAdmin.from('profiles').upsert({
-        user_id: userId,
-        ...updatePayload
-    }, { onConflict: 'user_id' });
+    const { data: profile, error: profileError } = await (supabaseAdmin as any)
+        .from('profiles')
+        .upsert(updatePayload, { onConflict: 'user_id' })
+        .select('id')
+        .single();
+    if (profileError || !profile) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+        return { error: `프로필 생성 실패: ${profileError?.message || '프로필 정보가 없습니다.'}` };
+    }
 
     // 3. 클럽 멤버십 연결
-    const clubRole = payload.role === 'manager' ? 'manager' : 'member';
-    await (supabaseAdmin as any).from('club_members').upsert({
+    const clubRole = payload.role === 'manager' ? 'manager' : payload.role === 'guest' ? 'guest' : 'member';
+    const { error: membershipError } = await (supabaseAdmin as any).from('club_members').upsert({
         club_id: ctx.clubId,
-        user_id: userId,
+        user_id: profile.id,
         role: clubRole,
         status: 'active'
     }, { onConflict: 'club_id,user_id' });
+    if (membershipError) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+        return { error: `클럽 권한 생성 실패: ${membershipError.message}` };
+    }
 
     if (options.revalidate !== false) revalidatePath('/manager/members');
     return { success: true };
 }
 
-export async function createMembersBulk(payload: { full_names: string; skill_level?: string | null; role?: 'manager' | 'member' | 'user' | null }) {
+export async function createMembersBulk(payload: { full_names: string; skill_level?: string | null; role?: 'manager' | 'member' | 'guest' | 'user' | null }) {
     const ctx = await getManagerContext();
     if (!ctx) return { error: '추가 권한이 없습니다.' };
 

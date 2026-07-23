@@ -1,129 +1,180 @@
 import { NextResponse } from 'next/server';
-import { getFilteredAdminClient } from '@/lib/supabase-server';
+import { getUnfilteredGlobalAdminClient } from '@/lib/supabase-server';
 import { getKoreaDate } from '@/lib/date';
 import { readCoinSettings } from '@/lib/coin-settings';
 
-export async function POST(request: Request) {
-  try {
-    const { fullName, skillLevel } = await request.json().catch(() => ({ fullName: '', skillLevel: 'N3' }));
-    const trimmedName = fullName?.trim();
-    const trimmedLevel = skillLevel?.trim() || 'N3';
+function normalizeClubCode(value: unknown) {
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
+}
 
-    if (!trimmedName) {
-      return NextResponse.json({ error: '이름을 입력해주세요.' }, { status: 400 });
+async function findClubByCode(clubCode: string) {
+  if (!clubCode) return null;
+
+  const admin = getUnfilteredGlobalAdminClient();
+  const { data, error } = await admin
+    .from('clubs')
+    .select('id, name, code')
+    .eq('code', clubCode)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function GET(request: Request) {
+  try {
+    const clubCode = normalizeClubCode(new URL(request.url).searchParams.get('club'));
+    const club = await findClubByCode(clubCode);
+
+    if (!club) {
+      return NextResponse.json({ error: '클럽을 찾을 수 없습니다.' }, { status: 404 });
     }
 
+    const admin = getUnfilteredGlobalAdminClient();
+    const { data: schedules, error } = await admin
+      .from('match_schedules')
+      .select('id, match_date, start_time, end_time, location, description, max_participants, current_participants')
+      .eq('club_id', club.id)
+      .eq('status', 'scheduled')
+      .gte('match_date', getKoreaDate())
+      .order('match_date', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      console.error('Guest registration schedules lookup error:', error);
+      return NextResponse.json({ error: '경기 일정을 불러오지 못했습니다.' }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      { club: { name: club.name, code: club.code }, schedules: schedules || [] },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
+  } catch (error) {
+    console.error('Guest registration info error:', error);
+    return NextResponse.json({ error: '게스트 신청 정보를 불러오지 못했습니다.' }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  let createdAuthUserId: string | null = null;
+
+  try {
+    const body = await request.json().catch(() => ({}));
+    const clubCode = normalizeClubCode(body?.clubCode);
+    const scheduleId = typeof body?.scheduleId === 'string' ? body.scheduleId : '';
+    const trimmedName = typeof body?.fullName === 'string' ? body.fullName.trim() : '';
+    const trimmedLevel = typeof body?.skillLevel === 'string' && body.skillLevel.trim() ? body.skillLevel.trim() : 'N3';
+
+    if (!clubCode || !scheduleId) {
+      return NextResponse.json({ error: '클럽과 참가할 경기를 선택해주세요.' }, { status: 400 });
+    }
     if (trimmedName.length < 2) {
       return NextResponse.json({ error: '이름을 두 글자 이상 입력해주세요.' }, { status: 400 });
     }
 
-    const supabase = await getFilteredAdminClient();
-    const todayStr = getKoreaDate();
+    const club = await findClubByCode(clubCode);
+    if (!club) {
+      return NextResponse.json({ error: '클럽을 찾을 수 없습니다.' }, { status: 404 });
+    }
 
-    // 1. 오늘 열리는 경기 일정 중 정원이 남아 있는 일정을 가져온다.
-    const { data: schedules, error: schedError } = await supabase
+    const admin = getUnfilteredGlobalAdminClient();
+    const { data: schedule, error: scheduleError } = await admin
       .from('match_schedules')
-      .select('id, current_participants, max_participants, description, start_time')
-      .eq('match_date', todayStr)
+      .select('id, match_date, description, max_participants')
+      .eq('id', scheduleId)
+      .eq('club_id', club.id)
       .eq('status', 'scheduled')
-      .order('start_time', { ascending: true });
+      .gte('match_date', getKoreaDate())
+      .maybeSingle();
 
-    if (schedError) {
-      console.error('경기 일정 조회 실패:', schedError);
-      return NextResponse.json({ error: '경기 일정을 확인하는 데 실패했습니다.' }, { status: 500 });
+    if (scheduleError) {
+      console.error('Guest registration schedule validation error:', scheduleError);
+      return NextResponse.json({ error: '경기 일정을 확인하지 못했습니다.' }, { status: 500 });
+    }
+    if (!schedule) {
+      return NextResponse.json({ error: '선택한 클럽에서 신청 가능한 경기가 아닙니다.' }, { status: 400 });
     }
 
-    if (!schedules || schedules.length === 0) {
-      return NextResponse.json(
-        { error: '오늘 예정된 경기 일정이 없습니다.' },
-        { status: 400 }
-      );
+    const { count, error: countError } = await admin
+      .from('match_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('match_schedule_id', schedule.id)
+      .in('status', ['registered', 'attended']);
+    if (countError) {
+      return NextResponse.json({ error: '경기 정원을 확인하지 못했습니다.' }, { status: 500 });
+    }
+    if ((count || 0) >= (schedule.max_participants ?? 20)) {
+      return NextResponse.json({ error: '선택한 경기는 정원이 마감되었습니다.' }, { status: 400 });
     }
 
-    // 정원 미달인 경기 찾기
-    const availableSchedules = schedules.filter(
-      (s) => (s.current_participants ?? 0) < (s.max_participants ?? 20)
-    );
-
-    if (availableSchedules.length === 0) {
-      return NextResponse.json(
-        { error: '오늘 경기 일정의 정원이 모두 마감되었습니다. 게스트 추가가 불가합니다.' },
-        { status: 400 }
-      );
-    }
-
-    // 첫 번째 참가 가능한 경기를 타겟으로 선정
-    const targetSchedule = availableSchedules[0];
-
-    // 2. 임시 게스트 계정 생성
-    const tempId = Date.now() + Math.random().toString().slice(2, 6);
+    const tempId = `${Date.now()}${Math.random().toString().slice(2, 6)}`;
     const email = `guest_${tempId}@badminton.com`;
-    const password = 'bad123!';
-
-    const { data: userData, error: createUserError } = await supabase.auth.admin.createUser({
+    const { data: userData, error: createUserError } = await admin.auth.admin.createUser({
       email,
-      password,
+      password: 'bad123!',
       email_confirm: true,
-      user_metadata: {
-        full_name: trimmedName,
-        is_guest: true,
-      }
+      user_metadata: { full_name: trimmedName, is_guest: true },
     });
-
     if (createUserError || !userData.user) {
-      console.error('게스트 사용자 생성 실패:', createUserError);
-      return NextResponse.json({ error: '게스트 사용자 생성에 실패했습니다.' }, { status: 500 });
+      console.error('Guest user creation error:', createUserError);
+      return NextResponse.json({ error: '게스트 계정을 생성하지 못했습니다.' }, { status: 500 });
     }
+    createdAuthUserId = userData.user.id;
 
-    const userId = userData.user.id;
-
-    // 3. profiles 테이블 업데이트
     const coinSettings = await readCoinSettings();
-    const username = `${trimmedName} (게스트_${tempId})`;
-    const { error: profileError } = await supabase
+    const username = `${trimmedName} (게스트_${tempId.slice(-6)})`;
+    const { data: profile, error: profileError } = await (admin as any)
       .from('profiles')
-      .update({
+      .upsert({
+        id: createdAuthUserId,
+        user_id: createdAuthUserId,
+        email,
         username,
         full_name: trimmedName,
+        role: 'member',
         is_guest: true,
         skill_level: trimmedLevel,
-        coin_balance: coinSettings.guestInitialCoin ?? 5
-      })
-      .eq('id', userId);
+        coin_balance: coinSettings.guestInitialCoin ?? 5,
+      }, { onConflict: 'user_id' })
+      .select('id')
+      .single();
+    if (profileError || !profile) throw profileError || new Error('Guest profile was not created');
 
-    if (profileError) {
-      console.error('게스트 프로필 업데이트 실패:', profileError);
-      // 롤백
-      await supabase.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: '게스트 프로필 생성에 실패했습니다.' }, { status: 500 });
-    }
+    const { error: memberError } = await admin
+      .from('club_members')
+      .upsert({
+        club_id: club.id,
+        user_id: profile.id,
+        role: 'guest',
+        status: 'active',
+        coin_balance: coinSettings.guestInitialCoin ?? 5,
+      } as any, { onConflict: 'club_id,user_id' });
+    if (memberError) throw memberError;
 
-    // 4. 참가 신청 등록
-    const { error: participateError } = await supabase
+    const { error: participantError } = await admin
       .from('match_participants')
       .insert({
-        match_schedule_id: targetSchedule.id,
-        user_id: userId,
+        match_schedule_id: schedule.id,
+        user_id: profile.id,
+        club_id: club.id,
         status: 'registered',
-        notes: '일일 게스트 신청'
-      });
+        notes: '클럽 게스트 신청',
+      } as any);
+    if (participantError) throw participantError;
 
-    if (participateError) {
-      console.error('참가 신청 실패:', participateError);
-      // 롤백
-      await supabase.from('profiles').delete().eq('id', userId);
-      await supabase.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: '참가 신청 처리에 실패했습니다.' }, { status: 500 });
-    }
+    await admin
+      .from('match_schedules')
+      .update({ current_participants: (count || 0) + 1 })
+      .eq('id', schedule.id)
+      .eq('club_id', club.id);
 
-    return NextResponse.json({
-      success: true,
-      email,
-      password,
-      matchDescription: targetSchedule.description || '오늘 경기',
-    });
+    return NextResponse.json({ success: true, clubName: club.name, matchDescription: schedule.description || `${schedule.match_date} 경기` });
   } catch (error) {
-    console.error('register-guest error:', error);
-    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
+    console.error('Guest registration error:', error);
+    if (createdAuthUserId) {
+      const admin = getUnfilteredGlobalAdminClient();
+      await admin.auth.admin.deleteUser(createdAuthUserId);
+    }
+    return NextResponse.json({ error: '게스트 신청 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' }, { status: 500 });
   }
 }

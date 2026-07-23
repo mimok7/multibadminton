@@ -1,139 +1,118 @@
-import { Player, Match, Team } from '@/types';
-import { getTeamScore, reorderMatchesToAvoidConsecutive } from './match-helpers';
+import type { Match, Player, Team } from '@/types';
+import { getTeamScore, reorderMatchesToAvoidConsecutive, shuffle } from './match-helpers';
+
+export function getEqualGamesPerPlayer(playerCount: number, requestedGames: number): number {
+  if (playerCount < 4) return 0;
+
+  let gamesPerPlayer = Math.max(1, Math.floor(requestedGames || 1));
+  while ((playerCount * gamesPerPlayer) % 4 !== 0) {
+    gamesPerPlayer += 1;
+  }
+  return gamesPerPlayer;
+}
+
+const getPairKey = (player1: Player, player2: Player) =>
+  [player1.id, player2.id].sort((left, right) => left.localeCompare(right)).join('::');
+
+function chooseBalancedTeams(
+  four: Player[],
+  partnerCounts: Record<string, number>
+): { team1: Team; team2: Team } | null {
+  if (four.length !== 4) return null;
+
+  const candidates: Array<{ team1: Team; team2: Team; scoreDiff: number; repeatedPartners: number }> = [
+    {
+      team1: { player1: four[0], player2: four[1] },
+      team2: { player1: four[2], player2: four[3] },
+      scoreDiff: 0,
+      repeatedPartners: 0,
+    },
+    {
+      team1: { player1: four[0], player2: four[2] },
+      team2: { player1: four[1], player2: four[3] },
+      scoreDiff: 0,
+      repeatedPartners: 0,
+    },
+    {
+      team1: { player1: four[0], player2: four[3] },
+      team2: { player1: four[1], player2: four[2] },
+      scoreDiff: 0,
+      repeatedPartners: 0,
+    },
+  ].map((candidate) => ({
+    ...candidate,
+    scoreDiff: Math.abs(getTeamScore(candidate.team1) - getTeamScore(candidate.team2)),
+    repeatedPartners:
+      (partnerCounts[getPairKey(candidate.team1.player1, candidate.team1.player2)] || 0) +
+      (partnerCounts[getPairKey(candidate.team2.player1, candidate.team2.player2)] || 0),
+  }));
+
+  const minimumPartnerRepeats = Math.min(...candidates.map((candidate) => candidate.repeatedPartners));
+  const leastRepeated = candidates.filter((candidate) => candidate.repeatedPartners === minimumPartnerRepeats);
+  const minimumScoreDiff = Math.min(...leastRepeated.map((candidate) => candidate.scoreDiff));
+  const best = leastRepeated.filter((candidate) => candidate.scoreDiff === minimumScoreDiff);
+  const selected = best[Math.floor(Math.random() * best.length)];
+
+  return selected ? { team1: selected.team1, team2: selected.team2 } : null;
+}
 
 export function createRandomBalancedDoublesMatches(playersInput: Player[], minGamesPerPlayer = 1): Match[] {
   if (!Array.isArray(playersInput) || playersInput.length < 4) return [];
 
-  const players = [...playersInput].sort((a, b) => a.id.localeCompare(b.id));
-  const counts: Record<string, number> = {};
-  players.forEach(p => { counts[p.id] = 0; });
+  const uniquePlayers = Array.from(new Map(playersInput.map((player) => [player.id, player])).values());
+  if (uniquePlayers.length < 4) return [];
+
+  const gamesPerPlayer = getEqualGamesPerPlayer(uniquePlayers.length, minGamesPerPlayer);
+  const totalMatches = (uniquePlayers.length * gamesPerPlayer) / 4;
+  const remaining: Record<string, number> = Object.fromEntries(
+    uniquePlayers.map((player) => [player.id, gamesPerPlayer])
+  );
+  const participationCounts: Record<string, number> = Object.fromEntries(
+    uniquePlayers.map((player) => [player.id, 0])
+  );
+  const partnerCounts: Record<string, number> = {};
   const result: Match[] = [];
-  const totalPlayers = players.length;
-  let targetMatches = Math.ceil((totalPlayers * minGamesPerPlayer) / 4);
-  targetMatches = Math.max(targetMatches, Math.ceil(totalPlayers / 4));
-  
-  console.log(`🎲 랜덤 경기 생성 시작: ${totalPlayers}명, 최소 ${targetMatches}경기`);
 
-  const bestBalancedPairs = (four: Player[]): { t1: Team; t2: Team } | null => {
-    if (four.length !== 4) return null;
-    const combos: [Team, Team][] = [
-      [ { player1: four[0], player2: four[1] }, { player1: four[2], player2: four[3] } ],
-      [ { player1: four[0], player2: four[2] }, { player1: four[1], player2: four[3] } ],
-      [ { player1: four[0], player2: four[3] }, { player1: four[1], player2: four[2] } ],
-    ];
+  for (let matchIndex = 0; matchIndex < totalMatches; matchIndex += 1) {
+    const candidates = shuffle(uniquePlayers.filter((player) => remaining[player.id] > 0))
+      .sort((left, right) => {
+        const remainingDiff = remaining[right.id] - remaining[left.id];
+        if (remainingDiff !== 0) return remainingDiff;
+        return participationCounts[left.id] - participationCounts[right.id];
+      });
+    const selectedPlayers = candidates.slice(0, 4);
 
-    let best: { t1: Team; t2: Team } | null = null;
-    let bestDiff = Number.POSITIVE_INFINITY;
-    for (const [a, b] of combos) {
-      const diff = Math.abs(getTeamScore(a) - getTeamScore(b));
-      if (diff < bestDiff) { bestDiff = diff; best = { t1: a, t2: b }; }
+    if (selectedPlayers.length !== 4) {
+      throw new Error('모든 선수의 경기 횟수를 동일하게 배정하지 못했습니다.');
     }
-    return best;
-  };
 
-  let attempts = 0;
-  const maxAttempts = targetMatches * 5;
-  
-  while (result.length < targetMatches && attempts < maxAttempts) {
-    const pool = [...players].sort((a, b) => {
-      const countDiff = counts[a.id] - counts[b.id];
-      if (countDiff !== 0) return countDiff;
-      // 난수를 사용하여 셔플 (클릭 시마다 매번 다른 결과 보장)
-      return Math.random() - 0.5;
+    const teams = chooseBalancedTeams(selectedPlayers, partnerCounts);
+    if (!teams) {
+      throw new Error('랜덤 복식 팀을 구성하지 못했습니다.');
+    }
+
+    result.push({
+      id: `match-random-${Date.now()}-${matchIndex}-${Math.random().toString(36).slice(2, 7)}`,
+      team1: teams.team1,
+      team2: teams.team2,
     });
 
-    const minCount = counts[pool[0].id];
-    const minCountPlayers = pool.filter(p => counts[p.id] === minCount);
+    [teams.team1.player1, teams.team1.player2, teams.team2.player1, teams.team2.player2].forEach((player) => {
+      remaining[player.id] -= 1;
+      participationCounts[player.id] += 1;
+    });
 
-    const numMatchesToGenerate = Math.floor(minCountPlayers.length / 4);
-
-    if (numMatchesToGenerate > 0) {
-      let bestSchedule: { t1: Team; t2: Team }[] = [];
-      let bestMaxDiff = Number.POSITIVE_INFINITY;
-      
-      const iterations = 500;
-      for (let iter = 0; iter < iterations; iter++) {
-        const shuffled = [...minCountPlayers].sort(() => Math.random() - 0.5);
-        let maxDiff = 0;
-        const currentSchedule: { t1: Team; t2: Team }[] = [];
-        
-        for (let i = 0; i < numMatchesToGenerate; i++) {
-          const four = shuffled.slice(i * 4, i * 4 + 4);
-          const pairing = bestBalancedPairs(four);
-          if (pairing) {
-            const diff = Math.abs(getTeamScore(pairing.t1) - getTeamScore(pairing.t2));
-            if (diff > maxDiff) maxDiff = diff;
-            currentSchedule.push(pairing);
-          }
-        }
-        
-        if (currentSchedule.length === numMatchesToGenerate && maxDiff < bestMaxDiff) {
-          bestMaxDiff = maxDiff;
-          bestSchedule = currentSchedule;
-        }
-      }
-      
-      for (const pairing of bestSchedule) {
-        result.push({
-          id: `match-rand-${Date.now()}-${attempts}-${Math.random().toString(36).slice(2, 6)}`,
-          team1: pairing.t1,
-          team2: pairing.t2
-        });
-        counts[pairing.t1.player1.id]++;
-        counts[pairing.t1.player2.id]++;
-        counts[pairing.t2.player1.id]++;
-        counts[pairing.t2.player2.id]++;
-      }
-    } else {
-      // 남은 인원이 4명 미만일 때, 경기 수가 약간 더 많은 사람을 끌어와서 1경기 강제 생성
-      const candidates = pool.slice(0, 4);
-      const pairing = bestBalancedPairs(candidates);
-      if (pairing) {
-        result.push({
-          id: `match-rand-${Date.now()}-${attempts}-${Math.random().toString(36).slice(2, 6)}`,
-          team1: pairing.t1,
-          team2: pairing.t2
-        });
-        counts[pairing.t1.player1.id]++;
-        counts[pairing.t1.player2.id]++;
-        counts[pairing.t2.player1.id]++;
-        counts[pairing.t2.player2.id]++;
-      }
-    }
-    
-    attempts++;
-  }
-
-  // 최종 검증 및 상세 로깅
-  const finalMissing = players.filter(p => counts[p.id] < minGamesPerPlayer);
-  const zeroGames = players.filter(p => counts[p.id] === 0);
-  
-  console.log('✅ 랜덤 경기 생성 완료:');
-  console.log(`  - 생성된 경기: ${result.length}개`);
-  console.log(`  - 참가한 선수: ${players.filter(p => counts[p.id] > 0).length}명 / ${players.length}명`);
-  
-  // 경기 수 분포
-  const distribution: Record<number, number> = {};
-  players.forEach(p => {
-    const count = counts[p.id] || 0;
-    distribution[count] = (distribution[count] || 0) + 1;
-  });
-  console.log('  - 경기 수 분포:', distribution);
-  
-  // 최종 검증
-  if (zeroGames.length > 0) {
-    console.error(`❌ 치명적: ${zeroGames.length}명이 경기에 한 번도 참여하지 못함!`);
-    console.error(`   선수: ${zeroGames.map(p => `${p.name}(${p.skill_level})`).join(', ')}`);
-  } else {
-    console.log(`✅ 모든 선수 참여 완료!`);
-  }
-  
-  if (finalMissing.length > 0) {
-    console.warn(`⚠️ ${finalMissing.length}명이 목표 ${minGamesPerPlayer}회 미달:`);
-    finalMissing.forEach(p => {
-      console.warn(`   - ${p.name}(${p.skill_level}): ${counts[p.id] || 0}회`);
+    [teams.team1, teams.team2].forEach((team) => {
+      const key = getPairKey(team.player1, team.player2);
+      partnerCounts[key] = (partnerCounts[key] || 0) + 1;
     });
   }
 
+  const actualCounts = uniquePlayers.map((player) => participationCounts[player.id]);
+  if (actualCounts.some((count) => count !== gamesPerPlayer)) {
+    throw new Error('랜덤 경기의 선수별 참가 횟수가 동일하지 않습니다.');
+  }
+
+  console.log(`✅ 랜덤 경기 균등 배정: ${uniquePlayers.length}명 모두 ${gamesPerPlayer}경기, 총 ${result.length}경기`);
   return reorderMatchesToAvoidConsecutive(result);
 }

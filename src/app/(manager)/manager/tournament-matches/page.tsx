@@ -8,6 +8,7 @@ import { ArrowLeft, Trophy } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchLevelInfoMap, getLevelScoreFromCode, type LevelInfoMap } from '@/lib/level-info';
 import { formatKSTDate } from '@/lib/date';
+import { createTeamLockedDoublesMatches } from '@/utils/match-utils';
 
 interface TeamAssignment {
   id: string;
@@ -147,6 +148,22 @@ interface Match {
   next_match_slot?: 1 | 2;
   is_bracket_slot?: boolean;
 }
+
+const getParticipationSummary = (matches: Match[]): string => {
+  if (matches.length === 0) return '없음';
+
+  const counts: Record<string, number> = {};
+  matches.forEach((match) => {
+    [...match.team1, ...match.team2].forEach((player) => {
+      counts[player] = (counts[player] || 0) + 1;
+    });
+  });
+
+  const appearances = Object.values(counts);
+  const minimum = Math.min(...appearances);
+  const maximum = Math.max(...appearances);
+  return minimum === maximum ? `전원 ${minimum}경기` : `${minimum}~${maximum}경기`;
+};
 
 interface Tournament {
   id: string;
@@ -944,7 +961,6 @@ export default function TournamentMatchesPage() {
     fetchTeamAssignments();
     fetchTournaments();
     fetchLevelMap();
-    fetchPlayerGenderMap();
 
     return () => {
       if (noticeTimerRef.current) {
@@ -988,37 +1004,6 @@ export default function TournamentMatchesPage() {
     } catch (error) {
       console.error('❌ 레벨 정보 로드 중 오류:', formatSupabaseError(error));
       setLevelInfoMap({});
-    }
-  };
-
-  const fetchPlayerGenderMap = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('username, full_name, gender');
-
-      if (error) {
-        throw error;
-      }
-
-      const nextMap: PlayerGenderMap = {};
-
-      (data || []).forEach((profile: any) => {
-        const candidates = [profile?.full_name, profile?.username]
-          .map((value: unknown) => normalizePlayerLookupKey(String(value || '')))
-          .filter(Boolean);
-
-        candidates.forEach((candidate) => {
-          if (!nextMap[candidate] && profile?.gender) {
-            nextMap[candidate] = String(profile.gender);
-          }
-        });
-      });
-
-      setPlayerGenderMap(nextMap);
-    } catch (error) {
-      console.error('❌ 선수 성별 정보 로드 중 오류:', formatSupabaseError(error));
-      setPlayerGenderMap({});
     }
   };
 
@@ -1084,9 +1069,25 @@ export default function TournamentMatchesPage() {
 
       const payload = await response.json();
       setTournaments(Array.isArray(payload?.tournaments) ? payload.tournaments : []);
+
+      const nextGenderMap: PlayerGenderMap = {};
+      const profiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
+      profiles.forEach((profile: any) => {
+        const candidates = [profile?.full_name, profile?.username]
+          .map((value: unknown) => normalizePlayerLookupKey(String(value || '')))
+          .filter(Boolean);
+
+        candidates.forEach((candidate) => {
+          if (!nextGenderMap[candidate] && profile?.gender) {
+            nextGenderMap[candidate] = String(profile.gender);
+          }
+        });
+      });
+      setPlayerGenderMap(nextGenderMap);
     } catch (error) {
       console.error('대회 조회 오류:', error);
       setTournaments([]);
+      setPlayerGenderMap({});
     }
   };
 
@@ -1676,7 +1677,10 @@ export default function TournamentMatchesPage() {
     }
   };
 
-  const buildGeneratedMatches = async (assignment: TeamAssignment): Promise<Match[]> => {
+  const buildGeneratedMatches = async (
+    assignment: TeamAssignment,
+    options: { avoidCurrentRepeatPlayers?: boolean } = {}
+  ): Promise<Match[]> => {
       if (assignment.team_type === 'pairs') {
         return buildPairTournamentMatches(assignment);
       }
@@ -1707,6 +1711,71 @@ export default function TournamentMatchesPage() {
       const maxTotalMatches = Math.ceil((playersWithScores.length * effectiveMatchesPerPlayer) / 4);
 
       const maxCourts = numberOfCourts > 0 ? numberOfCourts : Math.max(4, Math.ceil(playersWithScores.length / 4));
+
+      // 레벨/랜덤/혼복은 라켓/셔틀 등 원래 소속팀 안에서만 페어를 만든다.
+      // 설정 횟수 미달 선수를 먼저 배정하고, 빈자리에 필요한 추가 출전자는
+      // 팀 점수 차이가 가장 작아지도록 선택한다.
+      if (['level_based', 'random', 'mixed_doubles'].includes(matchType as string)) {
+        const utilityPlayers = playersWithScores.map((player, index) => ({
+          id: `${index}-${player.name}`,
+          name: player.name,
+          skill_level: extractLevelFromName(player.name).toUpperCase(),
+          skill_label: extractLevelFromName(player.name).toUpperCase(),
+          skill_code: extractLevelFromName(player.name).toUpperCase(),
+          score: player.score,
+          gender: normalizeGender(player.gender) || 'O',
+        }));
+        const utilityPlayerByName = new Map(utilityPlayers.map((player) => [player.name, player]));
+        const currentAppearanceCounts: Record<string, number> = {};
+        if (options.avoidCurrentRepeatPlayers) {
+          generatedMatches.forEach((match) => {
+            [...match.team1, ...match.team2].forEach((playerName) => {
+              currentAppearanceCounts[playerName] = (currentAppearanceCounts[playerName] || 0) + 1;
+            });
+          });
+        }
+        const avoidRepeatPlayerIds = utilityPlayers
+          .filter((player) => (currentAppearanceCounts[player.name] || 0) > effectiveMatchesPerPlayer)
+          .map((player) => player.id);
+        const lockedGroups = teams.map((team) => ({
+          name: team.name,
+          players: team.players
+            .map((playerName) => utilityPlayerByName.get(playerName))
+            .filter((player): player is (typeof utilityPlayers)[number] => Boolean(player)),
+        }));
+        const generated = createTeamLockedDoublesMatches(
+          lockedGroups,
+          effectiveMatchesPerPlayer,
+          matchType,
+          {
+            maxScoreDiff: 9,
+            avoidRepeatPlayerIds,
+          }
+        );
+
+        if (generated.length === 0) {
+          throw new Error('선수 구성을 확인해주세요. 복식 경기는 최소 4명이 필요합니다.');
+        }
+
+        const converted = generated.map((match, index): Match => ({
+          tournament_id: '',
+          round: 1,
+          match_number: index + 1,
+          team1: [match.team1.player1.name, match.team1.player2.name],
+          team2: [match.team2.player1.name, match.team2.player2.name],
+          team1_levels: [match.team1.player1.score || 0, match.team1.player2.score || 0],
+          team2_levels: [match.team2.player1.score || 0, match.team2.player2.score || 0],
+          court: `Court ${(index % maxCourts) + 1}`,
+          status: 'pending',
+        }));
+
+        return avoidConsecutiveMatches(converted, maxCourts, tournamentDate, startTime, timeInterval).map((match) => ({
+          ...match,
+          court: '',
+          scheduled_time: undefined,
+        }));
+      }
+
       const playerMatchCount: Record<string, number> = Object.fromEntries(
         playersWithScores.map((player) => [player.name, 0])
       );
@@ -2195,7 +2264,9 @@ export default function TournamentMatchesPage() {
     if (!selectedAssignment) return;
 
     try {
-      const optimizedMatches = await buildGeneratedMatches(selectedAssignment);
+      const optimizedMatches = await buildGeneratedMatches(selectedAssignment, {
+        avoidCurrentRepeatPlayers: true,
+      });
       setGeneratedMatches(optimizedMatches);
       setIsManualEditing(false);
       showGenerationNotice('success', `대진표를 다시 생성했습니다. ${optimizedMatches.length}경기를 배정했습니다. 코트와 시간을 일괄 배정하려면 아래 버튼을 눌러주세요.`);
@@ -2727,7 +2798,7 @@ export default function TournamentMatchesPage() {
               {/* 제어 버튼 영역 */}
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:p-4 shadow-sm">
                 <div className="mb-3 rounded bg-white p-2 text-[11px] text-gray-500 border border-slate-100">
-                  선수당목표: {matchesPerPlayer}경기 | 생성된대진: {generatedMatches.length}경기
+                  선수당목표: {matchesPerPlayer}경기 | 실제배정: {getParticipationSummary(generatedMatches)} | 생성된대진: {generatedMatches.length}경기
                 </div>
                 <div className="flex flex-col gap-2">
                   <button

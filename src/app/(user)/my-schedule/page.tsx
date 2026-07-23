@@ -1510,21 +1510,42 @@ export default function MySchedulePage() {
       });
     const matchIndex = orderedMatches.findIndex((item) => item.id === match.id);
     const activeIndex = orderedMatches.findIndex((item) => item.status === 'in_progress');
-    const scheduledIndex = orderedMatches.findIndex((item) => item.status === 'pending');
 
     return {
       total: orderedMatches.length,
       position: matchIndex + 1,
-      currentPosition: activeIndex >= 0 ? activeIndex + 1 : scheduledIndex >= 0 ? scheduledIndex + 1 : 0,
+      // 실제 진행 상태인 경기만 현재 경기으로 취급한다. 단순 대기 경기는
+      // 진행 중이라고 표시하지 않아야 한다.
+      currentPosition: activeIndex >= 0 ? activeIndex + 1 : 0,
     };
   };
 
   const getTournamentWaitingMessage = (match: MyTournamentMatchView) => {
-    const { total, position } = getTournamentMatchOrder(match);
+    const { total, position, currentPosition } = getTournamentMatchOrder(match);
+
+    if (match.status === 'completed') {
+      return '종료된 경기입니다';
+    }
+
+    if (match.status === 'in_progress') {
+      return '현재 진행중인 경기입니다';
+    }
+
+    if (currentPosition > 0) {
+      const gamesLeft = position - currentPosition;
+      if (gamesLeft > 0) {
+        return `현재 ${currentPosition}번째 경기 진행 중 (내 경기까지 ${gamesLeft}경기 남음)`;
+      }
+      if (gamesLeft === 0) {
+        return `곧 시작될 예정입니다 (현재 ${currentPosition}번째 경기 순서)`;
+      }
+      return '순서가 지난 경기입니다';
+    }
+
     if (total > 0 && position > 0) {
       return `전체 ${total}경기 중 ${position}번째 경기`;
     }
-    return total > 0 ? `전체 ${total}경기 중 ${position}번째 경기` : '';
+    return '';
   };
 
   const isTournamentTab = activeTab === 'tournaments';

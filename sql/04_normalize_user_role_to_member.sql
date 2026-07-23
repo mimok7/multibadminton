@@ -7,7 +7,7 @@
 --
 -- Canonical values:
 --   profiles.role      : superadmin, member
---   club_members.role  : owner, admin, manager, member
+--   club_members.role  : owner, admin, manager, member, guest
 
 BEGIN;
 
@@ -80,7 +80,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.club_members
       ADD CONSTRAINT club_members_role_canonical_check
-      CHECK (role IS NULL OR role IN ('owner', 'admin', 'manager', 'member'))
+      CHECK (role IS NULL OR role IN ('owner', 'admin', 'manager', 'member', 'guest'))
       NOT VALID;
   END IF;
 END $$;
@@ -98,7 +98,7 @@ UNION ALL
 SELECT 'club_members', role, COUNT(*)
 FROM public.club_members
 WHERE role IS NOT NULL
-  AND role NOT IN ('owner', 'admin', 'manager', 'member')
+  AND role NOT IN ('owner', 'admin', 'manager', 'member', 'guest')
 GROUP BY role
 ORDER BY table_name, role;
 

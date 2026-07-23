@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/superadmin';
 
-export type ClubMemberRole = 'owner' | 'admin' | 'manager' | 'member';
+export type ClubMemberRole = 'owner' | 'admin' | 'manager' | 'member' | 'guest';
 
 const INITIAL_PASSWORD = 'bad123!';
 
@@ -41,7 +41,7 @@ export async function resetSuperadminMemberPassword(memberId: string) {
 export async function updateSuperadminClubMemberRole(clubId: string, userId: string, role: ClubMemberRole) {
   try {
     const { supabaseAdmin } = await requireSuperadmin();
-    const allowedRoles: ClubMemberRole[] = ['owner', 'admin', 'manager', 'member'];
+    const allowedRoles: ClubMemberRole[] = ['owner', 'admin', 'manager', 'member', 'guest'];
     if (!allowedRoles.includes(role)) return { error: '올바르지 않은 클럽 권한입니다.' };
     const { data, error } = await supabaseAdmin.from('club_members').update({ role }).eq('club_id', clubId).eq('user_id', userId).select('id, club_id, user_id, role, status').maybeSingle();
     if (error) return { error: error.message };

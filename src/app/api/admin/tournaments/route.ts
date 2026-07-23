@@ -428,7 +428,7 @@ export async function GET(request: Request) {
 
     const { data: profilesData } = await adminContext.adminSupabase
       .from('profiles')
-      .select('id, full_name, username')
+      .select('id, full_name, username, gender')
       .order('full_name', { ascending: true });
     const profiles = profilesData || [];
 
