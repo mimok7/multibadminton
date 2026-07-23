@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Match } from '@/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { ArrowLeft, Trophy } from 'lucide-react';
 import { formatKSTDate, getKoreaDate } from '@/lib/date';
 
 import { 
@@ -527,38 +528,52 @@ function PlayersPage() {
   // 단순화된 메인 렌더링 - 복잡한 경기 생성 로직은 별도로 처리
   
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
-      <div className="w-full">
-        <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">⚡ 경기 생성 관리</h1>
-                <p className="text-gray-500 text-sm md:text-base mt-1">출석한 선수들로 균형잡힌 경기를 생성하세요</p>
-              </div>
-              <div className="mt-4 sm:mt-0 flex gap-2">
-                <Link href="/dashboard">
-                  <Button variant="outline" className="text-blue-600 hover:bg-blue-50">
-                    🏠 대시보드
-                  </Button>
-                </Link>
-              </div>
+    <div className="min-h-screen bg-slate-50 px-3 py-4 sm:px-5 sm:py-6">
+      <div className="mx-auto w-full max-w-[1600px] space-y-4">
+        <section className="relative overflow-hidden rounded-[24px] bg-[#0f172a] px-4 py-4 text-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.85)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_120%,rgba(99,102,241,0.15),transparent_50%)]" />
+          <div className="relative z-10 flex items-center justify-between gap-3 px-1">
+            <div className="space-y-0.5 pl-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/20 px-3 py-0.5 text-[11px] font-semibold text-indigo-300">
+                <Trophy className="h-3.5 w-3.5" />
+                오늘 게임
+              </span>
+              <h1 className="text-xl font-bold tracking-tight">경기 배정 관리</h1>
+              <p className="mt-0.5 hidden text-xs text-slate-400 sm:block">출석 선수를 기준으로 균형 잡힌 오늘의 경기를 생성하고 배정합니다.</p>
             </div>
+            <Link href="/dashboard">
+              <Button variant="outline" className="flex items-center gap-1.5 rounded-full border-0 bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/15">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                홈
+              </Button>
+            </Link>
           </div>
-          
-          <div className="p-6">
-            <AttendanceStatus 
-              todayPlayers={todayPlayers} 
+        </section>
+
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-6">
+          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <AttendanceStatus
+              todayPlayers={todayPlayers}
               onStatusChange={updatePlayerStatus}
               onBulkStatusChange={bulkUpdatePlayerStatus}
               disabled={isUpdatingStatus}
             />
-            
-            <MatchSessionStatus 
-              matchSessions={matchSessions} 
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <MatchSessionStatus
+              matchSessions={matchSessions}
               registeredSchedules={registeredSchedules}
             />
+          </section>
+        </div>
 
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-6">
+          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:col-span-5">
+            <div className="mb-4 border-b border-slate-100 pb-3">
+              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">게임 설정</h2>
+              <p className="mt-1 text-xs text-slate-500">경기 수와 배정 방식을 선택한 뒤 대진을 생성하세요.</p>
+            </div>
             <MatchGenerationControls
               todayPlayers={todayPlayers}
               perPlayerMinGames={perPlayerMinGames}
@@ -570,7 +585,13 @@ function PlayersPage() {
               onGenerateMixed={handleAssignMixed}
               onManualAssign={handleManualAssign}
             />
-            
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:col-span-7">
+            <div className="mb-4 border-b border-slate-100 pb-3">
+              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">생성될 경기</h2>
+              <p className="mt-1 text-xs text-slate-500">생성 결과를 확인하고 필요하면 수동으로 조정한 뒤 배정하세요.</p>
+            </div>
             <GeneratedMatchesList
               matches={matches}
               playerGameCounts={playerGameCounts}
@@ -601,15 +622,12 @@ function PlayersPage() {
                 setPlayerGameCounts(counts);
               }}
             />
-            
-
-          </div>
+          </section>
         </div>
       </div>
     </div>
   );
 }
-
 // 인증 필요 래핑
 export default function ProtectedPlayersPage() {
   return (
