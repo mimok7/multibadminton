@@ -761,7 +761,8 @@ export default function MatchSchedulePage() {
       );
 
       const availableProfiles = ((payload?.profiles || []) as ParticipantSearchProfile[])
-        .filter((profile) => profile.user_id && !registeredUserIds.has(profile.user_id))
+        // match_participants.user_id에는 profiles.id가 저장된다.
+        .filter((profile) => profile.id && !registeredUserIds.has(profile.id))
         .sort((left, right) => {
           const leftName = (left.full_name || left.username || '').trim();
           const rightName = (right.full_name || right.username || '').trim();

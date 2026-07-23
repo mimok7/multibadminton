@@ -69,7 +69,7 @@ export async function GET(request: Request) {
       return adminContext.error;
     }
 
-    const { adminSupabase } = adminContext;
+    const { adminSupabase, activeClubId } = adminContext;
 
     const requestUrl = new URL(request.url);
     const dateParam = requestUrl.searchParams.get('date');
@@ -87,11 +87,18 @@ export async function GET(request: Request) {
     const scheduleSource = scheduleSourceParam ? normalizeScheduleSource(scheduleSourceParam) : null;
 
     if (profilesQueryParam !== null) {
+      // 참가자 선택 목록은 현재 활성 클럽의 활성 회원만 제공한다.
+      // 활성 클럽이 없을 때 전체 클럽 회원을 노출하지 않는다.
+      if (!activeClubId) {
+        return NextResponse.json({ profiles: [] });
+      }
+
       const normalizedQuery = profilesQueryParam.trim();
 
       let profilesQuery = adminSupabase
         .from('club_members')
         .select('user_id, status, profiles!inner(id, user_id, username, full_name)')
+        .eq('club_id', activeClubId)
         .eq('status', 'active')
         .not('user_id', 'is', null)
         .limit(shouldFetchAllProfiles ? 500 : 20);
@@ -529,6 +536,30 @@ export async function POST(request: Request) {
       );
       if (targetUserIds.length === 0) {
         return NextResponse.json({ error: 'No matching member profiles found' }, { status: 400 });
+      }
+
+      // 목록 조회 외의 직접 API 호출로 다른 클럽 회원을 추가하는 경우도 차단한다.
+      const { data: activeMembers, error: activeMembersError } = await adminSupabase
+        .from('club_members')
+        .select('user_id')
+        .eq('club_id', schedule.club_id)
+        .eq('status', 'active')
+        .in('user_id', targetUserIds);
+
+      if (activeMembersError) {
+        console.error('Admin participant club membership lookup error:', activeMembersError);
+        return NextResponse.json({ error: 'Failed to validate club members' }, { status: 500 });
+      }
+
+      const activeMemberIds = new Set(
+        (activeMembers || [])
+          .map((member) => member.user_id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      );
+      const nonMemberIds = targetUserIds.filter((userId) => !activeMemberIds.has(userId));
+
+      if (nonMemberIds.length > 0) {
+        return NextResponse.json({ error: 'Only active members of this club can be added' }, { status: 400 });
       }
 
       const { data: existingParticipants, error: existingParticipantsError } = await adminSupabase

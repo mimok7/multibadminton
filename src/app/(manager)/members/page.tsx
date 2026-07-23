@@ -72,8 +72,7 @@ export default async function ManagerMembersPage({
           id, user_id, username, full_name, skill_level, gender, email, updated_at
         )
       `)
-      .eq('club_id', activeClubId)
-      .neq('role', 'admin'),
+      .eq('club_id', activeClubId),
     (filteredAdmin as any).from('club_level_aliases').select('level_code, alias').eq('club_id', activeClubId),
     (filteredAdmin as any).from('level_info').select('code, name, description, score').order('score', { ascending: false, nullsFirst: false }),
     (filteredAdmin as any).from('attendances').select('user_id, attended_at, status').eq('club_id', activeClubId).eq('status', 'present').order('attended_at', { ascending: false })

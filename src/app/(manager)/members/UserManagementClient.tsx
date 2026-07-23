@@ -351,7 +351,7 @@ export default function UserManagementClient({
                 full_name: draft.full_name,
                 skill_level: normalizeSkillLevel(draft.skill_level),
                 gender: draft.gender,
-                role: draft.role === 'admin' ? 'admin' : normalizeEditableRole(draft.role),
+                role: user.role === 'admin' ? undefined : normalizeEditableRole(draft.role),
             };
             const res = await updateUser(user.id, payload);
             if (res?.error) {
@@ -612,7 +612,7 @@ export default function UserManagementClient({
                         username: draft.full_name,
                         skill_level: normalizeSkillLevel(draft.skill_level),
                         gender: draft.gender,
-                        role: draft.role === 'admin' ? 'admin' : normalizeEditableRole(draft.role),
+                        role: user.role === 'admin' ? undefined : normalizeEditableRole(draft.role),
                     } satisfies UpdateUserPayload,
                 };
             });
@@ -816,9 +816,12 @@ export default function UserManagementClient({
                                     </td>
                                     <td className="px-4 py-3 align-top">
                                         {normalizedRole === 'admin' ? (
-                                            <span className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
-                                                admin
-                                            </span>
+                                            <div className="space-y-1">
+                                                <span className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                                                    관리자
+                                                </span>
+                                                <div className="text-[11px] font-medium text-slate-500">권한 변경 금지</div>
+                                            </div>
                                         ) : (
                                             <select
                                                 value={normalizeEditableRole(draft.role)}
@@ -978,7 +981,10 @@ export default function UserManagementClient({
                                 <div className="flex flex-col">
                                     <span className="text-xs text-slate-400 font-medium">역할</span>
                                     {normalizedRole === 'admin' ? (
-                                        <span className="mt-1.5 font-semibold text-slate-700">관리자 (Admin)</span>
+                                        <div className="mt-1.5">
+                                            <span className="font-semibold text-slate-700">관리자</span>
+                                            <div className="mt-0.5 text-[11px] font-medium text-slate-500">권한 변경 금지</div>
+                                        </div>
                                     ) : (
                                         <select
                                             value={normalizeEditableRole(draft.role)}

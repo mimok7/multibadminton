@@ -67,14 +67,14 @@ async function getTargetClubMember(
 
     const { data: membership, error: membershipError } = await supabaseAdmin
         .from('club_members')
-        .select('user_id')
+        .select('user_id, role')
         .eq('club_id', clubId)
         .eq('user_id', profile.id)
         .eq('status', 'active')
         .maybeSingle();
 
     if (membershipError || !membership) return null;
-    return profile;
+    return { ...profile, club_role: membership.role };
 }
 
 export type UpdateUserPayload = {
@@ -129,6 +129,10 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
     const targetProfile = await getTargetClubMember(supabaseAdmin, ctx.clubId, userId);
     if (!targetProfile) return { error: '소속 클럽의 회원만 수정할 수 있습니다.' };
 
+    if (updates.role !== undefined && targetProfile.club_role === 'admin' && updates.role !== 'admin') {
+        return { error: '관리자 권한은 이 페이지에서 변경할 수 없습니다.' };
+    }
+
     const profilePayload: Record<string, any> = {};
     if (updates.username !== undefined) profilePayload.username = updates.username || null;
     if (updates.full_name !== undefined) profilePayload.full_name = updates.full_name || null;
@@ -146,17 +150,21 @@ export async function updateUser(userId: string, updates: UpdateUserPayload) {
 
     // Roles shown in the member UI are user/manager, while club_members stores member/manager.
     if (updates.role !== undefined) {
-        const clubRole = toClubMemberRole(updates.role);
-        if (!clubRole) {
-            return { error: '관리자 또는 소유자 역할은 이 페이지에서 변경할 수 없습니다.' };
-        }
+        if (targetProfile.club_role === 'admin') {
+            // 관리자 역할은 유지합니다.
+        } else {
+            const clubRole = toClubMemberRole(updates.role);
+            if (!clubRole) {
+                return { error: '관리자 또는 소유자 역할은 이 페이지에서 변경할 수 없습니다.' };
+            }
 
-        const { error } = await (supabaseAdmin as any)
-            .from('club_members')
-            .update({ role: clubRole })
-            .eq('club_id', ctx.clubId)
-            .eq('user_id', targetProfile.id);
-        if (error) return { error: error.message };
+            const { error } = await (supabaseAdmin as any)
+                .from('club_members')
+                .update({ role: clubRole })
+                .eq('club_id', ctx.clubId)
+                .eq('user_id', targetProfile.id);
+            if (error) return { error: error.message };
+        }
     }
 
     revalidatePath('/manager/members');
